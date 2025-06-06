@@ -1,0 +1,10 @@
+{
+  "name": "Islands.Runtime",
+  "rootNamespace": "Islands",
+  "references": [
+    "Unity.Mathematics",
+    "Unity.Collections",
+    "Unity.Burst"
+  ],
+  "autoReferenced": true
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Islands.Samples",
+  "references": [
+    "Islands.Runtime",
+    "Unity.TextMeshPro",
+    "Unity.Mathematics",
+    "Unity.Collections",
+    "Unity.Burst"
+  ],
+  "includePlatforms": [],
+  "overrideReferences": false,
+  "autoReferenced": true
+}

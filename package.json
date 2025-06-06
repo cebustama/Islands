@@ -1,0 +1,26 @@
+{
+  "name": "io.github.cebustama.islands",
+  "displayName": "Islands",
+  "version": "0.1.0-preview",
+  "unity": "2021.3",
+  "description": "Burst-accelerated noise generation, procedural meshes and surface flows.",
+  "license": "MIT",
+  "keywords": [ "procedural", "noise", "mesh", "burst", "jobs" ],
+  "dependencies": {
+    "com.unity.collections": "2.5.1",
+    "com.unity.mathematics": "1.3.2",
+    "com.unity.burst": "1.8.18"
+  },
+  "samples": [
+    {
+      "displayName": "Getting Started",
+      "description": "Basic scenes and prefabs showing how to create noise maps and meshes.",
+      "path": "Samples~/0.1.0-preview"
+    }
+  ],
+  "documentationUrl": "https://github.com/cebustama/Islands#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cebustama/Islands.git"
+  }
+}

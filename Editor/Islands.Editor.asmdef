@@ -1,0 +1,12 @@
+{
+  "name": "Islands.Editor",
+  "rootNamespace": "Islands.Editor",
+  "references": [
+    "Islands.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true,
+  "overrideReferences": false
+}
