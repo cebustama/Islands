@@ -16,22 +16,22 @@ meshes, sculpt them with SIMD/Burst noise, and shade them with Shader Graphs �
 
 | Layer | Package | What it does | Key file |
 |-------|---------|--------------|----------|
-| **Noise** | `UnityBurstNoise` | SIMD, Burst‑compiled Perlin / Simplex / Voronoi + derivatives | [`docs/noise.md`](noise.md) |
-| **Mesh** | `ProceduralMesh` | Parametric generators + job wrapper & vertex‑stream variants | [`docs/mesh.md`](mesh.md) |
-| **Surface** | `ProceduralSurface` | CPU displacement (SurfaceJob) & particle FlowJob | [`docs/surfaces.md`](surfaces.md) |
-| **Shaders** | `IslandsShaders` | Displacement, ripple, cubemap, HLSL helpers | [`docs/shaders.md`](shaders.md) |
+| **Noise** | `UnityBurstNoise` | SIMD, Burst‑compiled Perlin / Simplex / Voronoi + derivatives | [`Documentation~/noise.md`](noise.md) |
+| **Mesh** | `ProceduralMesh` | Parametric generators + job wrapper & vertex‑stream variants | [`Documentation~/mesh.md`](mesh.md) |
+| **Surface** | `ProceduralSurface` | CPU displacement (SurfaceJob) & particle FlowJob | [`Documentation~/surfaces.md`](surfaces.md) |
+| **Shaders** | `IslandsShaders` | Displacement, ripple, cubemap, HLSL helpers | [`Documentation~/shaders.md`](shaders.md) |
 
 ---
 
 ## 🔗 Pipeline overview
 
 ```mermaid
-graph LR
-  A[Generator &lt;G,S&gt;] -- MeshJob --> B[MeshData]
-  B --> C[SurfaceJob &lt;N&gt;]
+flowchart LR
+  A["Generator <G,S>"] -->|MeshJob| B[MeshData]
+  B --> C["SurfaceJob <N>"]
   C --> D(MeshRenderer)
-  C -->|optional| E[FlowJob &lt;N&gt; -> ParticleSystem]
-  D --> F[ShaderGraph<br/> (Displacement / Ripple / CubeMap)]
+  C -- optional --> E["FlowJob <N>"] --> ParticleSystem
+  D --> F["ShaderGraph (Displacement / Ripple / CubeMap)"]
 ```
 
 1. **MeshJob** builds the analytic shape.  
