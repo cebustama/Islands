@@ -16,10 +16,10 @@ meshes, sculpt them with SIMD/Burst noise, and shade them with Shader Graphs �
 
 | Layer | Package | What it does | Key file |
 |-------|---------|--------------|----------|
-| **Noise** | `UnityBurstNoise` | SIMD, Burst‑compiled Perlin / Simplex / Voronoi + derivatives | [`Documentation~/noise.md`](noise.md) |
-| **Mesh** | `ProceduralMesh` | Parametric generators + job wrapper & vertex‑stream variants | [`Documentation~/mesh.md`](mesh.md) |
-| **Surface** | `ProceduralSurface` | CPU displacement (SurfaceJob) & particle FlowJob | [`Documentation~/surfaces.md`](surfaces.md) |
-| **Shaders** | `IslandsShaders` | Displacement, ripple, cubemap, HLSL helpers | [`Documentation~/shaders.md`](shaders.md) |
+| **Noise** | `UnityBurstNoise` | SIMD, Burst‑compiled Perlin / Simplex / Voronoi + derivatives | [`noise.md`](Documentation~/noise.md) |
+| **Mesh** | `ProceduralMesh` | Parametric generators + job wrapper & vertex‑stream variants | [`mesh.md`](Documentation~/mesh.md) |
+| **Surface** | `ProceduralSurface` | CPU displacement (SurfaceJob) & particle FlowJob | [`surfaces.md`](Documentation~/surfaces.md) |
+| **Shaders** | `IslandsShaders` | Displacement, ripple, cubemap, HLSL helpers | [`shaders.md`](Documentation~/shaders.md) |
 
 ---
 
