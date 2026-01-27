@@ -1,0 +1,314 @@
+Folder PATH listing for volume SSD 2
+Volume serial number is 54D1-92B7
+D:.
+|   make-tree.bat
+|   package.json
+|   README.md
+|   tree.txt
+|   
++---Documentation~
+|   |   graphs.md
+|   |   mesh.md
+|   |   noise.md
+|   |   overview.md
+|   |   shaders.md
+|   |   surfaces.md
+|   |   
+|   +---subsystems
+|   |       GraphLibrary_Pipeline_Technical_Doc.md
+|   |       PCG_Pipeline_Technical_Snapshot.md
+|   |       
+|   \---wip
+|       |   Islands_PCG_Pipeline_SSoT_v0_1_1.md
+|       |   Islands_PCG_Roadmap.md
+|       |   Islands_SSoT_Technical_Bible.md
+|       |   PCG_DungeonPipeline_SSoT.md
+|       |   
+|       \---progress reports
+|               islands_pcg_steps_0_to_4_report_UPDATED_PhaseC_C0_C3_and_C4_next.md
+|               
++---Editor
+|   |   
+|   \---Inspectors
++---Runtime
+|   |   Islands.Runtime.asmdef
+|   |   MathExtensions.cs
+|   |   SpaceTRS.cs
+|   |   
+|   +---Graphs
+|   |   |   
+|   |   \---GraphLibrary
+|   |           AbstractGraph.cs
+|   |           AbstractNode.cs
+|   |           DirectedGraph.cs
+|   |           DirectedGraphExample.cs
+|   |           GraphLibrary_Pipeline_Technical_Doc.md
+|   |           IGraph.cs
+|   |           PairValueImplementation.cs
+|   |           UndirectedGraph.cs
+|   |           
+|   +---Meshes
+|   |   |   IMeshGenerator.cs
+|   |   |   IMeshStreams.cs
+|   |   |   MeshJob.cs
+|   |   |   TriangleUInt16.cs
+|   |   |   Vertex.cs
+|   |   |   
+|   |   +---Generators
+|   |   |       Cube.cs
+|   |   |       CubeSphere.cs
+|   |   |       Dodecahedron.cs
+|   |   |       FlatHexagonGrid.cs
+|   |   |       GeoIcosphere.cs
+|   |   |       GeoOctasphere.cs
+|   |   |       Icosahedron.cs
+|   |   |       Icosphere.cs
+|   |   |       Octahedron.cs
+|   |   |       Octasphere.cs
+|   |   |       PointyHexagonGrid.cs
+|   |   |       SharedCubeSphere.cs
+|   |   |       SharedSquareGrid.cs
+|   |   |       SharedTriangleGrid.cs
+|   |   |       SquareGrid.cs
+|   |   |       Tetrahedron.cs
+|   |   |       UVSphere.cs
+|   |   |       
+|   |   \---Streams
+|   |           MultiStream.cs
+|   |           PositionStream.cs
+|   |           SingleStream.cs
+|   |           
+|   +---Noise
+|   |   |   NoiseBurstExplicitCompilation.cs
+|   |   |   Shapes.cs
+|   |   |   SmallXXHash.cs
+|   |   |   Visualization.cs
+|   |   |   
+|   |   \---Noise
+|   |           Noise.cs
+|   |           Noise.Gradient.cs
+|   |           Noise.Lattice.cs
+|   |           Noise.Sample.cs
+|   |           Noise.Simplex.cs
+|   |           Noise.Voronoi.cs
+|   |           Noise.Voronoi.Distance.cs
+|   |           Noise.Voronoi.Function.cs
+|   |           
+|   +---PCG
+|   |   |   Islands.PCG.Runtime.asmdef
+|   |   |   make-tree.bat
+|   |   |   tree.txt
+|   |   |   
+|   |   +---Core
+|   |   |       GridDomain2D.cs
+|   |   |       
+|   |   +---Fields
+|   |   |       ScalarField2D.cs
+|   |   |       
+|   |   +---Generators
+|   |   |       CheckerFillGenerator.cs
+|   |   |       RectFillGenerator.cs
+|   |   |       
+|   |   +---Grids
+|   |   |       MaskGrid2D.cs
+|   |   |       
+|   |   +---Operators
+|   |   |       ScalarToMaskOps.cs
+|   |   |       SdfToScalarOps.cs
+|   |   |       
+|   |   +---Primitives
+|   |   |       Sdf2D.cs
+|   |   |       SdfComposeOps.cs
+|   |   |       
+|   |   \---Samples
+|   |       |   
+|   |       \---PCG Mask
+|   |               PCG Mask URP GPU.shadergraph
+|   |               PCG Mask.mat
+|   |               PCGMaskDemo.unity
+|   |               PCGMaskGPU.hlsl
+|   |               PCGMaskPaletteController.cs
+|   |               PCGMaskVisualization.cs
+|   |               
+|   +---Resources
+|   |   |   
+|   |   +---Fonts
+|   |   |   |   Montserrat.zip
+|   |   |   |   Roboto.zip
+|   |   |   |   
+|   |   |   \---Roboto
+|   |   |       |   OFL.txt
+|   |   |       |   README.txt
+|   |   |       |   Roboto-Italic-VariableFont_wdth,wght.ttf
+|   |   |       |   Roboto-VariableFont_wdth,wght SDF.asset
+|   |   |       |   Roboto-VariableFont_wdth,wght.ttf
+|   |   |       |   
+|   |   |       \---static
+|   |   |               Roboto-Black SDF.asset
+|   |   |               Roboto-Black.ttf
+|   |   |               Roboto-BlackItalic SDF.asset
+|   |   |               Roboto-BlackItalic.ttf
+|   |   |               Roboto-Bold SDF.asset
+|   |   |               Roboto-Bold.ttf
+|   |   |               Roboto-BoldItalic SDF.asset
+|   |   |               Roboto-BoldItalic.ttf
+|   |   |               Roboto-ExtraBold.ttf
+|   |   |               Roboto-ExtraBoldItalic.ttf
+|   |   |               Roboto-ExtraLight SDF.asset
+|   |   |               Roboto-ExtraLight.ttf
+|   |   |               Roboto-ExtraLightItalic SDF.asset
+|   |   |               Roboto-ExtraLightItalic.ttf
+|   |   |               Roboto-Italic SDF.asset
+|   |   |               Roboto-Italic.ttf
+|   |   |               Roboto-Light SDF.asset
+|   |   |               Roboto-Light.ttf
+|   |   |               Roboto-LightItalic SDF.asset
+|   |   |               Roboto-LightItalic.ttf
+|   |   |               Roboto-Medium SDF.asset
+|   |   |               Roboto-Medium.ttf
+|   |   |               Roboto-MediumItalic SDF.asset
+|   |   |               Roboto-MediumItalic.ttf
+|   |   |               Roboto-Regular.ttf
+|   |   |               Roboto-SemiBold SDF.asset
+|   |   |               Roboto-SemiBold.ttf
+|   |   |               Roboto-SemiBoldItalic SDF.asset
+|   |   |               Roboto-SemiBoldItalic.ttf
+|   |   |               Roboto-Thin SDF.asset
+|   |   |               Roboto-Thin.ttf
+|   |   |               Roboto-ThinItalic SDF.asset
+|   |   |               Roboto-ThinItalic.ttf
+|   |   |               Roboto_Condensed-Black.ttf
+|   |   |               Roboto_Condensed-BlackItalic.ttf
+|   |   |               Roboto_Condensed-Bold.ttf
+|   |   |               Roboto_Condensed-BoldItalic.ttf
+|   |   |               Roboto_Condensed-ExtraBold.ttf
+|   |   |               Roboto_Condensed-ExtraBoldItalic.ttf
+|   |   |               Roboto_Condensed-ExtraLight.ttf
+|   |   |               Roboto_Condensed-ExtraLightItalic.ttf
+|   |   |               Roboto_Condensed-Italic.ttf
+|   |   |               Roboto_Condensed-Light.ttf
+|   |   |               Roboto_Condensed-LightItalic.ttf
+|   |   |               Roboto_Condensed-Medium.ttf
+|   |   |               Roboto_Condensed-MediumItalic.ttf
+|   |   |               Roboto_Condensed-Regular.ttf
+|   |   |               Roboto_Condensed-SemiBold.ttf
+|   |   |               Roboto_Condensed-SemiBoldItalic.ttf
+|   |   |               Roboto_Condensed-Thin.ttf
+|   |   |               Roboto_Condensed-ThinItalic.ttf
+|   |   |               Roboto_SemiCondensed-Black.ttf
+|   |   |               Roboto_SemiCondensed-BlackItalic.ttf
+|   |   |               Roboto_SemiCondensed-Bold.ttf
+|   |   |               Roboto_SemiCondensed-BoldItalic.ttf
+|   |   |               Roboto_SemiCondensed-ExtraBold.ttf
+|   |   |               Roboto_SemiCondensed-ExtraBoldItalic.ttf
+|   |   |               Roboto_SemiCondensed-ExtraLight.ttf
+|   |   |               Roboto_SemiCondensed-ExtraLightItalic.ttf
+|   |   |               Roboto_SemiCondensed-Italic.ttf
+|   |   |               Roboto_SemiCondensed-Light.ttf
+|   |   |               Roboto_SemiCondensed-LightItalic.ttf
+|   |   |               Roboto_SemiCondensed-Medium.ttf
+|   |   |               Roboto_SemiCondensed-MediumItalic.ttf
+|   |   |               Roboto_SemiCondensed-Regular.ttf
+|   |   |               Roboto_SemiCondensed-SemiBold.ttf
+|   |   |               Roboto_SemiCondensed-SemiBoldItalic.ttf
+|   |   |               Roboto_SemiCondensed-Thin.ttf
+|   |   |               Roboto_SemiCondensed-ThinItalic.ttf
+|   |   |               
+|   |   +---Materials
+|   |   |       CubeMap.mat
+|   |   |       Displacement - PS.mat
+|   |   |       Flat - PS.mat
+|   |   |       Flat.mat
+|   |   |       LatLon Map - PS.mat
+|   |   |       LatLon.mat
+|   |   |       ProceduralMesh.mat
+|   |   |       Ripple.mat
+|   |   |       SimpleProceduralMesh.mat
+|   |   |       
+|   |   \---Textures
+|   |           base-map.png
+|   |           cube-base-map.png
+|   |           cube-normal-map.png
+|   |           latlon-base-map.png
+|   |           latlon-normal-map.png
+|   |           normal-map.png
+|   |           
+|   +---Shaders
+|   |   |   
+|   |   +---HLSL
+|   |   |       NoiseGPU.hlsl
+|   |   |       ProceduralMesh.hlsl
+|   |   |       
+|   |   \---ShaderGraph
+|   |           Cube Map.shadergraph
+|   |           Displacement.shadergraph
+|   |           Procedural Mesh.shadergraph
+|   |           
+|   \---Surfaces
+|           FlowJob.cs
+|           SurfaceJob.cs
+|           
+\---Samples~
+    |   0.1.0-preview.zip
+    |   
+    \---0.1.0-preview
+        |   FrameRateCounter.cs
+        |   Islands.Samples.asmdef
+        |   ProceduralSurface.cs
+        |   ProceduralSurface.unity
+        |   
+        +---Fractal
+        |   |   Fractal URP GPU.mat
+        |   |   Fractal URP GPU.shadergraph
+        |   |   Fractal.cs
+        |   |   Fractal.unity
+        |   |   FractalGPU.hlsl
+        |   |   FractalSimple.unity
+        |   |   Yellow.mat
+        |   |   
+        |   \---Fractal
+        |           Black.mat
+        |           GlobalVolumeProfile.asset
+        |           Gold.mat
+        |           Ground.mat
+        |           LightingData.asset
+        |           ReflectionProbe-0.exr
+        |           White.mat
+        |           
+        +---Graph
+        |       FunctionLibrary.compute
+        |       FunctionLibrary.cs
+        |       GPUGraph.cs
+        |       Graph.cs
+        |       Graph.unity
+        |       Point Surface GPU.mat
+        |       Point Surface GPU.shader
+        |       Point Surface.mat
+        |       Point Surface.shader
+        |       Point URP GPU.mat
+        |       Point URP GPU.shadergraph
+        |       Point URP.mat
+        |       Point URP.shadergraph
+        |       Point.prefab
+        |       PointGPU.hlsl
+        |       
+        +---Hash
+        |       Hash URP GPU.shadergraph
+        |       Hash.mat
+        |       Hash.unity
+        |       HashGPU.hlsl
+        |       HashVisualization.cs
+        |       
+        +---Noise
+        |       Noise URP GPU.shadergraph
+        |       Noise.mat
+        |       Noise.unity
+        |       NoiseVisualization.cs
+        |       
+        \---Procedural Meshes
+                AdvancedMultiStreamProceduralMesh.cs
+                AdvancedSingleStreamProceduralMesh.cs
+                ProceduralMesh.cs
+                ProceduralMesh.unity
+                SimpleProceduralMesh.cs
+                

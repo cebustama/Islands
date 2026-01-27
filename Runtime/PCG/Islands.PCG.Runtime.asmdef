@@ -1,0 +1,11 @@
+{
+  "name": "Islands.PCG.Runtime",
+  "rootNamespace": "Islands.PCG",
+  "references": [
+    "Islands.Runtime",
+    "Unity.Mathematics",
+    "Unity.Collections",
+    "Unity.Burst"
+  ],
+  "autoReferenced": true
+}

@@ -5,11 +5,17 @@
   "unity": "2021.3",
   "description": "Burst-accelerated noise generation, procedural meshes and surface flows.",
   "license": "MIT",
-  "keywords": [ "procedural", "noise", "mesh", "burst", "jobs" ],
+  "keywords": [
+    "procedural",
+    "noise",
+    "mesh",
+    "burst",
+    "jobs"
+  ],
   "dependencies": {
     "com.unity.collections": "2.5.1",
     "com.unity.mathematics": "1.3.2",
-    "com.unity.burst": "1.8.18"
+    "com.unity.burst": "1.8.27"
   },
   "samples": [
     {
