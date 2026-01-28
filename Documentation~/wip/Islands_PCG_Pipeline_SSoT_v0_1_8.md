@@ -1,4 +1,4 @@
-# Islands.PCG — Contract-Focused Design Bible (v0.1.4)
+# Islands.PCG — Contract-Focused Design Bible (v0.1.8)
 **Status:** initial / minimal SSoT for the *new Islands.PCG pipeline*  
 **Goal:** lock down *contracts* (data shapes, invariants, naming, layering) so we can scale from a reusable Fields/Grids toolkit → SDF primitives → dungeon strategies → adapters (Tilemap/Texture/Mesh) without drifting.
 
@@ -7,6 +7,13 @@
 **Update (v0.1.3):** Phase C5 complete — added **fast mask boolean ops** directly on `MaskGrid2D` (`CopyFrom`, `Or`, `And`, `AndNot`) with **tail-bit determinism enforcement**, plus lantern modes (`MaskUnion`, `MaskIntersect`, `MaskSubtract`) and a deterministic smoke test (`MaskGrid2DBooleanOpsSmokeTest`).
 
 **Update (v0.1.4):** Phase C6 complete — finalized the **lantern demo wiring** in `PCGMaskVisualization` so one scene can flip modes and visually verify: SDF primitives (`SdfCircleMask/SdfBoxMask/SdfCapsuleMask`), mask boolean ops (`MaskUnion/MaskIntersect/MaskSubtract`), and parity between **distance-composed** (`SdfCircleBoxCompositeMask` with `composeMode`) vs **mask-composed** results (at least union/intersect).
+
+**Update (v0.1.5):** Phase D2 complete — added **SimpleRandomWalk2D** (single “drunk line” walk that carves directly into `MaskGrid2D` with optional `brushRadius` stamping via `MaskRasterOps2D.StampDisc`), plus a lantern mode (`SimpleRandomWalkMask`) in `PCGMaskVisualization` to validate the pure-grid carver deterministically (same seed ⇒ same path / same `CountOnes`).
+
+
+**Update (v0.1.6):** Phase D3 complete — added **IteratedRandomWalk2D** (multi-walk, optional restart-on-floor, accumulating into `MaskGrid2D`), a new lantern mode (`IteratedRandomWalkMask`) in `PCGMaskVisualization`, and a **runtime snapshot hash** (`MaskGrid2D.SnapshotHash64`) plus `MaskGrid2D.TryGetRandomSetBit(...)` to support deterministic restart sampling and fast regression gates.
+
+**Update (v0.1.8):** Phase D4.0 complete — locked the **Raster Shapes Contract** (endpoint-inclusive lines, disc-per-point brush semantics with forward-compatible pluggable brush surface, and clip/ignore out-of-bounds policy) to prevent corridor/room ports from drifting.
 
 
 ---
@@ -53,8 +60,15 @@ It does **not** attempt to document the legacy tilemap pipeline (that’s in `PC
 - `Islands.PCG.Operators`  
   Deterministic transforms between grids/fields (threshold, SDF rasterization, boolean ops).
 
-- `Islands.PCG.Layout` *(later)*  
-  Higher-level procedural algorithms (room placement, corridor carving, region partitioning).
+
+**Primitives vs Operators vs Layout (quick mental model):**
+- **Primitives**: functions like `float SdCircle(p)` — take numbers, return numbers (no grids, no RNG).
+- **Operators**: deterministic transforms on *data containers* — e.g., rasterize SDF → `ScalarField2D`, threshold → `MaskGrid2D`, stamp a disc into a mask.
+- **Layout**: seed-driven orchestration — choose where/when to apply operators to produce an overall structure (walks, rooms, corridors). Layout is where “dungeon strategies” live.
+
+- `Islands.PCG.Layout`  
+  Seed-driven procedural *strategies* that orchestrate primitives + operators (e.g., random walks, room placement, corridor carving). **Layout writes into grids/fields, but does not talk to Tilemaps/Textures/Meshes.**
+
 
 - `Islands.PCG.Adapters` *(later)*  
   Tilemap/Texture/Mesh exporters.
@@ -81,6 +95,8 @@ It does **not** attempt to document the legacy tilemap pipeline (that’s in `PC
 - Must keep tail bits deterministic (bits beyond `Domain.Length` forced to 0).
 - `Get/Set` are bounds-checked; `GetUnchecked/SetUnchecked` assume caller guarantees bounds.
 - Intended for “floor/walls/solids/regions” masks and for snapshot testing (`CountOnes`).
+- Provides `SnapshotHash64(...)` for fast deterministic fingerprints (runtime + tests).
+- Provides `TryGetRandomSetBit(...)` to sample a uniformly random “ON” cell (used by Iterated Random Walk restart).
 
 ### 3.3 `ScalarField2D`
 **Responsibility:** dense scalar field (1 float per cell).  
@@ -161,7 +177,32 @@ To avoid drift, we commit to **one** convention:
   - `mode = LessEqual` (inside = distance <= 0).
 
 
-### 6.3 `SdfComposeRasterOps` (compose while rasterizing) — **NEW in v0.1.2**
+### 6.3 `MaskRasterOps2D` (mask writers / “brush stamps”) — **NEW in v0.1.5**
+**Responsibility:** small, deterministic raster “stamps” that write directly into a `MaskGrid2D`.
+
+**Methods:**
+- `StampDisc(ref MaskGrid2D dst, int cx, int cy, int radius, bool value)`
+- `DrawLine(ref MaskGrid2D dst, int2 a, int2 b, int brushRadius = 0, bool value = true)`
+
+**Contract:**
+- Allocation-free; deterministic.
+- Caller controls bounds semantics by providing `(cx,cy)`; the stamp itself clips to the domain.
+- Intended usage: brush carving in Layout algorithms (random walks, tunnels, room painting) where `brushRadius > 0`.
+
+
+
+**Raster Shapes Contract (D4.0)** — All raster shape writers in `Islands.PCG` operate on `MaskGrid2D` deterministically and in a “safe operator” style. **Lines are endpoint-inclusive**: both `A` and `B` are always carved when in-bounds. The `DrawLine` thickness is controlled by a **brush** concept: for now, `brushRadius` means **“disc stamp per line point”** (i.e., each rasterized line point stamps a filled disc of radius `brushRadius` into the mask; `brushRadius == 0` stamps a single cell). This definition is **forward-compatible**: the brush will be treated as a pluggable stamping primitive in the future (e.g., disc, square, diamond, custom SDF-derived stamps) while preserving the same `DrawLine` traversal semantics; only the per-point “stamp” implementation changes. **Out-of-bounds behavior is clip/ignore**: operations must never throw due to OOB coordinates;
+
+### D4.5 — Raster shapes completion gate (tests + lantern)
+**D4 is considered complete when:**
+1) `StampDisc` + `DrawLine` exist and are OOB-safe (clip/ignore writes).
+2) EditMode tests cover endpoint inclusion, reversal invariance, brush growth, and stable `SnapshotHash64`.
+3) Lantern can display a disc and a line (with brush) and correctness is immediately visible.
+ any writes that fall outside the domain are simply skipped (clipped to the domain), ensuring robustness for procedural iteration and consistent determinism.
+**Why this is in Operators (not Layout):**
+- It’s a reusable *grid write primitive* (a deterministic transform on a grid), not a dungeon strategy.
+
+### 6.4 `SdfComposeRasterOps` (compose while rasterizing) — **NEW in v0.1.2**
 **Responsibility:** rasterize **two** SDF primitives into a *single* `ScalarField2D` by composing their distances per cell.
 
 **Why this exists:**
@@ -186,7 +227,113 @@ To avoid drift, we commit to **one** convention:
 
 ---
 
-## 7) Generators (tiny writers / sanity tests)
+## 7) Layout (procedural strategies on pure grids)
+
+**Definition:** “Layout” is where we start building *actual dungeon strategies* by combining:
+- **core data** (`MaskGrid2D`, `ScalarField2D`)
+- **primitives** (math-only SDFs and composition)
+- **operators** (threshold, rasterization, boolean ops, brush stamps)
+- **seed-driven decisions** (`Unity.Mathematics.Random`)
+
+**Hard rule:** Layout never depends on Tilemaps/Textures/Mesh. Those are adapters.
+
+### 7.1 `Direction2D`
+**Responsibility:** deterministic direction selection utilities for layout algorithms.
+
+**Current surface (Phase D1):**
+- `Cardinal` directions in a fixed order.
+- `PickCardinal(ref Random rng)`
+- `PickSkewedCardinal(ref Random rng, float skewX, float skewY)`
+
+**Skew semantics (contract):**
+- `skewX ∈ [-1, +1]` biases horizontal sign: `-1` = always left, `+1` = always right, `0` = unbiased.
+- `skewY ∈ [-1, +1]` biases vertical sign: `-1` = always down, `+1` = always up, `0` = unbiased.
+- Axis selection is 50/50 (horizontal vs vertical), then sign selection applies skew.
+
+> Note: this matches the legacy intent while staying seed-driven (`Unity.Mathematics.Random`), and is tested in EditMode.
+
+### 7.2 `SimpleRandomWalk2D` (Phase D2 “carver”)
+**Responsibility:** perform a single random walk and **carve** into a destination `MaskGrid2D` (0/1 floor mask).
+
+**Primary method:**
+- `int2 Walk(ref MaskGrid2D dst, ref Random rng, int2 start, int walkLength, int brushRadius, float skewX=0, float skewY=0, int maxRetries=8)`
+
+**Parameters (what they mean):**
+- `dst`: the floor mask we’re writing into (must be allocated by the caller).
+- `rng`: seed-driven RNG (passed by `ref` so it advances deterministically).
+- `start`: initial cell (must be in-bounds).
+- `walkLength`: number of steps to attempt (may stop early if boxed-in).
+- `brushRadius`:
+  - `0` → carve exactly one cell per visit (`dst.SetUnchecked(x,y,true)`).
+  - `>0` → carve a disc stamp per visit (`MaskRasterOps2D.StampDisc(..., value:true)`).
+- `skewX/skewY`: directional bias (see `Direction2D`).
+- `maxRetries`: bounce retries when an attempted step would go OOB.
+
+**Algorithm (exact flow):**
+1) Validate inputs (`walkLength >= 0`, `brushRadius >= 0`, `start` in-bounds).
+2) `pos = start`; **carve** at `pos`.
+3) For `i in 0..walkLength-1`:
+   - Try up to `maxRetries` times:
+     - pick `dir = Direction2D.PickSkewedCardinal(ref rng, skewX, skewY)`
+     - `next = pos + dir`
+     - if `next` in-bounds → `pos = next`; carve at `pos`; continue to next step
+   - If no valid direction found after retries: **StopEarly** (break).
+4) Return the final `pos`.
+
+**Objective:** this is the smallest “drunk line” mask you can build, and it’s the building block for `IteratedRandomWalk2D` (the full strategy in D3).
+
+
+### 7.3 `IteratedRandomWalk2D` (Phase D3 full strategy)
+**Responsibility:** replicate the legacy dungeon concept: perform **multiple** random walks, optionally restarting from an existing floor cell, accumulating floor into a single `MaskGrid2D`.
+
+**Primary method:**
+- `int2 Carve(ref MaskGrid2D dst, ref Random rng, int2 start, int iterations, int walkLengthMin, int walkLengthMax, int brushRadius, float randomStartChance, float skewX=0, float skewY=0, int maxRetries=8)`
+
+**Parameters (what they mean):**
+- `iterations`: number of individual walks to run (accumulating into `dst`).
+- `walkLengthMin/walkLengthMax`: per-walk length range (inclusive max sampling).
+- `randomStartChance`: for `i>0`, probability to restart from a uniformly random ON cell in `dst` (if any exist).
+- `start`: for `i==0`, the initial start cell (no restart roll on the first iteration).
+- `brushRadius/skewX/skewY/maxRetries`: forwarded to `SimpleRandomWalk2D.Walk(...)`.
+
+**Parity rule (non-negotiable):**
+When `iterations=1` AND `walkLengthMin==walkLengthMax` AND `randomStartChance==0`, the implementation must avoid consuming extra RNG so the direction sequence matches `SimpleRandomWalk2D` for the same seed/config.
+
+**Algorithm (exact flow):**
+1) Validate inputs and clamp where appropriate (min/max, non-negative, chance in [0..1]).
+2) For each iteration `i`:
+   - Choose `walkLength`:
+     - if `min==max`: fixed length (no RNG consumed)
+     - else: `rng.NextInt(min, max+1)`
+   - Choose `iterStart`:
+     - if `i==0`: `start`
+     - else if `randomStartChance>0` and `dst` has any ON cell and `rng.NextFloat() < randomStartChance`:
+       - `dst.TryGetRandomSetBit(ref rng, out iterStart)`
+     - else:
+       - previous walk end
+   - Run `SimpleRandomWalk2D.Walk(...)` accumulating into `dst`.
+3) Return final end position.
+
+### 7.4 How D2/D3 plug into the pipeline (Lantern path)
+In the lantern (`PCGMaskVisualization`), D2 runs in `SourceMode.SimpleRandomWalkMask` and D3 runs in `SourceMode.IteratedRandomWalkMask`:
+
+- ensure/allocate `MaskGrid2D` at the chosen resolution
+- clear mask (or respect `clearBeforeDraw`)
+- create `Unity.Mathematics.Random rng` from `walkSeed`
+- call `SimpleRandomWalk2D.Walk(...)`
+- upload `MaskGrid2D` to GPU via the existing pack/upload path
+- log `CountOnes()` for sanity
+
+This is the “core PCG → debug view” adapter. The algorithm itself stays Tilemap-free.
+
+### 7.5 Determinism gates (what we test)
+Minimum acceptance for Layout algorithms:
+- Same `seed + config + domain` ⇒ same output mask.
+- Simple monotonic sanity checks (e.g., longer `walkLength` should not reduce `CountOnes` with the same seed/start).
+
+EditMode tests can validate determinism cheaply before any PlayMode/visual checks.
+
+## 8) Generators (tiny writers / sanity tests)
 These are **not** “the framework”; they are minimal deterministic producers used to validate contracts:
 
 - `RectFillGenerator` writes a filled rect into `MaskGrid2D`.
@@ -194,9 +341,9 @@ These are **not** “the framework”; they are minimal deterministic producers 
 
 ---
 
-## 8) Lantern / Debug visualization (current vertical slice)
+## 9) Lantern / Debug visualization (current vertical slice)
 
-### 8.1 `PCGMaskVisualization : Visualization`
+### 9.1 `PCGMaskVisualization : Visualization`
 **Responsibility:** a debug “lantern” that proves the end-to-end loop:
 
 `Generate → Store in grid → Pack → Upload → GPU instance display`
@@ -207,6 +354,8 @@ These are **not** “the framework”; they are minimal deterministic producers 
   - scalar→threshold→mask (`ThresholdedScalar`)
   - SDF→scalar→threshold→mask (`SdfCircleMask`, `SdfBoxMask`, `SdfCapsuleMask`)
   - **Mask boolean ops (C5)** in mask-space: `MaskUnion`, `MaskIntersect`, `MaskSubtract` (built from two thresholded masks).
+- **Random walk layouts (Phase D)**: `SimpleRandomWalkMask` (D2) and `IteratedRandomWalkMask` (D3), driven by seed + walk params and rendered via the same pack/upload path.
+- **Raster shape debug (Phase D4)**: `RasterDiscMask` and `RasterLineMask` for validating disc symmetry, diagonal continuity, and brush thickness.
 - **SDF compose** → scalar→threshold→mask (`SdfCircleBoxCompositeMask`)
 - **C6 demo wiring:** inspector-exposed parameters for circle/box/capsule + `composeMode` must update outputs without per-frame allocations (reuse `EnsureMaskAllocated/EnsureScalarAllocated`).
 - Must not require Tilemaps.
@@ -214,7 +363,7 @@ These are **not** “the framework”; they are minimal deterministic producers 
 
 ---
 
-## 9) Roadmap (phases)
+## 10) Roadmap (phases)
 This roadmap starts with the reusable Fields/Grids toolkit, then ports dungeon strategies.
 
 ### Phase 0 — Baseline parity harness (legacy side)
@@ -241,6 +390,8 @@ This roadmap starts with the reusable Fields/Grids toolkit, then ports dungeon s
   - (Optional later) generalized multi-shape SDF composition + SmoothUnion controls.
 
 ### Phase 3 — Layout (port dungeon strategies, one by one)
+- ✅ Random Walk layouts: D2 (single walk) + D3 (iterated strategy) complete; next is room/corridor raster shapes (D4).
+- ✅ **D4.0 Raster Shapes Contract locked** (inclusive endpoints, disc-per-point brush with future pluggable brushes, OOB clip/ignore).
 Each strategy becomes a composition of:
 - primitive fields/masks
 - operators
@@ -264,7 +415,7 @@ Examples:
 
 ---
 
-## 10) Proposed module / package structure (namespaces + assemblies)
+## 11) Proposed module / package structure (namespaces + assemblies)
 **Runtime assemblies**
 - `Islands.PCG.Runtime`
   - References: `Unity.Collections`, `Unity.Mathematics`, `Unity.Burst`, `Islands.Runtime` (Visualization base)
@@ -287,7 +438,7 @@ Examples:
 
 ---
 
-## 11) Minimal “first file set” (the smallest stable surface)
+## 12) Minimal “first file set” (the smallest stable surface)
 This is the minimum set that defines the contract and gives us a working lantern:
 
 1) `GridDomain2D`
@@ -301,13 +452,19 @@ This is the minimum set that defines the contract and gives us a working lantern
 9) `RectFillGenerator`
 10) `CheckerFillGenerator`
 11) `PCGMaskVisualization`
+12) `Direction2D`
+13) `MaskRasterOps2D`
+14) `SimpleRandomWalk2D`
 
 **Proof / test (recommended):**
-12) `MaskGrid2DBooleanOpsSmokeTest`
+15) `MaskGrid2DBooleanOpsSmokeTest`
+16) `Direction2DTests`
+17) `SimpleRandomWalk2DTests` (Phase D2)
+18) `DrawLineTests` (Phase D4)
 
 ---
 
-## 12) Immediate next step deliverables (very small, high ROI)
+## 13) Immediate next step deliverables (very small, high ROI)
 **Deliverable A — Mask boolean ops (bitset-fast) — DONE (C5)**
 - Implemented directly on `MaskGrid2D` as in-place, word-wise methods:
   - `CopyFrom(in other)`
@@ -333,5 +490,36 @@ This is the minimum set that defines the contract and gives us a working lantern
 
 ---
 
+**Deliverable E — SimpleRandomWalk2D (Phase D2) — DONE**
+- Implemented: `Direction2D` (D1), `MaskRasterOps2D.StampDisc`, `SimpleRandomWalk2D.Walk(...)`
+- Implemented: lantern wiring mode `SourceMode.SimpleRandomWalkMask` in `PCGMaskVisualization`.
+- Acceptance:
+  - visible continuous-ish trail starting at `start` (lantern)
+  - `MaskGrid2D.CountOnes()` increases as `walkLength` grows (sanity)
+  - same seed ⇒ same trail (determinism)
+
+**Deliverable F — IteratedRandomWalk2D (Phase D3) — DONE**
+- Implemented: `IteratedRandomWalk2D.Carve(ref MaskGrid2D dst, ref Random rng, ...)` (multi-walk + restart-on-floor + accumulate)
+- Adds:
+  - multiple walks (`iterations`)
+  - restart policy (`randomStartChance` sampling uniformly among existing ON cells via `MaskGrid2D.TryGetRandomSetBit`)
+  - per-iteration `walkLength` randomization (`walkLengthMin..walkLengthMax`)
+  - runtime fingerprinting (`MaskGrid2D.SnapshotHash64`) to support fast regression gates
+- Acceptance:
+  - `iterations=1` + fixed length + `randomStartChance=0` matches D2 behavior (parity)
+  - increasing `iterations` increases density/spread
+  - same seed + config ⇒ identical output (prefer `SnapshotHash64` gate; `CountOnes` as sanity)
+
 ## Appendix — “How the current vertical slice works” (one sentence)
 - *Primitives* compute distances (`Sdf2D`) → *RasterOps* write those distances into a scalar field (`SdfToScalarOps`) → *Threshold* turns distances into a filled mask (`ScalarToMaskOps`) → *Lantern* packs and uploads for GPU visualization (`PCGMaskVisualization`). (Current SDF shapes: circle/box/capsule.)
+
+
+---
+
+## 14) Phase D4 deliverable summary (new)
+
+**Deliverable G — Raster shapes (Phase D4) — DONE**
+- Implemented `MaskRasterOps2D.DrawLine(...)` using Bresenham (all octants), endpoint-inclusive.
+- Brush semantics: `brushRadius` = disc stamp per line point (via `StampDisc`), forward-compatible.
+- EditMode tests: endpoint inclusion, reversal invariance (hash), axis count sanity, brush growth.
+- Lantern modes: `RasterDiscMask` + `RasterLineMask` in `PCGMaskVisualization` for rapid visual QA.

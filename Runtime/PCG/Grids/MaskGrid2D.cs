@@ -13,7 +13,7 @@ namespace Islands.PCG.Grids
     ///
     /// IMPORTANT: This is a mutable struct. Avoid copying it by value; prefer passing by ref.
     /// </summary>
-    public struct MaskGrid2D : IDisposable
+    public partial struct MaskGrid2D : IDisposable
     {
         /// <summary>
         /// The discrete grid domain (width/height) that defines valid coordinates and indexing.
@@ -219,6 +219,78 @@ namespace Islands.PCG.Grids
             return count;
         }
 
+        // ----------------------------
+        // D3 Step 1: pick random ON cell
+        // ----------------------------
+
+        /// <summary>
+        /// If the mask has at least one set bit, returns a random ON cell coordinate (x,y),
+        /// chosen deterministically using the provided Unity.Mathematics.Random.
+        ///
+        /// Algorithm (roulette):
+        /// 1) Sum popcounts across words to get totalOn.
+        /// 2) Choose k in [0, totalOn).
+        /// 3) Walk words again; find the word containing the k-th set bit, then scan bits in that word.
+        /// </summary>
+        public bool TryGetRandomSetBit(ref Unity.Mathematics.Random rng, out int2 cell)
+        {
+            cell = default;
+
+            if (!_words.IsCreated || _words.Length == 0)
+                return false;
+
+            // 1) totalOn
+            int totalOn = 0;
+            int lastIndex = _words.Length - 1;
+            ulong lastMask = LastWordValidMask();
+
+            for (int i = 0; i < _words.Length; i++)
+            {
+                ulong w = _words[i];
+                if (i == lastIndex) w &= lastMask;
+                totalOn += PopCount(w);
+            }
+
+            if (totalOn <= 0)
+                return false;
+
+            // 2) choose k-th ON bit
+            int k = rng.NextInt(0, totalOn);
+
+            // 3) locate k-th set bit
+            for (int wi = 0; wi < _words.Length; wi++)
+            {
+                ulong w = _words[wi];
+                if (wi == lastIndex) w &= lastMask;
+
+                int c = PopCount(w);
+                if (c == 0) continue;
+
+                if (k >= c)
+                {
+                    k -= c;
+                    continue;
+                }
+
+                // k is inside this word
+                int bitIndex = FindKthSetBitIndex(w, k);
+                if (bitIndex < 0)
+                {
+                    // Should never happen if popcount + scan are consistent.
+                    return false;
+                }
+
+                int linearIndex = (wi << 6) + bitIndex; // wi*64 + bitIndex
+                if ((uint)linearIndex >= (uint)Domain.Length)
+                    return false; // defensive (tail bits should be masked already)
+
+                cell = Domain.Coord(linearIndex);
+                return true;
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// Unchecked get: no bounds check. Use only in hot loops where you already guarantee bounds.
         /// </summary>
@@ -316,6 +388,23 @@ namespace Islands.PCG.Grids
             uint hi = (uint)(x >> 32);
 
             return (int)math.countbits(lo) + (int)math.countbits(hi);
+        }
+
+        /// <summary>
+        /// Finds the index [0..63] of the k-th set bit inside 'word' (k in [0..popcount-1]).
+        /// Simple scan is fine for Phase D.
+        /// </summary>
+        private static int FindKthSetBitIndex(ulong word, int k)
+        {
+            for (int b = 0; b < 64; b++)
+            {
+                if (((word >> b) & 1UL) != 0UL)
+                {
+                    if (k == 0) return b;
+                    k--;
+                }
+            }
+            return -1;
         }
     }
 }

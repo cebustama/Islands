@@ -19,13 +19,15 @@ D:.
 |   |       PCG_Pipeline_Technical_Snapshot.md
 |   |       
 |   \---wip
-|       |   Islands_PCG_Pipeline_SSoT_v0_1_1.md
-|       |   Islands_PCG_Roadmap.md
+|       |   Islands_PCG_Pipeline_SSoT_v0_1_5.md
+|       |   Islands_PCG_Roadmap_v4.md
 |       |   Islands_SSoT_Technical_Bible.md
 |       |   PCG_DungeonPipeline_SSoT.md
 |       |   
 |       \---progress reports
-|               islands_pcg_steps_0_to_4_report_UPDATED_PhaseC_C0_C3_and_C4_next.md
+|               27-01-26_Islands_PCG_PhaseC_Progress_Report.md
+|               27-01-26_Islands_PCG_Progress_Report_PhaseA_B.md
+|               Islands_PCG_PhaseD_Progress_Report.md
 |               
 +---Editor
 |   |   
@@ -112,23 +114,40 @@ D:.
 |   |   +---Grids
 |   |   |       MaskGrid2D.cs
 |   |   |       
+|   |   +---Layout
+|   |   |       Direction2D.cs
+|   |   |       IteratedRandomWalk2D.cs
+|   |   |       SimpleRandomWalk2D.cs
+|   |   |       
 |   |   +---Operators
+|   |   |       MaskRasterOps2D.cs
 |   |   |       ScalarToMaskOps.cs
+|   |   |       SdfComposeRasterOps.cs
 |   |   |       SdfToScalarOps.cs
 |   |   |       
 |   |   +---Primitives
 |   |   |       Sdf2D.cs
 |   |   |       SdfComposeOps.cs
 |   |   |       
-|   |   \---Samples
+|   |   +---Samples
+|   |   |   |   
+|   |   |   \---PCG Mask
+|   |   |           MaskGrid2DBooleanOpsSmokeTest.cs
+|   |   |           PCG Mask URP GPU.shadergraph
+|   |   |           PCG Mask.mat
+|   |   |           PCGMaskDemo.unity
+|   |   |           PCGMaskGPU.hlsl
+|   |   |           PCGMaskPaletteController.cs
+|   |   |           PCGMaskVisualization.cs
+|   |   |           
+|   |   \---Tests
 |   |       |   
-|   |       \---PCG Mask
-|   |               PCG Mask URP GPU.shadergraph
-|   |               PCG Mask.mat
-|   |               PCGMaskDemo.unity
-|   |               PCGMaskGPU.hlsl
-|   |               PCGMaskPaletteController.cs
-|   |               PCGMaskVisualization.cs
+|   |       \---EditMode
+|   |               Direction2DTests.cs
+|   |               Islands.PCG.Tests.EditMode.asmdef
+|   |               IteratedRandomWalk2DTests.cs
+|   |               MaskGrid2DRandomSetBitTests.cs
+|   |               SimpleRandomWalk2DTests.cs
 |   |               
 |   +---Resources
 |   |   |   

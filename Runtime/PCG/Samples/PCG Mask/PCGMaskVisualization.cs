@@ -3,12 +3,12 @@ using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
-using Islands;
 using Islands.PCG.Core;
 using Islands.PCG.Fields;
 using Islands.PCG.Grids;
 using Islands.PCG.Generators;
 using Islands.PCG.Operators;
+using Islands.PCG.Layout;
 
 namespace Islands.PCG.Samples
 {
@@ -22,10 +22,10 @@ namespace Islands.PCG.Samples
     /// Phase C (C4): SDF compose (circle+box) rasterized via SdfComposeRasterOps -> Threshold -> filled mask.
     /// Phase C (C5): Mask boolean ops (union/intersect/subtract) in mask-space using word-wise ops on MaskGrid2D.
     ///
-    /// C6: Final demo wiring: one scene can flip modes and verify:
-    /// - primitives look correct
-    /// - mask boolean ops work
-    /// - SDF-composed result matches mask-composed result (at least union/intersect)
+    /// Phase D (D2): SimpleRandomWalk2D carver writes directly into MaskGrid2D (no Tilemaps).
+    /// Phase D (D3): IteratedRandomWalk2D strategy (multiple walks + optional restart on existing floor).
+    ///
+    /// Phase D (D4): Raster debug modes (disc + line) writing directly into MaskGrid2D via MaskRasterOps2D.
     ///
     /// Optional GPU threshold preview is kept, but only supports Greater/GreaterEqual (shader uses _ThresholdGE).
     /// </summary>
@@ -58,6 +58,16 @@ namespace Islands.PCG.Samples
             MaskUnion = 7,
             MaskIntersect = 8,
             MaskSubtract = 9,
+
+            // Phase D (D2): pure-grid simple random walk carver (MaskGrid2D only)
+            SimpleRandomWalkMask = 10,
+
+            // Phase D (D3): iterated random walk strategy (multiple walks, optional restart)
+            IteratedRandomWalkMask = 11,
+
+            // Phase D (D4.3): raster debug modes
+            RasterDiscMask = 12,
+            RasterLineMask = 13,
         }
 
         [Header("Mask Source")]
@@ -118,6 +128,64 @@ namespace Islands.PCG.Samples
         [Tooltip("How to combine circle + box distances in composite mode (union / intersect / subtract).")]
         [SerializeField] private SdfCombineMode composeMode = SdfCombineMode.Union;
 
+        [Header("Simple / Iterated Random Walk (Phase D)")]
+        [Tooltip("Seed for Unity.Mathematics.Random (must be non-zero).")]
+        [SerializeField] private uint walkSeed = 1u;
+
+        [Tooltip("Start cell in grid coordinates (clamped to [0..resolution-1]).")]
+        [SerializeField] private Vector2Int walkStart = new Vector2Int(32, 32);
+
+        // D2 parameter (single walk length)
+        [Min(0)]
+        [SerializeField] private int walkLength = 200;
+
+        // D3 parameters (iterated strategy)
+        [Min(1)]
+        [SerializeField] private int walkIterations = 20;
+
+        [Min(0)]
+        [SerializeField] private int walkLengthMin = 25;
+
+        [Min(0)]
+        [SerializeField] private int walkLengthMax = 100;
+
+        [Range(0f, 1f)]
+        [SerializeField] private float walkRandomStartChance = 0.25f;
+
+        [Min(0)]
+        [SerializeField] private int walkBrushRadius = 0;
+
+        [Tooltip("Direction bias. Positive skewX biases right, negative biases left. Positive skewY biases up, negative biases down.")]
+        [SerializeField] private float walkSkewX = 0f;
+
+        [SerializeField] private float walkSkewY = 0f;
+
+        [Min(1)]
+        [SerializeField] private int walkMaxRetries = 8;
+
+        [Tooltip("If true, clears the mask before carving the walk.")]
+        [SerializeField] private bool walkClearBeforeDraw = true;
+
+        [Header("Raster Shapes (Phase D4)")]
+        [Tooltip("Disc center in grid coordinates (clamped to [0..resolution-1]).")]
+        [SerializeField] private Vector2Int discCenter = new Vector2Int(32, 32);
+
+        [Min(0)]
+        [SerializeField] private int discRadius = 8;
+
+        [SerializeField] private bool discValue = true;
+
+        [Tooltip("Line start in grid coordinates (clamped to [0..resolution-1]).")]
+        [SerializeField] private Vector2Int lineA = new Vector2Int(8, 32);
+
+        [Tooltip("Line end in grid coordinates (clamped to [0..resolution-1]).")]
+        [SerializeField] private Vector2Int lineB = new Vector2Int(56, 32);
+
+        [Min(0)]
+        [SerializeField] private int lineBrushRadius = 0;
+
+        [SerializeField] private bool lineValue = true;
+
         [Header("GPU Preview (Recommended for ThresholdedScalar)")]
         [Tooltip("If ON (and SourceMode=ThresholdedScalar, mode is Greater/GreaterEqual), uploads scalar to _Noise once and applies threshold in the shader.\n" +
                  "Dragging Threshold becomes very cheap (no CPU loops, no buffer upload).")]
@@ -175,6 +243,36 @@ namespace Islands.PCG.Samples
         private ThresholdMode lastThresholdMode;
         private bool thresholdDirty = true;
 
+        // Phase D: random walk dirty tracking
+        private uint lastWalkSeed;
+        private Vector2Int lastWalkStart;
+        private int lastWalkLength;
+
+        // D3 caches
+        private int lastWalkIterations;
+        private int lastWalkLengthMin;
+        private int lastWalkLengthMax;
+        private float lastWalkRandomStartChance;
+
+        private int lastWalkBrushRadius;
+        private float lastWalkSkewX;
+        private float lastWalkSkewY;
+        private int lastWalkMaxRetries;
+        private bool lastWalkClearBeforeDraw;
+        private bool walkDirty = true;
+
+        // Phase D4: raster dirty tracking
+        private Vector2Int lastDiscCenter;
+        private int lastDiscRadius;
+        private bool lastDiscValue;
+
+        private Vector2Int lastLineA;
+        private Vector2Int lastLineB;
+        private int lastLineBrushRadius;
+        private bool lastLineValue;
+
+        private bool rasterDirty = true;
+
         /// <summary>
         /// Runtime API used by PCGMaskPaletteController: sets colors for mask value 0 and 1.
         /// Requires shader properties: _MaskOffColor, _MaskOnColor.
@@ -212,6 +310,8 @@ namespace Islands.PCG.Samples
             lastSourceMode = (SourceMode)(-1);
             scalarDirty = true;
             thresholdDirty = true;
+            walkDirty = true;
+            rasterDirty = true;
 
             lastThresholdMode = thresholdMode;
             lastComposeMode = composeMode;
@@ -221,6 +321,38 @@ namespace Islands.PCG.Samples
 
             lastBoxHalfExtents01 = boxHalfExtents01;
             lastBoxCenter01 = boxCenter01;
+
+            lastCapsuleA01 = capsuleA01;
+            lastCapsuleB01 = capsuleB01;
+            lastCapsuleRadius01 = capsuleRadius01;
+
+            lastInvertScalar = invertScalar;
+
+            // Phase D cache
+            lastWalkSeed = walkSeed;
+            lastWalkStart = walkStart;
+            lastWalkLength = walkLength;
+
+            lastWalkIterations = walkIterations;
+            lastWalkLengthMin = walkLengthMin;
+            lastWalkLengthMax = walkLengthMax;
+            lastWalkRandomStartChance = walkRandomStartChance;
+
+            lastWalkBrushRadius = walkBrushRadius;
+            lastWalkSkewX = walkSkewX;
+            lastWalkSkewY = walkSkewY;
+            lastWalkMaxRetries = walkMaxRetries;
+            lastWalkClearBeforeDraw = walkClearBeforeDraw;
+
+            // Phase D4 cache
+            lastDiscCenter = discCenter;
+            lastDiscRadius = discRadius;
+            lastDiscValue = discValue;
+
+            lastLineA = lineA;
+            lastLineB = lineB;
+            lastLineBrushRadius = lineBrushRadius;
+            lastLineValue = lineValue;
         }
 
         protected override void DisableVisualization()
@@ -252,6 +384,8 @@ namespace Islands.PCG.Samples
             lastSourceMode = (SourceMode)(-1);
             scalarDirty = true;
             thresholdDirty = true;
+            walkDirty = true;
+            rasterDirty = true;
         }
 
         protected override void UpdateVisualization(NativeArray<float3x4> positions, int resolution, JobHandle handle)
@@ -270,6 +404,8 @@ namespace Islands.PCG.Samples
                 lastResolution = resolution;
                 scalarDirty = true;
                 thresholdDirty = true;
+                walkDirty = true;
+                rasterDirty = true;
             }
 
             if (sourceMode != lastSourceMode)
@@ -277,6 +413,8 @@ namespace Islands.PCG.Samples
                 lastSourceMode = sourceMode;
                 scalarDirty = true;
                 thresholdDirty = true;
+                walkDirty = true;
+                rasterDirty = true;
             }
 
             // Threshold changes affect ALL scalar-based modes
@@ -364,6 +502,75 @@ namespace Islands.PCG.Samples
                     lastCapsuleB01 = capsuleB01;
                     lastCapsuleRadius01 = capsuleRadius01;
                     scalarDirty = true;
+                }
+            }
+
+            // Phase D params (D2 + D3)
+            bool usesWalk =
+                sourceMode == SourceMode.SimpleRandomWalkMask ||
+                sourceMode == SourceMode.IteratedRandomWalkMask;
+
+            if (usesWalk)
+            {
+                if (walkSeed != lastWalkSeed ||
+                    walkStart != lastWalkStart ||
+                    walkLength != lastWalkLength ||
+                    walkIterations != lastWalkIterations ||
+                    walkLengthMin != lastWalkLengthMin ||
+                    walkLengthMax != lastWalkLengthMax ||
+                    !Mathf.Approximately(walkRandomStartChance, lastWalkRandomStartChance) ||
+                    walkBrushRadius != lastWalkBrushRadius ||
+                    !Mathf.Approximately(walkSkewX, lastWalkSkewX) ||
+                    !Mathf.Approximately(walkSkewY, lastWalkSkewY) ||
+                    walkMaxRetries != lastWalkMaxRetries ||
+                    walkClearBeforeDraw != lastWalkClearBeforeDraw)
+                {
+                    lastWalkSeed = walkSeed;
+                    lastWalkStart = walkStart;
+                    lastWalkLength = walkLength;
+
+                    lastWalkIterations = walkIterations;
+                    lastWalkLengthMin = walkLengthMin;
+                    lastWalkLengthMax = walkLengthMax;
+                    lastWalkRandomStartChance = walkRandomStartChance;
+
+                    lastWalkBrushRadius = walkBrushRadius;
+                    lastWalkSkewX = walkSkewX;
+                    lastWalkSkewY = walkSkewY;
+                    lastWalkMaxRetries = walkMaxRetries;
+                    lastWalkClearBeforeDraw = walkClearBeforeDraw;
+                    walkDirty = true;
+                }
+            }
+
+            // Phase D4 params (raster)
+            bool usesDisc = sourceMode == SourceMode.RasterDiscMask;
+            if (usesDisc)
+            {
+                if (discCenter != lastDiscCenter ||
+                    discRadius != lastDiscRadius ||
+                    discValue != lastDiscValue)
+                {
+                    lastDiscCenter = discCenter;
+                    lastDiscRadius = discRadius;
+                    lastDiscValue = discValue;
+                    rasterDirty = true;
+                }
+            }
+
+            bool usesLine = sourceMode == SourceMode.RasterLineMask;
+            if (usesLine)
+            {
+                if (lineA != lastLineA ||
+                    lineB != lastLineB ||
+                    lineBrushRadius != lastLineBrushRadius ||
+                    lineValue != lastLineValue)
+                {
+                    lastLineA = lineA;
+                    lastLineB = lineB;
+                    lastLineBrushRadius = lineBrushRadius;
+                    lastLineValue = lineValue;
+                    rasterDirty = true;
                 }
             }
 
@@ -575,6 +782,132 @@ namespace Islands.PCG.Samples
                         break;
                     }
 
+                // ------------------------
+                // Phase D (D2): Simple Random Walk
+                // ------------------------
+                case SourceMode.SimpleRandomWalkMask:
+                    {
+                        if (walkDirty)
+                        {
+                            if (walkClearBeforeDraw) mask.Clear();
+
+                            uint seed = (walkSeed == 0u) ? 1u : walkSeed;
+                            var rng = new Unity.Mathematics.Random(seed);
+
+                            int sx = Mathf.Clamp(walkStart.x, 0, resolution - 1);
+                            int sy = Mathf.Clamp(walkStart.y, 0, resolution - 1);
+
+                            SimpleRandomWalk2D.Walk(
+                                ref mask,
+                                ref rng,
+                                new int2(sx, sy),
+                                walkLength,
+                                walkBrushRadius,
+                                walkSkewX,
+                                walkSkewY,
+                                walkMaxRetries);
+
+                            PackFromMaskAndUpload(resolution);
+                            uploadedThisFrame = true;
+                            walkDirty = false;
+                        }
+
+                        break;
+                    }
+
+                // ------------------------
+                // Phase D (D3): Iterated Random Walk Strategy
+                // ------------------------
+                case SourceMode.IteratedRandomWalkMask:
+                    {
+                        if (walkDirty)
+                        {
+                            if (walkClearBeforeDraw) mask.Clear();
+
+                            uint seed = (walkSeed == 0u) ? 1u : walkSeed;
+                            var rng = new Unity.Mathematics.Random(seed);
+
+                            int sx = Mathf.Clamp(walkStart.x, 0, resolution - 1);
+                            int sy = Mathf.Clamp(walkStart.y, 0, resolution - 1);
+
+                            // Normalize to avoid exceptions from invalid inspector combos.
+                            int iters = math.max(1, walkIterations);
+                            int lenMin = math.max(0, walkLengthMin);
+                            int lenMax = math.max(lenMin, walkLengthMax);
+
+                            IteratedRandomWalk2D.Carve(
+                                ref mask,
+                                ref rng,
+                                new int2(sx, sy),
+                                iters,
+                                lenMin,
+                                lenMax,
+                                walkBrushRadius,
+                                walkRandomStartChance,
+                                walkSkewX,
+                                walkSkewY,
+                                walkMaxRetries);
+
+                            PackFromMaskAndUpload(resolution);
+                            uploadedThisFrame = true;
+                            walkDirty = false;
+                        }
+
+                        break;
+                    }
+
+                // ------------------------
+                // Phase D (D4.3): Raster Disc
+                // ------------------------
+                case SourceMode.RasterDiscMask:
+                    {
+                        if (rasterDirty)
+                        {
+                            mask.Clear();
+
+                            int cx = Mathf.Clamp(discCenter.x, 0, resolution - 1);
+                            int cy = Mathf.Clamp(discCenter.y, 0, resolution - 1);
+                            int r = math.max(0, discRadius);
+
+                            MaskRasterOps2D.StampDisc(ref mask, cx, cy, r, discValue);
+
+                            PackFromMaskAndUpload(resolution);
+                            uploadedThisFrame = true;
+                            rasterDirty = false;
+                        }
+
+                        break;
+                    }
+
+                // ------------------------
+                // Phase D (D4.3): Raster Line
+                // ------------------------
+                case SourceMode.RasterLineMask:
+                    {
+                        if (rasterDirty)
+                        {
+                            mask.Clear();
+
+                            int2 a = new int2(
+                                Mathf.Clamp(lineA.x, 0, resolution - 1),
+                                Mathf.Clamp(lineA.y, 0, resolution - 1));
+
+                            int2 b = new int2(
+                                Mathf.Clamp(lineB.x, 0, resolution - 1),
+                                Mathf.Clamp(lineB.y, 0, resolution - 1));
+
+                            int brush = math.max(0, lineBrushRadius);
+
+                            MaskRasterOps2D.DrawLine(ref mask, a, b, brush, lineValue);
+
+                            PackFromMaskAndUpload(resolution);
+                            uploadedThisFrame = true;
+                            rasterDirty = false;
+                        }
+
+                        break;
+                    }
+
                 default:
                     {
                         CheckerFillGenerator.ClearAndFillCheckerboard(ref mask, cellSize: 2);
@@ -587,9 +920,19 @@ namespace Islands.PCG.Samples
             if (shouldLogThisCall)
             {
                 loggedFirstUpdate = true;
+
+                int ones = -1;
+                if (sourceMode == SourceMode.SimpleRandomWalkMask ||
+                    sourceMode == SourceMode.IteratedRandomWalkMask ||
+                    sourceMode == SourceMode.RasterDiscMask ||
+                    sourceMode == SourceMode.RasterLineMask)
+                {
+                    ones = mask.CountOnes();
+                }
+
                 Debug.Log(
                     $"[PCGMaskVisualization] Update #{updateCalls} mode={sourceMode} res={resolution} uploaded={uploadedThisFrame} " +
-                    $"previewGPU={CanUseGpuThresholdPreview()} threshold={threshold} mode={thresholdMode}"
+                    $"previewGPU={CanUseGpuThresholdPreview()} threshold={threshold} mode={thresholdMode} ones={ones}"
                 );
             }
         }

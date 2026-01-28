@@ -393,7 +393,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1143641473
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -457,7 +457,7 @@ MonoBehaviour:
   instanceScale: 1
   resolution: 64
   displacement: 0
-  sourceMode: 6
+  sourceMode: 12
   clearBeforeDraw: 1
   rectMin: {x: 2, y: 2}
   rectMax: {x: 20, y: 20}
@@ -477,6 +477,25 @@ MonoBehaviour:
   capsuleB01: {x: 0.75, y: 0.5}
   capsuleRadius01: 0.1
   composeMode: 0
+  walkSeed: 1
+  walkStart: {x: 32, y: 32}
+  walkLength: 200
+  walkIterations: 20
+  walkLengthMin: 25
+  walkLengthMax: 100
+  walkRandomStartChance: 0.25
+  walkBrushRadius: 0
+  walkSkewX: 0
+  walkSkewY: 0
+  walkMaxRetries: 8
+  walkClearBeforeDraw: 1
+  discCenter: {x: 32, y: 32}
+  discRadius: 8
+  discValue: 1
+  lineA: {x: 8, y: 32}
+  lineB: {x: 56, y: 32}
+  lineBrushRadius: 0
+  lineValue: 1
   previewThresholdInShader: 1
   maskOffColor: {r: 0, g: 0, b: 0, a: 1}
   maskOnColor: {r: 1, g: 1, b: 1, a: 1}
