@@ -1,7 +1,7 @@
-# Islands.PCG — Phase D Progress Report (D0–D4)
+# Islands.PCG — Phase D Progress Report (D0–D5)
 
 Date: 2026-01-28  
-Scope: Phase D (first dungeon strategy in pure grids) — **D0 + D1 + D2 + D3 + D4 completed**
+Scope: Phase D (first dungeon strategy in pure grids) — **D0 + D1 + D2 + D3 + D4 + D5 completed (Phase D complete)**
 
 ---
 
@@ -278,48 +278,125 @@ D4 is complete when all of the following are true:
 
 ---
 
-## Phase D status summary
 
-✅ **D0–D4 complete**: We now have:
-- A fully working **grid-only random walk dungeon strategy** (simple + iterated),
-- A stable deterministic validation hook (`SnapshotHash64`),
-- Minimal raster primitives required for corridor/room stamping (`StampDisc`, `DrawLine`),
-- Test coverage + Lantern visualization support for rapid iteration.
 
 ---
 
-## What’s next (immediate follow-ups)
+## D5 — Rooms + corridors composition (grid-only) (DONE)
 
-### D5 — Start porting “rooms + corridors” using raster ops (next milestone)
-- Implement room stamp(s) using existing primitives:
-  - Rect fill already exists (`RectFillGenerator.FillRect`).
-  - Add/port minimal “corridor connector” logic that calls `DrawLine` (brush thickness supported).
-- Add a “mini dungeon builder” that composes:
-  - room stamps (rect/circle via SDF threshold or disc stamp),
-  - corridor connectors (DrawLine),
-  - post-pass cleanup (optional, later).
+### Goal
+Build a **minimal, stable “room + corridor” composer** operating purely on `MaskGrid2D` so we can:
+- validate a second, more “dungeon-like” pipeline slice in Lantern,
+- add deterministic regression gates (SnapshotHash64),
+- keep all logic Tilemap-free and data-oriented.
 
-Acceptance:
-- Lantern shows room + corridor composition.
-- Snapshot hash stable for a fixed seed/config.
+This is intentionally a “first slice” (placement-order corridor chaining) that becomes the foundation for more advanced strategies later.
 
-### D6 — Parity harness against the legacy tilemap pipeline
-- Define baseline snapshots for a handful of seeds/configs from old pipeline.
-- Compare against grid outputs via:
-  - hash equality when expected,
-  - or a documented “allowed delta” if pipelines differ (ideally minimal).
+### What was implemented
+
+#### 1) Grid-only runtime composer
+Added `RoomsCorridorsComposer2D` with:
+
+- `RoomsCorridorsConfig` (struct) defining:
+  - `roomCount`
+  - `roomSizeMin`, `roomSizeMax` (inclusive width/height ranges)
+  - `placementAttemptsPerRoom`
+  - `roomPadding`
+  - `corridorBrushRadius`
+  - `clearBeforeGenerate`
+  - `allowOverlap`
+
+- `RoomsCorridorsComposer2D.Generate(...)`:
+  - Clears the mask if configured.
+  - Places up to `roomCount` rooms:
+    - Samples size and center within padded domain margins.
+    - Converts to rect bounds and stamps using `RectFillGenerator.FillRect(...)`.
+    - Stores each placed room center in `outRoomCenters[i]`.
+    - If `allowOverlap == false`, performs a cheap “area empty” check before stamping.
+  - Connects rooms in **placement order**:
+    - For `i = 1..placedRooms-1`, connect `centers[i-1] -> centers[i]` with
+      `MaskRasterOps2D.DrawLine(..., brushRadius: cfg.corridorBrushRadius)`.
+
+Determinism is guaranteed because all sampling uses `Unity.Mathematics.Random` passed by ref.
+
+#### 2) Lantern wiring (visual validation path)
+Updated `PCGMaskVisualization`:
+- Added `SourceMode.RoomsCorridorsMask`.
+- Added inspector parameters (seed, room count, size min/max, attempts, padding, corridor radius, clear toggle).
+- Added dirty tracking for those parameters.
+- In the Rooms+Corridors case:
+  - Creates `Random rng = new Random((uint)math.max(seed, 1));`
+  - Allocates `NativeArray<int2> centers` (Temp) sized to `roomCount`.
+  - Calls `RoomsCorridorsComposer2D.Generate(...)` and captures `placedRooms`.
+  - Packs + uploads via the existing trusted “Lantern” path.
+
+(Optional debug) `placedRooms` can be logged to immediately see when constraints are preventing placement.
+
+#### 3) EditMode tests (determinism + regression gates)
+Created `RoomsCorridorsComposer2DTests.cs` with:
+1) **Same seed/config ⇒ same hash** (two masks, identical inputs, `SnapshotHash64()` equal).
+2) **Different seed ⇒ different hash** (sanity; implemented robustly by checking multiple seeds).
+3) **Golden hash gate**: fixed config+seed with an expected constant hash locked in, so any behavioral drift is caught immediately.
+
+### D5 acceptance (done checks)
+- Lantern:
+  - Changing `roomsSeed` changes layout.
+  - Same seed/config is stable across runs.
+  - `roomsRoomCount` increases visible room count (within placement constraints).
+- Tests:
+  - Determinism tests pass consistently.
+  - Golden hash gate is locked and green.
+
+### Files added/modified (D5)
+- **Added:** `Runtime/PCG/Layout/RoomsCorridorsComposer2D.cs`
+- **Added:** `Tests/EditMode/RoomsCorridorsComposer2DTests.cs`
+- **Modified:** `Runtime/PCG/Samples/PCGMaskVisualization.cs` (new mode + params + dirty tracking + generation call)
+
+
+## Phase D status summary
+
+✅ **D0–D5 complete (Phase D complete)**: We now have:
+- A fully working **grid-only random walk dungeon strategy** (simple + iterated),
+- Minimal **raster primitives** required by dungeon ports (`StampDisc`, `DrawLine`, rect fill reuse),
+- A grid-only **Rooms+Corridors composer** (`RoomsCorridorsComposer2D`) to generate room layouts and corridor connections,
+- Determinism + regression gates via `SnapshotHash64` (including golden hash tests),
+- Lantern visualization modes covering random walks, raster shapes, and rooms+corridors.
+
+---
+
+## What’s next (Phase E — Port remaining dungeon strategies)
+
+Phase E goal: port the remaining legacy dungeon strategies into **pure grids**, reusing the Phase D toolbox (fields/grids, raster ops, deterministic RNG, snapshot hashing, Lantern modes).
+
+Recommended Phase E loop per strategy:
+1) **Runtime port**: add/port the core algorithm to operate on `MaskGrid2D` (and `ScalarField2D`/`Sdf2D` only if needed).
+2) **Lantern mode**: add a `SourceMode` + inspector params + dirty tracking to visualize it immediately.
+3) **Tests**:
+   - Same seed/config ⇒ same hash
+   - Different seed ⇒ different hash (sanity)
+   - Golden hash gate for one representative config
+4) **Parity notes**: document any intentional differences vs the legacy tilemap strategy.
+
+Suggested ordering (pragmatic):
+- Strategies that are already “mask-first” (carving / stamping), because they map directly to `MaskGrid2D`.
+- Then strategies that need a post-process (morphology / wall bitmasks), which will be Phase F.
+
+After Phase E:
+- **Phase F — Morphology + walls bitmasks** (engine-grade post-process): dilate/erode/open/close and neighbor bitmask wall classification + LUT mapping to tile IDs.
 
 ---
 
 ## Appendix — Key files touched across Phase D
 
+Runtime:
 - `Runtime/PCG/Operators/MaskRasterOps2D.cs` (StampDisc, DrawLine)
 - `Runtime/PCG/Layout/Direction2D.cs`
 - `Runtime/PCG/Layout/SimpleRandomWalk2D.cs`
 - `Runtime/PCG/Layout/IteratedRandomWalk2D.cs`
+- `Runtime/PCG/Layout/RoomsCorridorsComposer2D.cs`
 - `Runtime/PCG/Grids/MaskGrid2D.cs` (+ partial + random set-bit helper)
 - `Runtime/PCG/Grids/MaskGrid2D.Hash.cs` (SnapshotHash64)
-- `Runtime/PCG/Samples/PCGMaskVisualization.cs` (Lantern modes: D2/D3/D4)
+- `Runtime/PCG/Samples/PCGMaskVisualization.cs` (Lantern modes: D2/D3/D4/D5)
 
 Tests (EditMode):
 - `Direction2DTests.cs`
@@ -327,4 +404,4 @@ Tests (EditMode):
 - `IteratedRandomWalk2DTests.cs`
 - `MaskGrid2DRandomSetBitTests.cs`
 - `DrawLineTests.cs` (D4.2)
-
+- `RoomsCorridorsComposer2DTests.cs` (D5)

@@ -24,8 +24,9 @@ namespace Islands.PCG.Samples
     ///
     /// Phase D (D2): SimpleRandomWalk2D carver writes directly into MaskGrid2D (no Tilemaps).
     /// Phase D (D3): IteratedRandomWalk2D strategy (multiple walks + optional restart on existing floor).
-    ///
     /// Phase D (D4): Raster debug modes (disc + line) writing directly into MaskGrid2D via MaskRasterOps2D.
+    ///
+    /// Phase D (D5): Rooms + corridors composition (rect rooms + DrawLine corridors) via RoomsCorridorsComposer2D.
     ///
     /// Optional GPU threshold preview is kept, but only supports Greater/GreaterEqual (shader uses _ThresholdGE).
     /// </summary>
@@ -68,6 +69,12 @@ namespace Islands.PCG.Samples
             // Phase D (D4.3): raster debug modes
             RasterDiscMask = 12,
             RasterLineMask = 13,
+
+            // Phase D (D5): rooms + corridors composition
+            RoomsCorridorsMask = 14,
+
+            // Phase E (E1): corridor-first
+            CorridorFirstMask = 15,
         }
 
         [Header("Mask Source")]
@@ -186,6 +193,83 @@ namespace Islands.PCG.Samples
 
         [SerializeField] private bool lineValue = true;
 
+        // -------------------------
+        // Phase D5: Rooms + Corridors
+        // -------------------------
+        [Header("Rooms + Corridors (Phase D5)")]
+        [Tooltip("Seed for Rooms+Corridors (int; clamped to >= 1).")]
+        [SerializeField] private int roomsSeed = 1;
+
+        [Min(0)]
+        [SerializeField] private int roomsRoomCount = 12;
+
+        [Tooltip("Room size min (width,height) in cells. Clamped to >= 1.")]
+        [SerializeField] private Vector2Int roomsSizeMin = new Vector2Int(6, 6);
+
+        [Tooltip("Room size max (width,height) in cells. Clamped to >= 1.")]
+        [SerializeField] private Vector2Int roomsSizeMax = new Vector2Int(14, 14);
+
+        [Min(1)]
+        [SerializeField] private int roomsPlacementAttempts = 20;
+
+        [Min(0)]
+        [SerializeField] private int roomsPadding = 2;
+
+        [Min(0)]
+        [SerializeField] private int roomsCorridorBrushRadius = 0;
+
+        [Tooltip("If true, clears the mask before generating rooms/corridors.")]
+        [SerializeField] private bool roomsClearBeforeDraw = true;
+
+        [Tooltip("If true, rooms may overlap existing filled cells.")]
+        [SerializeField] private bool roomsAllowOverlap = true;
+
+        // -------------------------
+        // Phase E1: Corridor First (legacy port)
+        // -------------------------
+        [Header("Corridor First (Phase E1)")]
+        [Tooltip("Seed for Corridor-First (int; clamped to >= 1).")]
+        [SerializeField] private int corridorFirstSeed = 1;
+
+        [Min(0)]
+        [Tooltip("Number of corridor segments to carve.")]
+        [SerializeField] private int corridorFirstCorridorCount = 64;
+
+        [Min(0)]
+        [Tooltip("Min corridor segment length (cells).")]
+        [SerializeField] private int corridorFirstCorridorLengthMin = 6;
+
+        [Min(0)]
+        [Tooltip("Max corridor segment length (cells).")]
+        [SerializeField] private int corridorFirstCorridorLengthMax = 18;
+
+        [Min(0)]
+        [Tooltip("Corridor brush radius for MaskRasterOps2D.DrawLine.")]
+        [SerializeField] private int corridorFirstCorridorBrushRadius = 0;
+
+        [Min(0)]
+        [Tooltip("Padding from the border. Start & endpoints are clamped to [borderPadding..res-1-borderPadding].")]
+        [SerializeField] private int corridorFirstBorderPadding = 1;
+
+        [Tooltip("If true, clears the mask before generating.")]
+        [SerializeField] private bool corridorFirstClearBeforeDraw = true;
+
+        [Header("Corridor First Rooms")]
+        [Tooltip("If > 0: pick exactly this many unique corridor endpoints and spawn rooms there. If <= 0: use roomSpawnChance to probabilistically place rooms at endpoints.")]
+        [SerializeField] private int corridorFirstRoomSpawnCount = 8;
+
+        [Range(0f, 1f)]
+        [SerializeField] private float corridorFirstRoomSpawnChance = 0.6f;
+
+        [Tooltip("Room size min (width,height) in cells. Clamped to >= 1.")]
+        [SerializeField] private Vector2Int corridorFirstRoomSizeMin = new Vector2Int(6, 6);
+
+        [Tooltip("Room size max (width,height) in cells. Clamped to >= 1.")]
+        [SerializeField] private Vector2Int corridorFirstRoomSizeMax = new Vector2Int(14, 14);
+
+        [Tooltip("If true, ensures dead-end rooms by stamping rooms at dead-ends after endpoint rooms.")]
+        [SerializeField] private bool corridorFirstEnsureRoomsAtDeadEnds = true;
+
         [Header("GPU Preview (Recommended for ThresholdedScalar)")]
         [Tooltip("If ON (and SourceMode=ThresholdedScalar, mode is Greater/GreaterEqual), uploads scalar to _Noise once and applies threshold in the shader.\n" +
                  "Dragging Threshold becomes very cheap (no CPU loops, no buffer upload).")]
@@ -273,6 +357,39 @@ namespace Islands.PCG.Samples
 
         private bool rasterDirty = true;
 
+        // Phase D5: rooms dirty tracking
+        private int lastRoomsSeed;
+        private int lastRoomsRoomCount;
+        private Vector2Int lastRoomsSizeMin;
+        private Vector2Int lastRoomsSizeMax;
+        private int lastRoomsPlacementAttempts;
+        private int lastRoomsPadding;
+        private int lastRoomsCorridorBrushRadius;
+        private bool lastRoomsClearBeforeDraw;
+        private bool lastRoomsAllowOverlap;
+        private int lastPlacedRooms = 0;
+
+        private bool roomsDirty = true;
+
+        // Phase E1: corridor-first dirty tracking
+        private int lastCorridorFirstSeed;
+        private int lastCorridorFirstCorridorCount;
+        private int lastCorridorFirstCorridorLengthMin;
+        private int lastCorridorFirstCorridorLengthMax;
+        private int lastCorridorFirstCorridorBrushRadius;
+        private int lastCorridorFirstBorderPadding;
+        private bool lastCorridorFirstClearBeforeDraw;
+
+        private int lastCorridorFirstRoomSpawnCount;
+        private float lastCorridorFirstRoomSpawnChance;
+        private Vector2Int lastCorridorFirstRoomSizeMin;
+        private Vector2Int lastCorridorFirstRoomSizeMax;
+        private bool lastCorridorFirstEnsureRoomsAtDeadEnds;
+
+        private int lastPlacedCorridorFirstRooms = 0;
+
+        private bool corridorFirstDirty = true;
+
         /// <summary>
         /// Runtime API used by PCGMaskPaletteController: sets colors for mask value 0 and 1.
         /// Requires shader properties: _MaskOffColor, _MaskOnColor.
@@ -312,6 +429,8 @@ namespace Islands.PCG.Samples
             thresholdDirty = true;
             walkDirty = true;
             rasterDirty = true;
+            roomsDirty = true;
+            corridorFirstDirty = true;
 
             lastThresholdMode = thresholdMode;
             lastComposeMode = composeMode;
@@ -353,6 +472,32 @@ namespace Islands.PCG.Samples
             lastLineB = lineB;
             lastLineBrushRadius = lineBrushRadius;
             lastLineValue = lineValue;
+
+            // Phase D5 cache
+            lastRoomsSeed = roomsSeed;
+            lastRoomsRoomCount = roomsRoomCount;
+            lastRoomsSizeMin = roomsSizeMin;
+            lastRoomsSizeMax = roomsSizeMax;
+            lastRoomsPlacementAttempts = roomsPlacementAttempts;
+            lastRoomsPadding = roomsPadding;
+            lastRoomsCorridorBrushRadius = roomsCorridorBrushRadius;
+            lastRoomsClearBeforeDraw = roomsClearBeforeDraw;
+            lastRoomsAllowOverlap = roomsAllowOverlap;
+
+            // Phase E1 cache
+            lastCorridorFirstSeed = corridorFirstSeed;
+            lastCorridorFirstCorridorCount = corridorFirstCorridorCount;
+            lastCorridorFirstCorridorLengthMin = corridorFirstCorridorLengthMin;
+            lastCorridorFirstCorridorLengthMax = corridorFirstCorridorLengthMax;
+            lastCorridorFirstCorridorBrushRadius = corridorFirstCorridorBrushRadius;
+            lastCorridorFirstBorderPadding = corridorFirstBorderPadding;
+            lastCorridorFirstClearBeforeDraw = corridorFirstClearBeforeDraw;
+
+            lastCorridorFirstRoomSpawnCount = corridorFirstRoomSpawnCount;
+            lastCorridorFirstRoomSpawnChance = corridorFirstRoomSpawnChance;
+            lastCorridorFirstRoomSizeMin = corridorFirstRoomSizeMin;
+            lastCorridorFirstRoomSizeMax = corridorFirstRoomSizeMax;
+            lastCorridorFirstEnsureRoomsAtDeadEnds = corridorFirstEnsureRoomsAtDeadEnds;
         }
 
         protected override void DisableVisualization()
@@ -386,6 +531,8 @@ namespace Islands.PCG.Samples
             thresholdDirty = true;
             walkDirty = true;
             rasterDirty = true;
+            roomsDirty = true;
+            corridorFirstDirty = true;
         }
 
         protected override void UpdateVisualization(NativeArray<float3x4> positions, int resolution, JobHandle handle)
@@ -406,6 +553,8 @@ namespace Islands.PCG.Samples
                 thresholdDirty = true;
                 walkDirty = true;
                 rasterDirty = true;
+                roomsDirty = true;
+                corridorFirstDirty = true;
             }
 
             if (sourceMode != lastSourceMode)
@@ -415,6 +564,8 @@ namespace Islands.PCG.Samples
                 thresholdDirty = true;
                 walkDirty = true;
                 rasterDirty = true;
+                roomsDirty = true;
+                corridorFirstDirty = true;
             }
 
             // Threshold changes affect ALL scalar-based modes
@@ -571,6 +722,68 @@ namespace Islands.PCG.Samples
                     lastLineBrushRadius = lineBrushRadius;
                     lastLineValue = lineValue;
                     rasterDirty = true;
+                }
+            }
+
+            // Phase D5 params (rooms + corridors)
+            bool usesRooms = sourceMode == SourceMode.RoomsCorridorsMask;
+            if (usesRooms)
+            {
+                if (roomsSeed != lastRoomsSeed ||
+                    roomsRoomCount != lastRoomsRoomCount ||
+                    roomsSizeMin != lastRoomsSizeMin ||
+                    roomsSizeMax != lastRoomsSizeMax ||
+                    roomsPlacementAttempts != lastRoomsPlacementAttempts ||
+                    roomsPadding != lastRoomsPadding ||
+                    roomsCorridorBrushRadius != lastRoomsCorridorBrushRadius ||
+                    roomsClearBeforeDraw != lastRoomsClearBeforeDraw ||
+                    roomsAllowOverlap != lastRoomsAllowOverlap)
+                {
+                    lastRoomsSeed = roomsSeed;
+                    lastRoomsRoomCount = roomsRoomCount;
+                    lastRoomsSizeMin = roomsSizeMin;
+                    lastRoomsSizeMax = roomsSizeMax;
+                    lastRoomsPlacementAttempts = roomsPlacementAttempts;
+                    lastRoomsPadding = roomsPadding;
+                    lastRoomsCorridorBrushRadius = roomsCorridorBrushRadius;
+                    lastRoomsClearBeforeDraw = roomsClearBeforeDraw;
+                    lastRoomsAllowOverlap = roomsAllowOverlap;
+                    roomsDirty = true;
+                }
+            }
+
+            // Phase E1 params (corridor-first)
+            bool usesCorridorFirst = sourceMode == SourceMode.CorridorFirstMask;
+            if (usesCorridorFirst)
+            {
+                if (corridorFirstSeed != lastCorridorFirstSeed ||
+                    corridorFirstCorridorCount != lastCorridorFirstCorridorCount ||
+                    corridorFirstCorridorLengthMin != lastCorridorFirstCorridorLengthMin ||
+                    corridorFirstCorridorLengthMax != lastCorridorFirstCorridorLengthMax ||
+                    corridorFirstCorridorBrushRadius != lastCorridorFirstCorridorBrushRadius ||
+                    corridorFirstBorderPadding != lastCorridorFirstBorderPadding ||
+                    corridorFirstClearBeforeDraw != lastCorridorFirstClearBeforeDraw ||
+                    corridorFirstRoomSpawnCount != lastCorridorFirstRoomSpawnCount ||
+                    !Mathf.Approximately(corridorFirstRoomSpawnChance, lastCorridorFirstRoomSpawnChance) ||
+                    corridorFirstRoomSizeMin != lastCorridorFirstRoomSizeMin ||
+                    corridorFirstRoomSizeMax != lastCorridorFirstRoomSizeMax ||
+                    corridorFirstEnsureRoomsAtDeadEnds != lastCorridorFirstEnsureRoomsAtDeadEnds)
+                {
+                    lastCorridorFirstSeed = corridorFirstSeed;
+                    lastCorridorFirstCorridorCount = corridorFirstCorridorCount;
+                    lastCorridorFirstCorridorLengthMin = corridorFirstCorridorLengthMin;
+                    lastCorridorFirstCorridorLengthMax = corridorFirstCorridorLengthMax;
+                    lastCorridorFirstCorridorBrushRadius = corridorFirstCorridorBrushRadius;
+                    lastCorridorFirstBorderPadding = corridorFirstBorderPadding;
+                    lastCorridorFirstClearBeforeDraw = corridorFirstClearBeforeDraw;
+
+                    lastCorridorFirstRoomSpawnCount = corridorFirstRoomSpawnCount;
+                    lastCorridorFirstRoomSpawnChance = corridorFirstRoomSpawnChance;
+                    lastCorridorFirstRoomSizeMin = corridorFirstRoomSizeMin;
+                    lastCorridorFirstRoomSizeMax = corridorFirstRoomSizeMax;
+                    lastCorridorFirstEnsureRoomsAtDeadEnds = corridorFirstEnsureRoomsAtDeadEnds;
+
+                    corridorFirstDirty = true;
                 }
             }
 
@@ -908,6 +1121,104 @@ namespace Islands.PCG.Samples
                         break;
                     }
 
+                // ------------------------
+                // Phase D (D5): Rooms + Corridors
+                // ------------------------
+                case SourceMode.RoomsCorridorsMask:
+                    {
+                        if (roomsDirty)
+                        {
+                            // Build config (sanitize cheap + determinism-friendly).
+                            var cfg = new RoomsCorridorsComposer2D.RoomsCorridorsConfig
+                            {
+                                roomCount = math.max(0, roomsRoomCount),
+                                roomSizeMin = new int2(math.max(1, roomsSizeMin.x), math.max(1, roomsSizeMin.y)),
+                                roomSizeMax = new int2(math.max(1, roomsSizeMax.x), math.max(1, roomsSizeMax.y)),
+                                placementAttemptsPerRoom = math.max(1, roomsPlacementAttempts),
+                                roomPadding = math.max(0, roomsPadding),
+                                corridorBrushRadius = math.max(0, roomsCorridorBrushRadius),
+                                clearBeforeGenerate = roomsClearBeforeDraw,
+                                allowOverlap = roomsAllowOverlap
+                            };
+
+                            uint seed = (uint)math.max(roomsSeed, 1);
+                            var rng = new Unity.Mathematics.Random(seed);
+
+                            // Centers are output-only for now; still useful for future debug overlays.
+                            int n = cfg.roomCount;
+                            var centers = new NativeArray<int2>(n, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+
+                            RoomsCorridorsComposer2D.Generate(
+                                ref mask,
+                                ref rng,
+                                in cfg,
+                                centers,
+                                out int placedRooms);
+
+                            lastPlacedRooms = placedRooms;
+
+                            centers.Dispose();
+
+                            PackFromMaskAndUpload(resolution);
+                            uploadedThisFrame = true;
+                            roomsDirty = false;
+                        }
+
+                        break;
+                    }
+
+                // ------------------------
+                // Phase E (E1): Corridor First (legacy port)
+                // ------------------------
+                case SourceMode.CorridorFirstMask:
+                    {
+                        if (corridorFirstDirty)
+                        {
+                            var cfg = new CorridorFirstDungeon2D.CorridorFirstConfig
+                            {
+                                corridorCount = math.max(0, corridorFirstCorridorCount),
+                                corridorLengthMin = math.max(0, corridorFirstCorridorLengthMin),
+                                corridorLengthMax = math.max(math.max(0, corridorFirstCorridorLengthMin), corridorFirstCorridorLengthMax),
+                                corridorBrushRadius = math.max(0, corridorFirstCorridorBrushRadius),
+                                borderPadding = math.max(0, corridorFirstBorderPadding),
+                                clearBeforeGenerate = corridorFirstClearBeforeDraw,
+
+                                roomSpawnCount = corridorFirstRoomSpawnCount,
+                                roomSpawnChance = math.clamp(corridorFirstRoomSpawnChance, 0f, 1f),
+                                roomSizeMin = new int2(math.max(1, corridorFirstRoomSizeMin.x), math.max(1, corridorFirstRoomSizeMin.y)),
+                                roomSizeMax = new int2(math.max(1, corridorFirstRoomSizeMax.x), math.max(1, corridorFirstRoomSizeMax.y)),
+                                ensureRoomsAtDeadEnds = corridorFirstEnsureRoomsAtDeadEnds,
+                            };
+
+                            var rng = LayoutSeedUtil.CreateRng(corridorFirstSeed);
+
+                            int endpointsCap = math.max(1, cfg.corridorCount + 1);
+                            var scratchEndpoints = new NativeArray<int2>(endpointsCap, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+
+                            int roomCentersCap = math.max(1, resolution * resolution);
+                            var roomCenters = new NativeArray<int2>(roomCentersCap, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+
+                            CorridorFirstDungeon2D.Generate(
+                                ref mask,
+                                ref rng,
+                                in cfg,
+                                scratchEndpoints,
+                                roomCenters,
+                                out int placedRooms);
+
+                            lastPlacedCorridorFirstRooms = placedRooms;
+
+                            scratchEndpoints.Dispose();
+                            roomCenters.Dispose();
+
+                            PackFromMaskAndUpload(resolution);
+                            uploadedThisFrame = true;
+                            corridorFirstDirty = false;
+                        }
+
+                        break;
+                    }
+
                 default:
                     {
                         CheckerFillGenerator.ClearAndFillCheckerboard(ref mask, cellSize: 2);
@@ -925,14 +1236,23 @@ namespace Islands.PCG.Samples
                 if (sourceMode == SourceMode.SimpleRandomWalkMask ||
                     sourceMode == SourceMode.IteratedRandomWalkMask ||
                     sourceMode == SourceMode.RasterDiscMask ||
-                    sourceMode == SourceMode.RasterLineMask)
+                    sourceMode == SourceMode.RasterLineMask ||
+                    sourceMode == SourceMode.RoomsCorridorsMask ||
+                    sourceMode == SourceMode.CorridorFirstMask)
                 {
                     ones = mask.CountOnes();
                 }
 
+                string roomsExtra = (sourceMode == SourceMode.RoomsCorridorsMask)
+                    ? $" placedRooms={lastPlacedRooms}"
+                    : (sourceMode == SourceMode.CorridorFirstMask)
+                        ? $" placedRooms={lastPlacedCorridorFirstRooms}"
+                        : string.Empty;
+
                 Debug.Log(
                     $"[PCGMaskVisualization] Update #{updateCalls} mode={sourceMode} res={resolution} uploaded={uploadedThisFrame} " +
-                    $"previewGPU={CanUseGpuThresholdPreview()} threshold={threshold} mode={thresholdMode} ones={ones}"
+                    $"previewGPU={CanUseGpuThresholdPreview()} threshold={threshold} mode={thresholdMode} ones={ones}" +
+                    roomsExtra
                 );
             }
         }
