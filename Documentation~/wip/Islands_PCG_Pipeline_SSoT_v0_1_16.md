@@ -1,8 +1,20 @@
-# Islands.PCG — Contract-Focused Design Bible (v0.1.10)
+# Islands.PCG — Contract-Focused Design Bible (v0.1.16)
 **Status:** initial / minimal SSoT for the *new Islands.PCG pipeline*  
 **Goal:** lock down *contracts* (data shapes, invariants, naming, layering) so we can scale from a reusable Fields/Grids toolkit → SDF primitives → dungeon strategies → adapters (Tilemap/Texture/Mesh) without drifting.
 
 **Note (2026-01-29):** Roadmap and phase planning sections have been removed from this SSoT to keep it purely contract-focused. See the separate Phase E Planning Report (and the dedicated roadmap doc) for planning details.
+
+
+
+**Update (v0.1.16, 2026-02-03):** Phase **F2** complete — added `Stage_BaseTerrain2D` (Height/Land/DeepWater), deterministic border-connected flood fill (`MaskFloodFillOps2D`), lantern tunables for rapid iteration, and stage/pipeline golden gates.
+
+**Update (v0.1.15, 2026-02-02):** Phase **F** (Map Pipeline by Layers) **F0–F1 implemented** — added the core contracts (`MapInputs`, `MapContext2D`, `IMapStage2D`, `MapPipelineRunner2D`), the map lantern (`PCGMapVisualization`), and EditMode determinism + golden-hash gates for a trivial pipeline.
+
+**Update (v0.1.12):** Added a **system-level overview** of the new **Map Pipeline by Layers** subsystem (pure-grid, deterministic, adapters-last). Detailed implementation and roadmap remain in the dedicated Map Layers roadmap doc.
+
+**Update (v0.1.14):** Phase **E3 Room Grid** is now **fully locked** (determinism + golden hash gate), and Phase **E4 seed-set regression** is complete via `DungeonSeedSetSnapshotTests` (multi-seed, multi-strategy golden expectations).
+
+**Update (v0.1.13):** Added Phase **E3 Room Grid** contract coverage (`RoomGridDungeon2D` API + safety/capacity rules), and updated Lantern + test-gate notes to include E3.
 
 
 **Update (v0.1.2):** Phase C4 complete — added **SDF compose raster ops** (`SdfComposeRasterOps`) and a lantern composite mode (`SdfCircleBoxCompositeMask`) to validate Union/Intersect/Subtract in **distance-space** before thresholding.
@@ -25,12 +37,15 @@
 ---
 
 ## 0) Scope (what this document governs)
-This SSoT covers the **new** data-oriented PCG pipeline (parallel-safe), built around:
+This SSoT covers the **new** data-oriented Islands.PCG pipeline (parallel-safe), built around:
 - **Grid data** (bitmasks + scalar fields + later vector fields)
-- **Deterministic operators** (threshold, boolean ops, SDF rasterization, etc.)
+- **Deterministic operators** (threshold, boolean ops, SDF rasterization, morphology, etc.)
 - **One debug/lantern path** to visualize results without requiring Tilemaps
+- **Layout subsystems on pure grids**, including:
+  - **Dungeon layout strategies** (rooms/corridors/random-walk/BSP/etc.)
+  - **Map Pipeline by Layers** (general map generation via a layer stack of masks/fields)
 
-It does **not** attempt to document the legacy tilemap pipeline (that’s in `PCG_DungeonPipeline_SSoT.md`).
+It does **not** attempt to document the legacy tilemap-based generators (e.g., old tilemap dungeon pipeline, legacy island map generator). Those live in separate documents.
 
 ---
 
@@ -73,8 +88,11 @@ It does **not** attempt to document the legacy tilemap pipeline (that’s in `PC
 - **Layout**: seed-driven orchestration — choose where/when to apply operators to produce an overall structure (walks, rooms, corridors). Layout is where “dungeon strategies” live.
 
 - `Islands.PCG.Layout`  
-  Seed-driven procedural *strategies* that orchestrate primitives + operators (e.g., random walks, room placement, corridor carving). **Layout writes into grids/fields, but does not talk to Tilemaps/Textures/Meshes.**
+  Seed-driven procedural *strategies* that orchestrate primitives + operators to produce meaningful structures **on pure grids/fields** (no Tilemaps/Textures/Mesh in core).
 
+  This layer hosts multiple strategy families:
+  - **Dungeon layout strategies**: rooms/corridors/random-walk/BSP/etc. (layout-only outputs as masks/fields).
+  - **Map Pipeline by Layers**: a generalized “Map” generator built as a **layer stack** (masks/fields) inside a `MapContext2D`, executed by deterministic `IMapStage2D` stages. Output is **layers + metadata** (e.g., spawn candidates), not GameObjects.
 
 - `Islands.PCG.Adapters` *(later)*  
   Tilemap/Texture/Mesh exporters.
@@ -255,6 +273,87 @@ To avoid drift, we commit to **one** convention:
 
 **Hard rule:** Layout never depends on Tilemaps/Textures/Mesh. Those are adapters.
 
+### 7.0 Map Pipeline by Layers (layout subsystem overview)
+**Intent:** provide a **general Map-generation pipeline** built on a **layer stack** (multiple `MaskGrid2D` + optional `ScalarField2D`), executed as deterministic stages. This is the Islands.PCG-native counterpart to legacy “step chains” that write into `TileType[,]`, but **keeps core generation headless** and pushes rendering/spawning to adapters.
+
+**Core concepts**
+- **`MapContext2D` (SSoT state):** owns all map layers and fields for one generation run (plus seed/config + small metadata outputs).
+  - Typical MVP layers: `Land`, `DeepWater`, `ShallowWater`, `HillsL1`, `HillsL2`, `Paths`, `Stairs`, `Vegetation`, `Walkable`.
+  - Typical MVP fields: `Height` (optional: `Moisture`, temperature, etc.).
+- **`IMapStage2D` (stage contract):** a stage is a pure-grid transform that **reads/writes** layers/fields in `MapContext2D` and may emit **metadata** (e.g., spawn candidates), but never instantiates GameObjects.
+- **`MapPipelineRunner` (orchestrator):** executes stages in a stable order with a seed-driven RNG (`Unity.Mathematics.Random`), enforcing the non‑negotiables (determinism, OOB safety, no allocations in hot loops).
+
+**How it fits the overarching pipeline**
+- **Core/Operators → Layout:** Map stages use the same operators as dungeon strategies (SDF rasterization, scalar→mask thresholding, mask raster ops, boolean ops).
+- **Post-process (Phase G):** morphology + neighborhood bitmasks become reusable “quality upgrades” for map layers (shore rings, smoothing, coastline/walls).
+- **Adapters (Phase H):** map layers can be exported to Tilemap/Texture/Mesh, and spawn metadata can be consumed by a spawn adapter. The **core remains headless**.
+
+**Determinism contract**
+- Stage outputs must be stable for (seed, config, domain).
+- Avoid non-stable iteration sources (e.g., `HashSet` traversal order) inside layout; prefer domain scans or explicitly sorted lists.
+- Add **snapshot hash gates** per stage/layer for regression-proof behavior.
+
+**Visualization**
+- The map pipeline gets its own lantern (`PCGMapVisualization`) as a sibling to `PCGDungeonVisualization`, allowing layer-by-layer inspection.
+
+#### Implemented surface (Phase F0–F2) — as of 2026-02-03
+**Runtime (headless, layout-level):**
+- `Runtime/Layout/Maps/MapIds2D.cs`
+  - `enum MapLayerId : byte { Land, DeepWater, ShallowWater, HillsL1, HillsL2, Paths, Stairs, Vegetation, Walkable, COUNT }`
+  - `enum MapFieldId : byte { Height, Moisture, COUNT }`
+- `Runtime/Layout/Maps/MapTunables2D.cs`
+  - deterministic clamp/sanitize ctor + `Default`
+  - F2 tunables used by `Stage_BaseTerrain2D` include (at least): `islandRadius01`, `waterThreshold01`, `islandSmoothFrom01`, `islandSmoothTo01`
+- `Runtime/Layout/Maps/MapInputs.cs`
+  - `readonly struct MapInputs { uint Seed; GridDomain2D Domain; MapTunables2D Tunables; }`
+  - Seed sanitation rule: `Seed==0 ? 1 : Seed`
+- `Runtime/Layout/Maps/MapContext2D.cs`
+  - `sealed class MapContext2D : IDisposable`
+  - Stable registries: `MaskGrid2D[]` layers + `ScalarField2D[]` fields (index-based; no dictionary iteration)
+  - Run state: `GridDomain2D Domain`, `uint Seed`, `MapTunables2D Tunables`, `Unity.Mathematics.Random Rng`
+  - Core API:
+    - `BeginRun(in MapInputs inputs, bool clearLayers=true)`
+    - `ref MaskGrid2D EnsureLayer(MapLayerId id, bool clearToZero=true)` / `ref MaskGrid2D GetLayer(MapLayerId id)`
+    - `ref ScalarField2D EnsureField(MapFieldId id, bool clearToZero=true)` / `ref ScalarField2D GetField(MapFieldId id)`
+    - `ClearAllCreatedLayers()` / `Dispose()`
+- `Runtime/Layout/Maps/IMapStage2D.cs`
+  - `string Name { get; }`
+  - `void Execute(ref MapContext2D ctx, in MapInputs inputs)`
+- `Runtime/Layout/Maps/MapPipelineRunner2D.cs`
+  - `Run(ref MapContext2D ctx, in MapInputs inputs, IMapStage2D[] stages, bool clearLayers=true)`
+  - `RunNew(in MapInputs inputs, IMapStage2D[] stages, Allocator allocator, bool clearLayers=true)`
+- **F2 stage + ops**
+  - `Runtime/Layout/Maps/Stages/Stage_BaseTerrain2D.cs`
+    - Writes `Field: Height` (`ScalarField2D`) in `[0..1]`
+    - Writes `Layer: Land` by thresholding height (`waterThreshold01`)
+    - Writes `Layer: DeepWater` as border-connected NOT Land (via deterministic flood fill)
+  - `Runtime/Operators/MaskFloodFillOps2D.cs`
+    - `FloodFillBorderConnected_NotSolid(ref MaskGrid2D solid, ref MaskGrid2D dstVisited)`
+
+**Samples (Lantern):**
+- `Samples/PCGMapVisualization.cs`
+  - Mask viewer:
+    - selects a `MapLayerId` and uploads it via `_Noise` using the same packing/ComputeBuffer contract as the dungeon lantern.
+  - Debug patterns (single-stage pipeline):
+    - `RectInLand` (legacy sanity check)
+    - `DonutLandPlusDeepWater` (flood fill sanity check)
+    - `BaseTerrainF2` (runs `Stage_BaseTerrain2D`)
+  - Micro-step: exposes key F2 tunables in Inspector (e.g., `islandRadius01`, `waterThreshold01`) for rapid visual iteration.
+
+**EditMode tests (gates):**
+- `Tests/EditMode/Maps/MapPipelineRunner2DTests.cs`
+  - Determinism test: same seed/config ⇒ same `SnapshotHash64`.
+  - Golden hash gate: trivial pipeline hash locked to a constant (infrastructure drift alarm).
+- `Tests/EditMode/Maps/StageBaseTerrain2DTests.cs`
+  - Stage-level determinism + goldens for `Land` and `DeepWater`.
+- `Tests/EditMode/Operators/MaskFloodFillOps2DTests.cs`
+  - Flood fill determinism + invariants / OOB-safety.
+- `Tests/EditMode/Maps/MapPipelineRunner2DGoldenF2Tests.cs`
+  - Pipeline-level golden for the real F2 pipeline (Option A: keep old trivial golden too).
+
+**Known limitation (intentional through F2):** field visualization (e.g., `Height`) is not yet implemented in the lantern; goldens focus on mask layers. If `ScalarField2D` hashing is not yet standardized, keep `Height` hashing out of the gates until a stable/quantized hash is added.
+
+
 ### 7.1 `Direction2D`
 **Responsibility:** deterministic direction selection utilities for layout algorithms.
 
@@ -407,7 +506,125 @@ When `iterations=1` AND `walkLengthMin==walkLengthMax` AND `randomStartChance==0
 - `MaskNeighborOps2D` provides OOB-safe 4-neighborhood queries, treating OOB neighbors as OFF.
 
 
-### 7.6 How D2/D3/D5 plug into the pipeline (Lantern path)
+
+### 7.6 `BspPartition2D` (Phase E2.1 — BSP partitioning, pure layout)
+**Responsibility:** deterministically split an **integer rectangle** into **leaf rects** using only `Unity.Mathematics.Random`.
+This is **layout-only** (no carving): it produces leaf rects for downstream room placement.
+
+**Implementation surface:** `Runtime/PCG/Layout/Bsp/BspPartition2D.cs`
+
+**Key types (contracts):**
+- `IntRect2D` uses **[min, max)** convention: `[xMin, yMin]..[xMax, yMax)` with integer math only.
+- `BspPartitionConfig`:
+  - `splitIterations` (max successful split attempts; worst-case leaves = `2^splitIterations`)
+  - `minLeafSize` (`int2`, both children must remain `>= minLeafSize`)
+
+**Primary API (capacity-explicit):**
+- `int MaxLeavesUpperBound(int splitIterations)`
+- `int PartitionLeaves(in IntRect2D root, ref Random rng, in BspPartitionConfig cfg, NativeArray<IntRect2D> outLeaves)`
+
+**Safety rules (must hold for all inputs):**
+- Never split if either child would be smaller than `minLeafSize`.
+- Clamp split ranges; if no valid split exists for a node, it becomes a leaf.
+- All rect math stays integer and domain-bounded; no float drift.
+
+**Determinism rules:**
+- RNG is consumed only via `ref Random rng` (no `UnityEngine.Random`, no GUID shuffles).
+- Output does **not** silently depend on caller capacity:
+  - `outLeaves.Length` must be `>= MaxLeavesUpperBound(cfg.splitIterations)` or the method throws (to avoid truncation changing behavior).
+
+---
+
+### 7.7 `RoomFirstBspDungeon2D` (Phase E2.2 — Room First BSP, grid-only)
+**Responsibility:** generate a dungeon `MaskGrid2D` by:
+1) BSP partitioning the domain into leaf rects (pure layout via `BspPartition2D`).
+2) Stamping one rectangular room per leaf (after shrinking by padding).
+3) Connecting room centers with corridors (Manhattan “L” or direct line).
+
+**Implementation surface:** `Runtime/PCG/Layout/RoomFirstBspDungeon2D.cs`
+
+**Config surface (`RoomFirstBspConfig`):**
+- `splitIterations`
+- `minLeafSize` (`int2`)
+- `roomPadding` (shrinks each leaf inward before room fill)
+- `corridorBrushRadius` (0 = single-cell line, >0 = disc brush via raster ops)
+- `connectWithManhattan` (two-segment “L” vs single line)
+- `clearBeforeGenerate`
+
+**Primary API (allocation-free contract):**
+- `void Generate(ref MaskGrid2D mask, ref Random rng, in RoomFirstBspConfig cfg,
+                NativeArray<BspPartition2D.IntRect2D> scratchLeaves,
+                NativeArray<int2> outRoomCenters,
+                out int leafCount, out int placedRooms)`
+
+**Key contracts:**
+- **Grid-only:** writes only to `MaskGrid2D`.
+- **Deterministic:** consumes only `Unity.Mathematics.Random` (`rng`) and does not use nondeterministic collections.
+- **No allocations inside:** caller provides `scratchLeaves` + `outRoomCenters`.
+- **Capacity is explicit and stable:**
+  - `scratchLeaves` must be large enough for worst-case leaves (`2^splitIterations`) or partitioning throws.
+  - `outRoomCenters` must be large enough for placed rooms (typically `>= scratchLeaves.Length`).
+- **OOB-safe:**
+  - Rooms stamped via `RectFillGenerator.FillRect(..., clampToDomain:true)`.
+  - Corridors carved via `MaskRasterOps2D.DrawLine(...)` (clip/ignore OOB per raster contract).
+
+**Algorithm outline (minimal stable slice):**
+1) Optional `mask.Clear()` (if `cfg.clearBeforeGenerate`).
+2) Partition root `[0,0]..[w,h)` into `leafCount` leaves in `scratchLeaves`.
+3) For each leaf:
+   - shrink by `roomPadding` (clamped so the rect remains valid),
+   - fill room rect (clamped to domain),
+   - compute and store room center in `outRoomCenters` (up to capacity) and increment `placedRooms`.
+4) Connect consecutive room centers in placement order:
+   - if `connectWithManhattan`: carve two segments (X then Y, or vice versa deterministically),
+   - else: carve a single line.
+   - line brush radius = `corridorBrushRadius`.
+
+
+### 7.8 `RoomGridDungeon2D` (Phase E3 — Room Grid, grid-only)
+**Responsibility:** generate a dungeon `MaskGrid2D` by:
+1) choosing `roomCount` room centers on a deterministic **coarse grid walk** (seed-driven),
+2) stamping a rectangular room at each center (domain-clamped),
+3) connecting consecutive centers with corridors (Manhattan “L” or direct line).
+
+**Implementation surface:** `Runtime/PCG/Layout/RoomGridDungeon2D.cs`
+
+**Config surface (`RoomGridConfig`):**
+- `roomCount`
+- `cellSize` (coarse grid spacing in cells; clamped to `>= 1`)
+- `borderPadding` (interior padding used to build the coarse grid)
+- `roomSizeMin`, `roomSizeMax` (`int2`, clamped to `>= 1` and `max >= min`)
+- `corridorBrushRadius` (0 = single-cell line, >0 uses raster brush semantics)
+- `connectWithManhattan` (two-segment “L” vs single line)
+- `clearBeforeGenerate`
+
+**Primary API (allocation-free contract):**
+- `void Generate(ref MaskGrid2D mask, ref Random rng, in RoomGridConfig cfg,
+                NativeArray<int> scratchPickedNodeIndices,
+                NativeArray<int2> outRoomCenters,
+                out int placedRooms)`
+
+**Key contracts:**
+- **Grid-only:** writes only to `MaskGrid2D`.
+- **Deterministic:** consumes only `Unity.Mathematics.Random` (`rng`) and does not use nondeterministic collections.
+- **No allocations inside:** caller provides `scratchPickedNodeIndices` + `outRoomCenters`.
+- **Capacity is explicit and stable:**
+  - `outRoomCenters` must be created & non-empty.
+  - `scratchPickedNodeIndices.Length >= take` where `take = min(cfg.roomCount, nodeCount, outRoomCenters.Length)` or the method throws (to avoid truncation silently changing behavior).
+- **OOB-safe:**
+  - Rooms stamped via `RectFillGenerator.FillRect(..., clampToDomain:true)`.
+  - Corridors carved via `MaskRasterOps2D.DrawLine(...)` (clip/ignore OOB per raster contract).
+
+**Algorithm outline (minimal stable slice):**
+1) Optional `mask.Clear()` (if `cfg.clearBeforeGenerate`).
+2) Build a coarse interior grid (stride = `cellSize`, padded by `borderPadding`).
+3) Pick a start node and do a deterministic **grid-walk** to select up to `take` unique nodes (neighbor-first, global fallback).
+4) For each selected node:
+   - convert node → mask-space `center`,
+   - stamp a random-sized room in `[roomSizeMin..roomSizeMax]` (domain-clamped),
+   - connect to previous center with Manhattan “L” or direct line.
+
+### 7.9 How D2/D3/D5/E1/E2/E3 plug into the pipeline (Lantern path)
 In the lantern (`PCGMaskVisualization`):
 
 - D2 runs in `SourceMode.SimpleRandomWalkMask`.
@@ -426,7 +643,7 @@ Each mode follows the same trusted loop:
 - Exposes a simple 0/1 palette (`_MaskOffColor`, `_MaskOnColor`) for readability.
 - Suitable as a single “workbench” scene while porting/validating Phase D/E strategies.
 
-**Currently supported strategies (as of v0.1.10):**
+**Currently supported strategies (as of v0.1.13):**
 - Simple Random Walk (D2)
 - Iterated Random Walk (D3)
 - Rooms + Corridors (D5)
@@ -446,7 +663,7 @@ hosen resolution
 
 This is the “core PCG → debug view” adapter. The algorithms themselves stay Tilemap-free.
 
-### 7.7 Determinism gates (what we test)
+### 7.10 Determinism gates (what we test)
 Minimum acceptance for Layout algorithms:
 - Same `seed + config + domain` ⇒ same output `MaskGrid2D` snapshot hash (`SnapshotHash64`).
 - Reversal invariance where applicable (e.g., line A→B equals B→A).
@@ -459,6 +676,23 @@ Minimum acceptance for Layout algorithms:
 
 EditMode tests validate determinism cheaply before any PlayMode/visual checks.
 
+**Phase E coverage:**
+- `CorridorFirstDungeon2D` determinism + golden hash gate (Phase E1).
+- `RoomFirstBspDungeon2DTests` determinism + golden hash gate (Phase E2) — current golden: `0x23A63F312B9CDF98`.
+- `RoomGridDungeon2DTests` determinism + golden hash gate (Phase E3) — current golden: `0x7AFA78556BFC1734UL`.
+- `DungeonSeedSetSnapshotTests` seed-set regression suite (Phase E4) — 9 locked cases across E1/E2/E3:
+  - `E1_CorridorFirst_96_seed12345` → `0xE126A81F491A0988UL`
+  - `E1_CorridorFirst_64_seed2222_brush1` → `0xC1437266C0C1A8B0UL`
+  - `E1_CorridorFirst_128x96_seed7777_dense` → `0x8110B380019CB96BUL`
+  - `E2_RoomFirstBsp_96_seed3333_L` → `0x2C510AC506B4D32FUL`
+  - `E2_RoomFirstBsp_96_seed3333_line` → `0xCE42E3515C41D077UL`
+  - `E2_RoomFirstBsp_128_seed9001_brush1` → `0x3785D3FA36D3A7EEUL`
+  - `E3_RoomGrid_96_seed4444` → `0xBAAFD41688231C32UL`
+  - `E3_RoomGrid_64_seed4444_tighter` → `0x5D10088BD7DAD9E5UL`
+  - `E3_RoomGrid_128x96_seed8888_noL_brush1` → `0xC011160E9B6359F0UL`
+
+
+
 ## 8) Generators (tiny writers / sanity tests)
 These are **not** “the framework”; they are minimal deterministic producers used to validate contracts:
 
@@ -469,10 +703,17 @@ These are **not** “the framework”; they are minimal deterministic producers 
 
 ## 9) Lantern / Debug visualization (current vertical slice)
 
-### 9.1 `PCGMaskVisualization : Visualization`
-**Responsibility:** a debug “lantern” that proves the end-to-end loop:
+This layer exists to prove the end-to-end loop:
 
 `Generate → Store in grid → Pack → Upload → GPU instance display`
+
+It is intentionally **not** a gameplay runtime system; it is a debug “lantern” that:
+- forces all strategies through the same **grid-only** writer contract
+- keeps packing/upload rules explicit (so bugs are obvious)
+- provides a stable place for visual gates (no flicker, deterministic per seed/config)
+
+### 9.1 `PCGMaskVisualization : Visualization` (general-purpose lantern)
+**Responsibility:** visualize core primitives/operators and early layout slices using the shared instanced rendering path.
 
 **Contract:**
 - Must be able to visualize:
@@ -482,17 +723,151 @@ These are **not** “the framework”; they are minimal deterministic producers 
   - SDF compose → scalar→threshold→mask (composite SDF demo)
   - mask boolean ops in mask-space (`MaskUnion`, `MaskIntersect`, `MaskSubtract`)
 - **Layout modes (Phase D):**
-  - `SimpleRandomWalkMask` (D2)
-  - `IteratedRandomWalkMask` (D3)
-  - `RoomsCorridorsMask` (D5)
+  - `SimpleRandomWalk2D` (D2)
+  - `IteratedRandomWalk2D` (D3)
+  - `RoomsCorridorsComposer2D` (D5)
 - **Raster shape debug (D4):**
-  - `RasterDiscMask`
-  - `RasterLineMask` (with `lineBrushRadius`)
+  - `StampDisc`, `DrawLine` (with brush radius)
 - Must reuse the same allocation + pack/upload path across modes (no Tilemaps).
 - Must keep packing rules explicit and deterministic.
 
+### 9.2 `PCGDungeonVisualization : Visualization` (dungeon-layout lantern)
+**Responsibility:** a focused lantern that only contains the **dungeon layout strategies** (Phase D + Phase E),
+exposing their config surfaces + seeds + dirty tracking, and writing into a `MaskGrid2D` that is displayed via GPU instancing.
+
+**Supported strategies (current):**
+- `SimpleRandomWalk` (D2)
+- `IteratedRandomWalk` (D3)
+- `RoomsCorridors` (D5)
+- `CorridorFirst` (E1)
+- `RoomFirstBsp` (E2)
+- Room Grid (E3)
+
+**Key contracts:**
+- One code path for: `MaskGrid2D → packed noise → ComputeBuffer upload`.
+- Strategy outputs never depend on rendering resolution changing; only the domain changes.
+- Dirty tracking is per-strategy and per-resolution (avoid unnecessary regen).
+- Seed-driven RNG only (normalized via `LayoutSeedUtil.CreateRng(seed)`).
+
+**Important packing contract (render correctness):**
+- The shader reads `_Noise[unity_InstanceID]` as **one float per instance**.
+- Therefore the `_Noise` buffer must contain **`resolution*resolution` floats**.
+- We pack as `float4` on CPU (`NativeArray<float4> packedNoise`) where each element represents 4 instances.
+  - GPU buffer allocation: `new ComputeBuffer(packCount * 4, sizeof(float))`
+  - CPU pack loop writes `packCount` float4s, and `SetData(float4[])` uploads them.
+- If `_Noise` is allocated as only `packCount` floats (or count mismatches), you will see “truncation”/missing instances.
+
+### 9.3 `PCGMapVisualization : Visualization` (implemented — Phase F2.3)
+**Responsibility:** map-layer “lantern” for the **Map Pipeline by Layers** subsystem. Provides a consistent way to inspect each layer (masks/fields) without introducing Tilemap dependencies into core logic.
+
+**Core UI contract**
+- Select a **layer view mode** (e.g., Land/Water/Hills/Paths/Stairs/Vegetation/Walkable).
+- Reuse the same “cell = instance” GPU instancing backend as other lanterns.
+- Must remain deterministic per seed/config (no frame-dependent flicker).
+
+**Why it exists**
+- Dungeon strategies already have a dedicated lantern (`PCGDungeonVisualization`). Map stages need the same debug loop to keep parity with the determinism + snapshot-gate workflow. As of 2026-02-03, `PCGMapVisualization` can display mask layers including `Land` and `DeepWater` produced by the F2 base terrain stage (fields later).
+
+
+## 10) Current display backend: GPU instancing via ShaderGraph + HLSL (authoritative)
+
+This section documents the **current** way we display `MaskGrid2D` on screen (Lantern/debug).
+It is written as a **technical contract** so we can later add alternative display backends (Textures/Meshes)
+without losing the current working path.
+
+### 10.1 High-level model: “cell = instance”
+We do **not** render a texture. Instead:
+- We draw `resolution*resolution` **mesh instances** (`Graphics.DrawMeshInstancedProcedural`).
+- Each instance corresponds to one grid cell.
+- The shader indexes per-instance data using `unity_InstanceID`.
+
+This makes the mask “look like pixels” because each instance is positioned on a regular grid.
+
+### 10.2 CPU → GPU data flow (buffers and ownership)
+There are three GPU buffers in the lantern render path:
+
+1) `_Positions` (per-instance `float3`, length = `resolution*resolution`)
+- Owned/filled by the base `Visualization` class.
+- CPU-side storage is packed as `NativeArray<float3x4>` and uploaded as a flattened `float3[]`.
+
+2) `_Normals` (per-instance `float3`, length = `resolution*resolution`)
+- Owned/filled by the base `Visualization` class (shape job).
+- Used for optional displacement and for correct lighting.
+
+3) `_Noise` (per-instance `float`, length = `resolution*resolution`)
+- Owned/filled by the specific lantern (e.g., `PCGDungeonVisualization`).
+- For masks, values are typically `0/1` (OFF/ON).
+- Packed on CPU as `NativeArray<float4>` (each element represents 4 instances) and uploaded via `ComputeBuffer.SetData(float4[])`.
+
+All three buffers are bound through a `MaterialPropertyBlock`:
+- `mpb.SetBuffer("_Positions", positionsBuffer)`
+- `mpb.SetBuffer("_Normals", normalsBuffer)`
+- `mpb.SetBuffer("_Noise", noiseBuffer)`
+
+### 10.3 `_Config` contract (shared by all lantern materials)
+`Visualization` sets:
+- `_Config.x = resolution`
+- `_Config.y = instanceScale / resolution`
+- `_Config.z = displacement`
+
+`_Config` is used by the HLSL instancing function to scale each instance and (optionally) displace it.
+
+### 10.4 ShaderGraph + HLSL integration (current authoritative path)
+The lantern material uses a ShaderGraph that calls into `PCGDungeonGPU.hlsl` via two Custom Function nodes:
+
+1) **InjectPragmas** (String Custom Function)
+Injects shader pragmas required for procedural instancing in ShaderGraph-generated code.
+Typical lines:
+- `#pragma target 4.5`
+- `#pragma multi_compile_instancing`
+- `#pragma instancing_options assumeuniformscaling`
+- `#pragma editor_sync_compilation`
+
+2) **ShaderGraphFunction** (File Custom Function)
+- Source: `PCGDungeonGPU.hlsl`
+- “Use Pragmas”: enabled (so the injected pragmas are respected)
+- Exposes `ShaderGraphFunction_float/half`, which outputs:
+  - passthrough vertex position (`Out = In`)
+  - instance-derived color (`Color = GetNoiseColor()`)
+
+### 10.5 HLSL instancing hook: `ConfigureProcedural`
+`PCGDungeonGPU.hlsl` defines:
+
+- `StructuredBuffer<float3> _Positions, _Normals;`
+- `StructuredBuffer<float> _Noise;`
+- `float4 _Config;`
+
+`ConfigureProcedural()` is the per-instance setup function (called by the instancing path):
+- Sets instance translation from `_Positions[unity_InstanceID]`.
+- Applies optional displacement along `_Normals[unity_InstanceID]` scaled by `_Noise[unity_InstanceID]` and `_Config.z`.
+- Sets uniform instance scale using `_Config.y` (written into `unity_ObjectToWorld._m00/_m11/_m22`).
+
+This is what turns “instance ID” into a positioned cell on the grid.
+
+### 10.6 Color path: `GetNoiseColor`
+`GetNoiseColor()` reads `_Noise[unity_InstanceID]` and returns:
+- `lerp(_MaskOffColor, _MaskOnColor, v)` for normal mask display.
+- Optional threshold preview path when `_UseThresholdPreview` is enabled (for scalar fields).
+
+This means:
+- For mask grids: upload `0/1` and the shader becomes a crisp ON/OFF display.
+- For scalar previews: upload continuous values and use threshold preview toggles.
+
+### 10.7 Extension points (how we evolve without breaking the contract)
+Future alternative display backends should keep the **writer contract** unchanged:
+- “strategies write to `MaskGrid2D` only; adapters visualize/output”
+
+Potential backends:
+- **Texture2D adapter:** pack mask into a CPU array and upload to a texture, or use a compute shader to write a RWTexture.
+- **Mesh adapter:** build a contour mesh (e.g., marching squares) from the mask.
+- **Tilemap adapter:** editor-only convenience output (not used by runtime strategies).
+
+To keep this clean, treat “display” as a swappable adapter surface with:
+- `MaskGrid2D → (DisplayBackend) → Unity renderable`
+while keeping the lantern instanced path as the current baseline.
 
 ---
+
 
 ## 11) Proposed module / package structure (namespaces + assemblies)
 **Runtime assemblies**
@@ -555,9 +930,13 @@ This is the minimum set that defines the contract and gives us a working lantern
 
 **Optional (recommended while porting Phase E strategies)**
 - `CorridorFirstDungeon2D`
+- `BspPartition2D`
+- `RoomFirstBspDungeon2D`
 - `LayoutSeedUtil`
 - `MaskNeighborOps2D`
 - `PCGDungeonVisualization` (strategy-focused workbench)
+- `RoomFirstBspDungeon2DTests`
+- `PCGDungeonGPU.hlsl` (current instanced render backend)
 
 ---
 

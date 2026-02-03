@@ -105,11 +105,6 @@ namespace Islands.PCG.Tests.EditMode
             // Lock-in pattern: set this once you visually validate Lantern output.
             const ulong GOLDEN = 0x5A75476E937F50FDUL;
 
-            if (GOLDEN == 0UL)
-            {
-                Assert.Fail($"CorridorFirst golden hash not set. Set GOLDEN = 0x{actual:X16}UL after verifying output.");
-            }
-
             Assert.AreEqual(GOLDEN, actual);
         }
     }

@@ -1,4 +1,4 @@
-using Unity.Collections;
+﻿using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
@@ -6,20 +6,13 @@ using UnityEngine;
 using Islands.PCG.Core;
 using Islands.PCG.Grids;
 using Islands.PCG.Layout;
+using Islands.PCG.Layout.Bsp;
 
 namespace Islands.PCG.Samples
 {
     /// <summary>
-    /// Lean dungeon-strategy visualization testbed for grid-based generation.
-    ///
-    /// Supported strategies:
-    /// - Simple Random Walk (Phase D2)
-    /// - Iterated Random Walk (Phase D3)
-    /// - Rooms + Corridors (Phase D5)
-    /// - Corridor First (Phase E1)
-    ///
-    /// This component writes into a MaskGrid2D (no Tilemaps/HashSets) and uploads the result
-    /// as packed float4 data to the "_Noise" buffer expected by the Islands GPU instancing path.
+    /// Lantern/Visualization testbed for grid-based dungeon generation (MaskGrid2D).
+    /// Includes D2/D3/D5/E1 and Phase E2 (Room First BSP).
     /// </summary>
     public sealed class PCGDungeonVisualization : Visualization
     {
@@ -33,157 +26,166 @@ namespace Islands.PCG.Samples
             IteratedRandomWalk = 1,
             RoomsCorridors = 2,
             CorridorFirst = 3,
+            RoomFirstBsp = 4,
+            RoomGrid = 5,
         }
 
         // -------------------------
         // Strategy + palette
         // -------------------------
         [Header("Strategy")]
-        [Tooltip("Which dungeon strategy to visualize.")]
         [SerializeField] private StrategyMode strategy = StrategyMode.IteratedRandomWalk;
 
         [Header("Palette (0/1)")]
-        [Tooltip("Color used when a cell is OFF (mask value = 0).")]
         [SerializeField] private Color maskOffColor = Color.black;
-
-        [Tooltip("Color used when a cell is ON (mask value = 1).")]
         [SerializeField] private Color maskOnColor = Color.white;
 
-        [Header("Logs")]
-        [Tooltip("If enabled, emits a debug log line describing the generated mask.")]
-        [SerializeField] private bool enableLogs = false;
-
-        [Tooltip("Log on every N UpdateVisualization calls. 0 = log only the first call.")]
-        [SerializeField] private int logEveryNUpdates = 0;
-
         // -------------------------
-        // Random Walk (Phase D2 / D3)
+        // Walk config (D2/D3)
         // -------------------------
         [Header("Random Walk (D2/D3)")]
-        [Tooltip("Seed for Unity.Mathematics.Random. If 0, it is clamped to 1.")]
         [SerializeField] private uint walkSeed = 1u;
-
-        [Tooltip("Starting grid cell for the walk. Clamped to [0..resolution-1].")]
-        [SerializeField] private Vector2Int walkStart = new Vector2Int(32, 32);
-
-        [Tooltip("If true, clears the mask before carving the walk.")]
+        [SerializeField] private Vector2Int walkStart = new Vector2Int(8, 8);
         [SerializeField] private bool walkClearBeforeDraw = true;
 
-        [Tooltip("D2 only: total number of attempted steps in the walk.")]
         [Min(0)]
         [SerializeField] private int walkLength = 200;
 
-        [Tooltip("D3 only: number of walk 'iterations' (multiple short walks combined).")]
         [Min(1)]
         [SerializeField] private int walkIterations = 20;
 
-        [Tooltip("D3 only: minimum length of each walk iteration.")]
         [Min(0)]
         [SerializeField] private int walkLengthMin = 25;
 
-        [Tooltip("D3 only: maximum length of each walk iteration.")]
         [Min(0)]
-        [SerializeField] private int walkLengthMax = 100;
+        [SerializeField] private int walkLengthMax = 75;
 
-        [Tooltip("D3 only: chance that each iteration restarts from a random existing floor cell.")]
         [Range(0f, 1f)]
-        [SerializeField] private float walkRandomStartChance = 0.25f;
+        [SerializeField] private float walkRandomStartChance = 0.2f;
 
-        [Tooltip("Brush radius for carving. 0 = single-cell carve; >0 = disc brush per step.")]
+        [Header("Walk Brush + Skew (D2/D3)")]
         [Min(0)]
-        [SerializeField] private int walkBrushRadius = 0;
+        [SerializeField] private int walkBrushRadius = 1;
 
-        [Tooltip("Directional bias: positive = bias right (X) / up (Y), negative = left / down.")]
+        [Range(-1f, 1f)]
         [SerializeField] private float walkSkewX = 0f;
 
-        [Tooltip("Directional bias: positive = bias up, negative = bias down.")]
+        [Range(-1f, 1f)]
         [SerializeField] private float walkSkewY = 0f;
 
-        [Tooltip("Max retries per step when a move would go out-of-bounds (keeps OOB-safe).")]
-        [Min(1)]
+        [Min(0)]
         [SerializeField] private int walkMaxRetries = 8;
 
         // -------------------------
-        // Rooms + Corridors (Phase D5)
+        // Rooms + Corridors (D5)
         // -------------------------
         [Header("Rooms + Corridors (D5)")]
-        [Tooltip("Seed for Rooms+Corridors. Clamped to >= 1.")]
         [SerializeField] private int rcSeed = 1;
 
-        [Tooltip("Target number of rooms to attempt to place.")]
         [Min(0)]
         [SerializeField] private int rcRoomCount = 12;
 
-        [Tooltip("Minimum room size (width,height) in cells. Values are clamped to >= 1.")]
         [SerializeField] private Vector2Int rcRoomSizeMin = new Vector2Int(6, 6);
-
-        [Tooltip("Maximum room size (width,height) in cells. Values are clamped to >= 1.")]
         [SerializeField] private Vector2Int rcRoomSizeMax = new Vector2Int(14, 14);
 
-        [Tooltip("Placement attempts per room. Higher = denser layouts but more CPU.")]
         [Min(1)]
-        [SerializeField] private int rcPlacementAttemptsPerRoom = 20;
+        [SerializeField] private int rcPlacementAttemptsPerRoom = 32;
 
-        [Tooltip("Padding (in cells) around rooms to reduce overlap / enforce spacing.")]
         [Min(0)]
-        [SerializeField] private int rcRoomPadding = 2;
+        [SerializeField] private int rcRoomPadding = 1;
 
-        [Tooltip("Corridor brush radius used by the composer when connecting rooms.")]
         [Min(0)]
-        [SerializeField] private int rcCorridorBrushRadius = 0;
+        [SerializeField] private int rcCorridorBrushRadius = 1;
 
-        [Tooltip("If true, clears the mask before generating rooms/corridors.")]
         [SerializeField] private bool rcClearBeforeDraw = true;
-
-        [Tooltip("If true, rooms may overlap existing filled cells (useful for high density).")]
-        [SerializeField] private bool rcAllowOverlap = true;
+        [SerializeField] private bool rcAllowOverlap = false;
 
         // -------------------------
-        // Corridor First (Phase E1)
+        // Corridor First (E1)
         // -------------------------
         [Header("Corridor First (E1)")]
-        [Tooltip("Seed for Corridor-First. Clamped to >= 1.")]
         [SerializeField] private int cfSeed = 1;
 
-        [Tooltip("Number of corridor segments to carve (each is a DrawLine).")]
         [Min(0)]
         [SerializeField] private int cfCorridorCount = 64;
 
-        [Tooltip("Minimum corridor segment length (cells).")]
         [Min(1)]
         [SerializeField] private int cfCorridorLengthMin = 6;
 
-        [Tooltip("Maximum corridor segment length (cells).")]
         [Min(1)]
         [SerializeField] private int cfCorridorLengthMax = 18;
 
-        [Tooltip("Brush radius used when carving corridors (DrawLine). 0 = single-cell line.")]
         [Min(0)]
-        [SerializeField] private int cfCorridorBrushRadius = 0;
+        [SerializeField] private int cfCorridorBrushRadius = 1;
 
-        [Tooltip("Padding from borders. Start/endpoints are clamped to [padding..res-1-padding].")]
         [Min(0)]
-        [SerializeField] private int cfBorderPadding = 1;
+        [SerializeField] private int cfBorderPadding = 2;
 
-        [Tooltip("If true, clears the mask before generating corridors/rooms.")]
         [SerializeField] private bool cfClearBeforeDraw = true;
 
-        [Header("Corridor First Rooms")]
-        [Tooltip("If > 0: pick exactly N unique corridor endpoints (seeded shuffle) to place rooms.\nIf <= 0: use Cf Room Spawn Chance per endpoint.")]
         [SerializeField] private int cfRoomSpawnCount = 8;
-
-        [Tooltip("If Cf Room Spawn Count <= 0: chance per endpoint to place a room.")]
         [Range(0f, 1f)]
         [SerializeField] private float cfRoomSpawnChance = 0.6f;
 
-        [Tooltip("Minimum room size (width,height) in cells. Values are clamped to >= 1.")]
         [SerializeField] private Vector2Int cfRoomSizeMin = new Vector2Int(6, 6);
-
-        [Tooltip("Maximum room size (width,height) in cells. Values are clamped to >= 1.")]
         [SerializeField] private Vector2Int cfRoomSizeMax = new Vector2Int(14, 14);
 
-        [Tooltip("If true, performs a dead-end scan after endpoint rooms and stamps rooms at dead-ends.")]
         [SerializeField] private bool cfEnsureRoomsAtDeadEnds = true;
+
+        // -------------------------
+        // Room First BSP (E2)
+        // -------------------------
+        [Header("Room First BSP (E2)")]
+        [SerializeField] private int rbSeed = 1;
+
+        [Min(0)]
+        [SerializeField] private int rbSplitIterations = 6;
+
+        [SerializeField] private Vector2Int rbMinLeafSize = new Vector2Int(16, 16);
+
+        [Min(0)]
+        [SerializeField] private int rbRoomPadding = 1;
+
+        [Min(0)]
+        [SerializeField] private int rbCorridorBrushRadius = 0;
+
+        [SerializeField] private bool rbConnectWithManhattan = true;
+        [SerializeField] private bool rbClearBeforeDraw = true;
+
+        // -------------------------
+        // Room Grid (E3)
+        // -------------------------
+        [Header("Room Grid (E3)")]
+        [Tooltip("Seed for RoomGrid. Clamped to >= 1.")]
+        [SerializeField] private int rgSeed = 1;
+
+        [Tooltip("How many rooms to place (unique nodes on coarse grid).")]
+        [Min(0)]
+        [SerializeField] private int rgRoomCount = 16;
+
+        [Tooltip("Coarse grid spacing in cells (>= 1).")]
+        [Min(1)]
+        [SerializeField] private int rgCellSize = 10;
+
+        [Tooltip("Padding from borders used to build the coarse grid interior.")]
+        [Min(0)]
+        [SerializeField] private int rgBorderPadding = 1;
+
+        [Tooltip("Minimum room size (width,height) in cells. Values are clamped to >= 1.")]
+        [SerializeField] private Vector2Int rgRoomSizeMin = new Vector2Int(6, 6);
+
+        [Tooltip("Maximum room size (width,height) in cells. Values are clamped to >= 1.")]
+        [SerializeField] private Vector2Int rgRoomSizeMax = new Vector2Int(14, 14);
+
+        [Tooltip("Brush radius for corridors (DrawLine). 0 = 1-cell wide.")]
+        [Min(0)]
+        [SerializeField] private int rgCorridorBrushRadius = 0;
+
+        [Tooltip("If true, connects with Manhattan L (two DrawLine segments). Otherwise direct DrawLine.")]
+        [SerializeField] private bool rgConnectWithManhattan = true;
+
+        [Tooltip("If true, clears the mask before generating.")]
+        [SerializeField] private bool rgClearBeforeDraw = true;
 
         // -------------------------
         // Runtime state
@@ -199,7 +201,7 @@ namespace Islands.PCG.Samples
         private int updateCalls = 0;
         private bool loggedFirstUpdate = false;
 
-        // Dirty tracking (minimal)
+        // Strategy caching
         private int lastResolution = -1;
         private StrategyMode lastStrategy = (StrategyMode)(-1);
 
@@ -247,38 +249,64 @@ namespace Islands.PCG.Samples
         private bool lastCfEnsureRoomsAtDeadEnds;
         private int lastPlacedCfRooms = 0;
 
-        /// <summary>
-        /// Sets the colors used for mask value 0 and 1.
-        /// Requires shader properties: _MaskOffColor, _MaskOnColor.
-        /// </summary>
-        public void SetMaskColors(Color offColor, Color onColor)
-        {
-            maskOffColor = offColor;
-            maskOnColor = onColor;
-            ApplyPaletteToMpb();
-        }
+        // RoomFirst BSP cache
+        private bool roomFirstBspDirty = true;
+        private int lastRbSeed;
+        private int lastRbSplitIterations;
+        private Vector2Int lastRbMinLeafSize;
+        private int lastRbRoomPadding;
+        private int lastRbCorridorBrushRadius;
+        private bool lastRbConnectWithManhattan;
+        private bool lastRbClearBeforeDraw;
+        private int lastRbLeafCount = 0;
+        private int lastPlacedRbRooms = 0;
+
+        private bool roomGridDirty = true;
+
+        private int lastRgSeed;
+        private int lastRgRoomCount;
+        private int lastRgCellSize;
+        private int lastRgBorderPadding;
+        private Vector2Int lastRgRoomSizeMin;
+        private Vector2Int lastRgRoomSizeMax;
+        private int lastRgCorridorBrushRadius;
+        private bool lastRgConnectWithManhattan;
+        private bool lastRgClearBeforeDraw;
+
+        private int lastPlacedRgRooms = 0;
+
 
         protected override void EnableVisualization(int dataLength, MaterialPropertyBlock propertyBlock)
         {
             mpb = propertyBlock;
 
             packedNoise = new NativeArray<float4>(dataLength, Allocator.Persistent, NativeArrayOptions.ClearMemory);
+
+            // IMPORTANT:
+            // packedNoise is float4 packs (dataLength packs).
+            // The shader expects _Noise to be a per-instance float buffer (count == resolution*resolution).
+            // Therefore, buffer element count must be dataLength * 4 with stride sizeof(float).
             noiseBuffer = new ComputeBuffer(dataLength * 4, sizeof(float));
             mpb.SetBuffer(NoiseId, noiseBuffer);
 
             ApplyPaletteToMpb();
 
-            // Force full regen on first update
             lastResolution = -1;
             lastStrategy = (StrategyMode)(-1);
 
+            // Mark everything dirty on enable (parity with other strategies)
             walkDirty = true;
             roomsCorridorsDirty = true;
             corridorFirstDirty = true;
+            roomFirstBspDirty = true;
+            roomGridDirty = true;
 
+            // Cache all params so "ParamsChanged()" comparisons start from a defined baseline
             CacheWalkParams();
             CacheRoomsCorridorsParams();
             CacheCorridorFirstParams();
+            CacheRoomFirstBspParams();
+            CacheRoomGridParams();
         }
 
         protected override void DisableVisualization()
@@ -294,34 +322,35 @@ namespace Islands.PCG.Samples
             if (mask.IsCreated) mask.Dispose();
             maskResolution = -1;
 
+            // Mark dirty so the next enable/update regenerates safely.
+            roomGridDirty = true;
+
             mpb = null;
-
-            updateCalls = 0;
-            loggedFirstUpdate = false;
-
-            lastResolution = -1;
-            lastStrategy = (StrategyMode)(-1);
-
-            walkDirty = true;
-            roomsCorridorsDirty = true;
-            corridorFirstDirty = true;
         }
 
-        protected override void UpdateVisualization(NativeArray<float3x4> positions, int resolution, JobHandle handle)
+
+        protected override void UpdateVisualization(
+            NativeArray<float3x4> positions,
+            int resolution,
+            JobHandle handle)
         {
-            updateCalls++;
+            // Base will SetData(positions/normals) right after calling us; make sure the shape jobs are done.
             handle.Complete();
 
-            bool shouldLogThisCall =
-                enableLogs &&
-                (!loggedFirstUpdate || (logEveryNUpdates > 0 && (updateCalls % logEveryNUpdates == 0)));
+            updateCalls++;
+            ApplyPaletteToMpb();
 
+            bool shouldLogThisCall = !loggedFirstUpdate;
+
+            // Force regen if base resolution changes
             if (resolution != lastResolution)
             {
                 lastResolution = resolution;
                 walkDirty = true;
                 roomsCorridorsDirty = true;
                 corridorFirstDirty = true;
+                roomFirstBspDirty = true;
+                roomGridDirty = true;
             }
 
             if (strategy != lastStrategy)
@@ -330,6 +359,8 @@ namespace Islands.PCG.Samples
                 walkDirty = true;
                 roomsCorridorsDirty = true;
                 corridorFirstDirty = true;
+                roomFirstBspDirty = true;
+                roomGridDirty = true;
             }
 
             // Parameter dirty checks (only for active strategy)
@@ -357,6 +388,22 @@ namespace Islands.PCG.Samples
                     corridorFirstDirty = true;
                 }
             }
+            else if (strategy == StrategyMode.RoomFirstBsp)
+            {
+                if (RoomFirstBspParamsChanged())
+                {
+                    CacheRoomFirstBspParams();
+                    roomFirstBspDirty = true;
+                }
+            }
+            else if (strategy == StrategyMode.RoomGrid)
+            {
+                if (RoomGridParamsChanged())
+                {
+                    CacheRoomGridParams();
+                    roomGridDirty = true;
+                }
+            }
 
             EnsureMaskAllocated(resolution);
 
@@ -381,10 +428,10 @@ namespace Islands.PCG.Samples
                             ref rng,
                             new int2(sx, sy),
                             walkLength,
-                            walkBrushRadius,
-                            walkSkewX,
-                            walkSkewY,
-                            walkMaxRetries);
+                            brushRadius: math.max(0, walkBrushRadius),
+                            skewX: walkSkewX,
+                            skewY: walkSkewY,
+                            maxRetries: math.max(0, walkMaxRetries));
 
                         PackFromMaskAndUpload(resolution);
                         uploadedThisFrame = true;
@@ -404,22 +451,19 @@ namespace Islands.PCG.Samples
                         int sx = Mathf.Clamp(walkStart.x, 0, resolution - 1);
                         int sy = Mathf.Clamp(walkStart.y, 0, resolution - 1);
 
-                        int iters = math.max(1, walkIterations);
-                        int lenMin = math.max(0, walkLengthMin);
-                        int lenMax = math.max(lenMin, walkLengthMax);
-
+                        // IMPORTANT: your IteratedRandomWalk2D API is Carve(...) (no config struct).
                         IteratedRandomWalk2D.Carve(
                             ref mask,
                             ref rng,
                             new int2(sx, sy),
-                            iters,
-                            lenMin,
-                            lenMax,
-                            walkBrushRadius,
-                            walkRandomStartChance,
-                            walkSkewX,
-                            walkSkewY,
-                            walkMaxRetries);
+                            iterations: math.max(1, walkIterations),
+                            walkLengthMin: math.max(0, walkLengthMin),
+                            walkLengthMax: math.max(math.max(0, walkLengthMin), walkLengthMax),
+                            brushRadius: math.max(0, walkBrushRadius),
+                            randomStartChance: math.clamp(walkRandomStartChance, 0f, 1f),
+                            skewX: walkSkewX,
+                            skewY: walkSkewY,
+                            maxRetries: math.max(0, walkMaxRetries));
 
                         PackFromMaskAndUpload(resolution);
                         uploadedThisFrame = true;
@@ -479,13 +523,13 @@ namespace Islands.PCG.Samples
                             ensureRoomsAtDeadEnds = cfEnsureRoomsAtDeadEnds,
                         };
 
-                        var rng = LayoutSeedUtil.CreateRng(cfSeed);
+                        uint seed = (uint)math.max(cfSeed, 1);
+                        var rng = new Unity.Mathematics.Random(seed);
 
-                        int endpointsCap = math.max(1, cfg.corridorCount + 1);
+                        int endpointsCap = math.max(1, cfg.corridorCount * 2);
                         using var endpoints = new NativeArray<int2>(endpointsCap, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
-                        // Only used to record room centers; stamping happens regardless of capacity.
-                        int centersCap = math.max(32, endpointsCap * 2);
+                        int centersCap = math.max(1, cfg.roomSpawnCount > 0 ? cfg.roomSpawnCount : endpointsCap);
                         using var centers = new NativeArray<int2>(centersCap, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
                         CorridorFirstDungeon2D.Generate(ref mask, ref rng, in cfg, endpoints, centers, out int placedRooms);
@@ -494,6 +538,72 @@ namespace Islands.PCG.Samples
                         PackFromMaskAndUpload(resolution);
                         uploadedThisFrame = true;
                         corridorFirstDirty = false;
+                        break;
+                    }
+
+                case StrategyMode.RoomFirstBsp:
+                    {
+                        if (!roomFirstBspDirty) break;
+
+                        var cfg = new RoomFirstBspDungeon2D.RoomFirstBspConfig
+                        {
+                            splitIterations = math.max(0, rbSplitIterations),
+                            minLeafSize = new int2(math.max(1, rbMinLeafSize.x), math.max(1, rbMinLeafSize.y)),
+                            roomPadding = math.max(0, rbRoomPadding),
+                            corridorBrushRadius = math.max(0, rbCorridorBrushRadius),
+                            connectWithManhattan = rbConnectWithManhattan,
+                            clearBeforeGenerate = rbClearBeforeDraw,
+                        };
+
+                        uint seed = (uint)math.max(rbSeed, 1);
+                        var rng = new Unity.Mathematics.Random(seed);
+
+                        int maxLeaves = BspPartition2D.MaxLeavesUpperBound(cfg.splitIterations);
+                        maxLeaves = math.max(1, maxLeaves);
+
+                        using var leaves = new NativeArray<BspPartition2D.IntRect2D>(maxLeaves, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                        using var centers = new NativeArray<int2>(maxLeaves, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+
+                        RoomFirstBspDungeon2D.Generate(ref mask, ref rng, in cfg, leaves, centers, out int leafCount, out int placedRooms);
+                        lastRbLeafCount = leafCount;
+                        lastPlacedRbRooms = placedRooms;
+
+                        PackFromMaskAndUpload(resolution);
+                        uploadedThisFrame = true;
+                        roomFirstBspDirty = false;
+                        break;
+                    }
+
+                case StrategyMode.RoomGrid:
+                    {
+                        if (!roomGridDirty) break;
+
+                        var cfg = new RoomGridDungeon2D.RoomGridConfig
+                        {
+                            roomCount = math.max(0, rgRoomCount),
+                            cellSize = math.max(1, rgCellSize),
+                            borderPadding = math.max(0, rgBorderPadding),
+
+                            roomSizeMin = new int2(math.max(1, rgRoomSizeMin.x), math.max(1, rgRoomSizeMin.y)),
+                            roomSizeMax = new int2(math.max(1, rgRoomSizeMax.x), math.max(1, rgRoomSizeMax.y)),
+
+                            corridorBrushRadius = math.max(0, rgCorridorBrushRadius),
+                            connectWithManhattan = rgConnectWithManhattan,
+                            clearBeforeGenerate = rgClearBeforeDraw,
+                        };
+
+                        var rng = LayoutSeedUtil.CreateRng(rgSeed);
+
+                        int take = math.max(1, cfg.roomCount);
+                        using var picked = new NativeArray<int>(take, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                        using var centers = new NativeArray<int2>(take, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+
+                        RoomGridDungeon2D.Generate(ref mask, ref rng, in cfg, picked, centers, out int placedRooms);
+                        lastPlacedRgRooms = placedRooms;
+
+                        PackFromMaskAndUpload(resolution);
+                        uploadedThisFrame = true;
+                        roomGridDirty = false;
                         break;
                     }
             }
@@ -506,6 +616,8 @@ namespace Islands.PCG.Samples
                 string extra =
                     (strategy == StrategyMode.RoomsCorridors) ? $" placedRooms={lastPlacedRcRooms}" :
                     (strategy == StrategyMode.CorridorFirst) ? $" placedRooms={lastPlacedCfRooms}" :
+                    (strategy == StrategyMode.RoomFirstBsp) ? $" placedRooms={lastPlacedRbRooms} leaves={lastRbLeafCount}" :
+                    (strategy == StrategyMode.RoomGrid) ? $" placedRooms={lastPlacedRgRooms}" :
                     string.Empty;
 
                 Debug.Log($"[PCGDungeonVisualization] Update #{updateCalls} strategy={strategy} res={resolution} uploaded={uploadedThisFrame} ones={ones}{extra}");
@@ -540,14 +652,15 @@ namespace Islands.PCG.Samples
                 packedNoise[packIndex] = new float4(v0, v1, v2, v3);
             }
 
-            noiseBuffer.SetData(packedNoise);
+            // Upload as float stream: length == packedNoise.Length * 4
+            noiseBuffer.SetData(packedNoise.Reinterpret<float>(sizeof(float) * 4));
         }
 
         private float MaskInstanceValue(int instanceIndex, int resolution)
         {
             int x = instanceIndex % resolution;
             int y = instanceIndex / resolution;
-            return mask.GetUnchecked(x, y) ? 1f : 0f;
+            return mask.Get(x, y) ? 1f : 0f;
         }
 
         private void ApplyPaletteToMpb()
@@ -650,11 +763,53 @@ namespace Islands.PCG.Samples
                    cfEnsureRoomsAtDeadEnds != lastCfEnsureRoomsAtDeadEnds;
         }
 
-        protected override void OnValidate()
+        private void CacheRoomFirstBspParams()
         {
-            base.OnValidate();
-            ApplyPaletteToMpb();
-            if (enabled) transform.hasChanged = true;
+            lastRbSeed = rbSeed;
+            lastRbSplitIterations = rbSplitIterations;
+            lastRbMinLeafSize = rbMinLeafSize;
+            lastRbRoomPadding = rbRoomPadding;
+            lastRbCorridorBrushRadius = rbCorridorBrushRadius;
+            lastRbConnectWithManhattan = rbConnectWithManhattan;
+            lastRbClearBeforeDraw = rbClearBeforeDraw;
         }
+
+        private bool RoomFirstBspParamsChanged()
+        {
+            return rbSeed != lastRbSeed ||
+                   rbSplitIterations != lastRbSplitIterations ||
+                   rbMinLeafSize != lastRbMinLeafSize ||
+                   rbRoomPadding != lastRbRoomPadding ||
+                   rbCorridorBrushRadius != lastRbCorridorBrushRadius ||
+                   rbConnectWithManhattan != lastRbConnectWithManhattan ||
+                   rbClearBeforeDraw != lastRbClearBeforeDraw;
+        }
+
+        private void CacheRoomGridParams()
+        {
+            lastRgSeed = rgSeed;
+            lastRgRoomCount = rgRoomCount;
+            lastRgCellSize = rgCellSize;
+            lastRgBorderPadding = rgBorderPadding;
+            lastRgRoomSizeMin = rgRoomSizeMin;
+            lastRgRoomSizeMax = rgRoomSizeMax;
+            lastRgCorridorBrushRadius = rgCorridorBrushRadius;
+            lastRgConnectWithManhattan = rgConnectWithManhattan;
+            lastRgClearBeforeDraw = rgClearBeforeDraw;
+        }
+
+        private bool RoomGridParamsChanged()
+        {
+            return rgSeed != lastRgSeed ||
+                   rgRoomCount != lastRgRoomCount ||
+                   rgCellSize != lastRgCellSize ||
+                   rgBorderPadding != lastRgBorderPadding ||
+                   rgRoomSizeMin != lastRgRoomSizeMin ||
+                   rgRoomSizeMax != lastRgRoomSizeMax ||
+                   rgCorridorBrushRadius != lastRgCorridorBrushRadius ||
+                   rgConnectWithManhattan != lastRgConnectWithManhattan ||
+                   rgClearBeforeDraw != lastRgClearBeforeDraw;
+        }
+
     }
 }

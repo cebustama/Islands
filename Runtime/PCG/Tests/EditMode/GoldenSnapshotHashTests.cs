@@ -49,14 +49,6 @@ public sealed class GoldenSnapshotHashTests
             // NOTE: includeDimensions defaults to true; keep it that way for this gate.
             ulong actual = mask.SnapshotHash64();
 
-            if (ExpectedHash == 0UL)
-            {
-                Assert.Fail(
-                    "Golden hash not locked yet.\n" +
-                    $"Set ExpectedHash to 0x{actual:X16}UL and re-run.\n" +
-                    "(Only update the constant when you intentionally change the output contract.)");
-            }
-
             Assert.AreEqual(
                 ExpectedHash, actual,
                 $"Golden SnapshotHash64 changed!\nExpected: 0x{ExpectedHash:X16}\nActual:   0x{actual:X16}\n" +

@@ -181,7 +181,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 1
+  orthographic size: 0.5
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -256,6 +256,68 @@ MonoBehaviour:
     m_MipBias: 0
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
+--- !u!1 &564236004
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 564236006}
+  - component: {fileID: 564236007}
+  m_Layer: 0
+  m_Name: PCG Map Demo
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &564236006
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 564236004}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &564236007
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 564236004}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5876b0f41c5302649a0e1fcdb3c4822b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  instanceMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  material: {fileID: 2100000, guid: 83d5046466c75d544ba14fab46d181c9, type: 2}
+  shape: 0
+  instanceScale: 1
+  resolution: 64
+  displacement: 0
+  seed: 1
+  viewLayer: 0
+  maskOffColor: {r: 0.13461196, g: 0.13731366, b: 0.5188679, a: 1}
+  maskOnColor: {r: 0.04215301, g: 0.3207547, b: 0.0015129976, a: 1}
+  islandRadius01: 0.45
+  waterThreshold01: 0.5
+  islandSmoothFrom01: 0.3
+  islandSmoothTo01: 0.7
+  noiseCellSize: 8
+  noiseAmplitude: 0.18
+  quantSteps: 1024
+  clearBeforeRun: 1
 --- !u!1 &1033610845
 GameObject:
   m_ObjectHideFlags: 0
@@ -272,7 +334,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1033610846
 Transform:
   m_ObjectHideFlags: 0
@@ -309,8 +371,6 @@ MonoBehaviour:
   strategy: 1
   maskOffColor: {r: 0, g: 0, b: 0, a: 1}
   maskOnColor: {r: 1, g: 1, b: 1, a: 1}
-  enableLogs: 0
-  logEveryNUpdates: 0
   walkSeed: 1
   walkStart: {x: 32, y: 32}
   walkClearBeforeDraw: 1
@@ -323,6 +383,15 @@ MonoBehaviour:
   walkSkewX: 0
   walkSkewY: 0
   walkMaxRetries: 8
+  rcSeed: 1
+  rcRoomCount: 12
+  rcRoomSizeMin: {x: 6, y: 6}
+  rcRoomSizeMax: {x: 14, y: 14}
+  rcPlacementAttemptsPerRoom: 32
+  rcRoomPadding: 1
+  rcCorridorBrushRadius: 1
+  rcClearBeforeDraw: 1
+  rcAllowOverlap: 0
   cfSeed: 1
   cfCorridorCount: 64
   cfCorridorLengthMin: 6
@@ -335,9 +404,26 @@ MonoBehaviour:
   cfRoomSizeMin: {x: 6, y: 6}
   cfRoomSizeMax: {x: 14, y: 14}
   cfEnsureRoomsAtDeadEnds: 1
+  rbSeed: 1
+  rbSplitIterations: 6
+  rbMinLeafSize: {x: 16, y: 16}
+  rbRoomPadding: 1
+  rbCorridorBrushRadius: 0
+  rbConnectWithManhattan: 1
+  rbClearBeforeDraw: 1
+  rgSeed: 1
+  rgRoomCount: 16
+  rgCellSize: 10
+  rgBorderPadding: 1
+  rgRoomSizeMin: {x: 6, y: 6}
+  rgRoomSizeMax: {x: 14, y: 14}
+  rgCorridorBrushRadius: 0
+  rgConnectWithManhattan: 1
+  rgClearBeforeDraw: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
   - {fileID: 297265533}
   - {fileID: 1033610846}
+  - {fileID: 564236006}

@@ -1,0 +1,1559 @@
+# tactiq.io free youtube transcript
+# No title found
+# https://www.youtube.com/watch/_24TfxaPWlI
+
+00:00:00.060 starting we're going to open unihub ensuring that it's version 3.2
+00:00:05.880 if you are new to Unity a download link to unihub is available in the description below first we're going to click new project
+00:00:12.599 from here we're going to ensure that the editor version is 2021.3 LTS
+00:00:19.740 and then we're going to select 2D from the template list we're going to name our project
+00:00:26.880 and simply click create project
+00:00:32.579 now that we have our project click window in the top menu selecting package Manager Go heading over to packages in
+00:00:39.300 project and selecting Unity registry you're going to navigate down to input system and click install
+00:00:49.680 clicking yes so unique into its thing time for a bit of coding right click in
+00:00:55.140 our project window heading over to create and click c-sharp script from
+00:01:00.300 there we're going to rename the script to game manager we're gonna open it from here create a
+00:01:06.479 static variable called public static game manager instance this is so we can use the game manager
+00:01:12.780 anywhere in the scene via its instance next remove the update method and rename
+00:01:18.780 starts to awake so we can create a condition that checks
+00:01:23.820 if there's already an instance of game manager if one does exist then this duplicate will just destroy itself
+00:01:33.180 coming back to Unity we want to import our Sprite sheet I left a link to the default Sprite sheet in the description
+00:01:38.939 and once imported select it in the project window within the assets folder
+00:01:44.040 from there we're going to head over to the inspector and do the following we're going to set Sprite mode to
+00:01:50.100 multiple pixels per unit to 10. filter mode to points it's Max size to
+00:01:58.640 512 and compression to high quality we're going to then click apply and
+00:02:05.460 proceed over to Sprite editor here we're going to go to slice in its top menu
+00:02:11.879 change its type to grid by cell size and change the pixel sizes for X and Y
+00:02:19.080 to 10. click slice and click apply
+00:02:24.480 and then close the Sprite editor window next select the main camera game object
+00:02:29.640 within the hierarchy and then in the inspector simply set the size on the camera component to 10.
+00:02:38.099 this way we have a better view of our soon to be roguelike map finally while
+00:02:43.379 we are done we can still get a bit of street cred so let's turn our project into a repository and publish it on
+00:02:49.620 GitHub I'll leave a link to a previous video I created on that subject so simply put open GitHub desktop click
+00:02:57.180 file new Repository we're now going to name our repository
+00:03:02.580 give it a short description select a folder where it's located and in the git
+00:03:08.459 ignore list we're going to select Unity
+00:03:14.879 then click create repository before finally clicking publish Repository
+00:03:21.360 it's time to begin our first steps into creating our roguelike but before that let's take some time to sort our assets
+00:03:27.480 into folders by creating a resources folder and a scripts folder
+00:03:34.019 then drag the Sprite shade into resources and game manager into Scripts
+00:03:40.980 now open the resources folder expand the Sprite sheet and drag the at symbol into the
+00:03:48.180 hierarchy this creates a 2d game object that we can then rename to player
+00:03:55.799 before dragging into our resources folder where it becomes a prefab now
+00:04:01.200 delete the Sprite from our hierarchy and open the game manuscript in our
+00:04:06.480 scripts folder with our game manager open we're going to create a start method
+00:04:13.500 we will then pass in instantiate resource.load with its type being game object and parameter being the player
+00:04:21.298 string this will make our player game object using the play prefab located within the
+00:04:27.540 resources folder once we click play in the unity editor we will then add a DOT
+00:04:33.540 name equals player so we don't see clone within its name in the hierarchy from here we will be creating a simple turn
+00:04:40.440 Handler by first creating two new variables a float called time giving it
+00:04:45.720 a default value of 0.1 f
+00:04:51.180 followed by a Boolean called is player turn with a default value of true
+00:04:58.979 before finally allowing our player is turn bullion to be accessed through a
+00:05:04.020 getter next we will create two methods one
+00:05:10.020 called end turn and the other wait for turns
+00:05:15.960 the end turn method tells the game manager to set its player turn to false
+00:05:21.300 and start a carotene called wait for turns the weight for turns method due to being
+00:05:28.139 of type I enumerator tells the game manager to wait one tenth of a second before setting is player turn to True
+00:05:35.940 without game Ranger now configured head back to Unity editor and try to input action file called controls
+00:05:45.660 we're going to set generate C sharp plus to true followed by clicking apply
+00:05:51.539 now press edit assets create a control scheme called arrow
+00:05:56.820 keys and add keyboard and mouse to the list
+00:06:03.900 you can set Mouse to optional and then click save you will follow this by creating an
+00:06:10.500 action map called player rename new action to movement
+00:06:17.759 set its action type to Value followed by setting its control type to Vector 2. from here we're going to
+00:06:25.139 quickly add the interaction press and a normalize Vector 2 in its processes now
+00:06:32.100 expanding movements we're going to delete its current binding and at an up down left right composite
+00:06:39.840 we're now going to set its individual paths to the arrow keys
+00:06:47.160 before moving on we're going to create a new action called exit
+00:06:52.800 and set its binding to escape making sure to set arrow keys to true
+00:07:00.660 and saving the asset now to use the import system that we just created we're going to create a
+00:07:07.139 player script opening the script with the script open we're going to get rid of the unneeded
+00:07:13.919 Imports followed by adding in uni engine dots import system
+00:07:21.720 and then remove both the start and update methods here we're going to add a reference to
+00:07:27.840 our controls input actions and then a private Boolean to represent
+00:07:34.319 when we hold down a movement key next we're going to add the awake method
+00:07:41.160 to create a new controls object followed by adding the on enable and on
+00:07:46.979 disable methods these two methods tell the controls when
+00:07:52.680 they can be used and when they cannot be used it also handles the subscriptions to and from the controls input actions
+00:08:00.419 we will then proceed to add the methods called on movement and on exit
+00:08:08.340 these methods take in the context provided when the movement keys are used or the Escape key we have on the
+00:08:15.599 movement method when the context is started I.E when you hold down a key to
+00:08:21.120 move move key held Boolean will be set to true and when you cease holding onto the key it will then say context got
+00:08:28.319 canceled which would then set the Boolean to false with our on exit method unlike in the t-cod tutorial all I've
+00:08:36.059 put here is debug.log exit this can be changed to application.quitz
+00:08:41.760 when you proceed to build your robe like without input actions being handled we're going to also create two more
+00:08:47.940 methods that are called Fix update and move player
+00:08:53.040 the fixed update method has a condition that checks to see if is player turned
+00:08:58.800 in the game manager instance is set the true and also checks if the movement key
+00:09:05.279 is being held we'll then call move player with move player just being a simple
+00:09:11.700 transformed lot position taking in our value from the vector 2 in our movement
+00:09:17.700 action upon movement it will also call end turn in our game manager instance now head back to the unity editor here
+00:09:25.200 we're going to go back to the resources folder selecting a player prefab we're going to
+00:09:32.279 then add the player script by clicking add components typing in player and selecting it
+00:09:38.519 from here we're going to create a new game object call it game manager
+00:09:44.399 and add the game manager script to it I'm going to quickly change the
+00:09:49.620 background color for the main camera to Black and let's press play to test out our
+00:09:56.519 movement everything seems to be in order it's
+00:10:01.680 time to create an entity class this class is going to be used to represent players enemies items and whatever else
+00:10:07.380 so in the project acid script folder we're going to create an entity script
+00:10:13.200 open it up first up remove the unnecessary Imports
+00:10:18.959 followed by the update method next we're going to add in a private Boolean for is sentient
+00:10:26.100 along with its getter the reason being this is the indicate if something is alive or not we're then going to add in
+00:10:31.920 two conditions these conditions first check if it is the player or not otherwise it checks if it's sentient
+00:10:37.680 these conditions be handling the placement of our entities whether or not it's going to be placed at the start or
+00:10:43.920 added on to the entity list after the start method we're going to implement a move method
+00:10:48.980 where the move parameter will take in a direction and with that direction it will tell the game object what position
+00:10:55.860 it's going to be in from here we're going to create an action class and do the following input using Unity
+00:11:02.459 engine static public class action followed by implementing three methods a
+00:11:07.560 static public void Escape Action a static public void movement action taking an entity and direction
+00:11:14.760 anesthetic public void skip action the actions are quite simple one simply prints a log saying quit in the console
+00:11:22.860 the movement action uses anti.move method taking in the direction given to it followed by ending the turn of the
+00:11:28.920 game manager and finally for the skip action it simply just ends the turn now head on over to the game manager here
+00:11:35.459 we're going to add an integer called entity num followed by a list with type entity and
+00:11:41.279 giving it a variable name of entities and initializing we're going to next rename start to start turn
+00:11:47.700 remove the instantiation and at the following conditions
+00:11:52.740 if entities with entity num get component player then is player turn equals true this simplifies that the
+00:11:59.940 turn is now the players else if entities entity num is sentient this will call
+00:12:05.100 the skip action as we don't have ai logic yet now heading down to the end turn method
+00:12:10.860 we're going to exchanges codes with a set of conditions once again checking if the entity's
+00:12:16.980 entity num is the player it's going to set is player turn to false it will then check to see if NC num equals enter
+00:12:23.940 these dot counts -1 changing it to zero else it would simply just increment it
+00:12:29.339 for starting a carotene called Turn delay which is simply the wait for turns method just renamed
+00:12:36.240 remove the is player turn equals true from turn delay before adding the start turn method
+00:12:41.820 this is followed by adding two simple methods that you've actually seen earlier within the entity class
+00:12:47.639 those two being add entity and insert entity these are relatively simple ad entity is simply
+00:12:54.660 adding an entity to the entity's list and insert entity is just adding The Entity wherever we specify the index in
+00:13:02.279 this case it's going to be zero as a fire code we always want the player to start first
+00:13:07.680 I'm just going to quickly repurpose our player prefab so heading over to the resources folder
+00:13:14.040 drag player back into the hierarchy right click it go to prefab
+00:13:20.220 and unpack it completely followed by renaming it to NPC
+00:13:26.279 next get rid of the player component script within it and add the entity script
+00:13:33.000 making sure to check is sentient and change the color to Yellow within
+00:13:38.160 the Sprite render before dragging it into the resources folder
+00:13:44.279 now left click player and adding The Entity script also to the player prefab
+00:13:52.019 once again checking is sentient and then get rid of the MPC game object
+00:13:57.540 within the hierarchy while we're still at the hierarchy right click and trade a toll map
+00:14:05.399 rename it to floor map Ctrl C and Ctrl V to duplicate it
+00:14:11.880 before renaming the duplicated toll map to obstacle map
+00:14:17.220 heading over to grid and renaming it to map manager
+00:14:23.399 from here click on window from the top menu going down to 2D
+00:14:29.160 and selecting tile palette here we're going to create a new palette called traditional roguelike
+00:14:36.779 before selecting create a folder called palette
+00:14:43.500 and clicking select folder now from the Sprite sheet we're going to get the hash symbol and the full stop
+00:14:51.000 dragging them into the toll palette
+00:14:56.279 selecting palette and select folder this process creates two tiles for us to
+00:15:02.699 use as we can see within the palette folder now head on to the scripts folder
+00:15:08.880 where we're going to create a script called map manager
+00:15:14.220 now we're simply going to drag it onto the map manager game object within the hierarchy
+00:15:19.740 before opening it up as always remove the unnecessary Imports
+00:15:25.339 and the update method now I'm going to change the flow up a little bit and do the following now I'm
+00:15:31.380 going to add in an instance with a map manager followed by two private int variables
+00:15:37.320 that control both the width and height of the map two color variables
+00:15:44.519 these will have a purpose later on and then our two created tiles followed by the tile maps that we created
+00:15:52.380 and giving access to them with their own getter methods now import uni.tull maps to get rid of the squiggly lines
+00:16:01.440 before just like the game manager creating an awake method that controls the instance
+00:16:08.399 now in the start method I'm just going to add a little bit of code now it is a little bit to take in so
+00:16:15.000 I'll explain it step by step we're getting a vector 3 Center tile from halving both the width and height of the
+00:16:20.820 map we're creating a box with the bounce into wall bounds telling it it's going to start from the 29th X position and
+00:16:26.820 the 28th wide position it's going to continue right three tiles for stopping I've then added two simple for Loops
+00:16:33.000 they'll sit every single tile within wall bounds to the wall tile and then like in the game manager I'll be
+00:16:38.820 instantiating both the player and the MPC prefabs you can ignore camera.maine
+00:16:44.279 Dot transform.position and Camera dot main.orthographic size as it's just
+00:16:49.620 something I've done that's just a little bit of a sweet spot for viewing our roguelike and before finishing off the
+00:16:54.959 map manager we're going to add in a Boolean method called inbounds that we'll be using to stop the player
+00:17:02.279 from leaving the game map heading back into the uni editor close the tile palette
+00:17:07.380 before selecting the map manager heading over to inspector we're going to
+00:17:12.839 set the tiles and the maps
+00:17:17.880 we've had map manager Now set up we're going to open the player script now I was informed on the Reddit post
+00:17:23.939 that I should make a simpler way of using the input system that way being using set callbacks and to implement it
+00:17:31.020 we're going to do the following adding controls.i player actions after mono behavior from here we're going to get
+00:17:37.080 rid of our movement and exit subscriptions followed by tweaking on movement and on
+00:17:43.740 exit Within These methods it's basically the same as before with on movement still
+00:17:49.320 having the same conditions but now are on exit method uses a condition that checks if Escape has been pressed
+00:17:56.039 followed by calling the Escape Action within our action class speaking of our action class we're going to go ahead and
+00:18:02.700 change around the move player method like before we'll be taking in the read
+00:18:09.360 Valley for the vector 2 from the movement but now it's also going to round the direction this is due to the
+00:18:15.299 fact that when the player will go diagonal it would actually be 0.71 which is not the intended outcome so by
+00:18:21.960 rounding a number it goes to the nearest one we then create a future position using the transform not position plus
+00:18:28.140 our rounded Direction and then calling the is valid position this is a method that takes in the future position uses
+00:18:34.500 our floor map to convert it to World Cell which is a vector 3 ins we use this
+00:18:39.900 Factor 3 ins to do the following we first check if it's not in balance for the map manager using the map manager
+00:18:45.360 imbalance method followed by checking if the obstacle map has a tile on that position we're also checking if the
+00:18:50.940 future position is also the current transform position if any of these conditions are met it will return false
+00:18:56.760 stating that no it is not a valid position otherwise it returns true if it
+00:19:01.799 does return true then the action. movement action is called passing in the game object which is the player and also
+00:19:09.299 the rounded Direction once again heading back to the unity editor we're going to go back into the resources folder
+00:19:15.360 and select both the NPC and player prefabs before changing their order and layout
+00:19:21.900 to one now testing what we've done
+00:19:28.080 everything seems to be in order before we continue we will sort our scripts into two folders The Entity folder
+00:19:33.960 containing all our entity related scripts and the map folder which will include both our map manager and new
+00:19:39.960 scripts procgen and rectangular room
+00:19:46.380 foreign script
+00:19:54.179 and we'll start by changing our class from public to sealed as it should never be inherited
+00:20:01.020 now remove both the start and update methods before creating a public void method
+00:20:06.960 called generate dungeon this method will take in six variables within its parameters those being mat width map
+00:20:13.500 Heights room Max size room Min size Max room and a list containing our
+00:20:19.380 rectangular rooms before proceeding we haven't set up our rectangular room class yet so let's do
+00:20:25.860 that now accessing it from the primary sidebar we're going to remove the mono Behavior
+00:20:32.039 inheritance and generic methods followed by giving it four public variables
+00:20:38.700 these public variables being integers they're going to consist of public Intex Public inty public Inc with
+00:20:47.760 and public in height X and Y are the rooms starting coordinates and width and
+00:20:52.919 height are self-explanatory we will then proceed to create a Constructor taking in all the variables
+00:20:59.100 we can now create three helper methods called Center get bounds and get bounds
+00:21:04.559 int the center method Returns the center most point of the room and the get
+00:21:10.140 bounds and get bounds into methods return the area of the room but for different reasons I'll explain soon but
+00:21:17.100 for now we're adding a system serializable in square brackets above the class name before returning to
+00:21:22.980 procgen we can now start generating our rooms so
+00:21:28.679 create a for Loop that sets a local variable called room num it's conditioned being while room num is less
+00:21:35.280 than room Max and if it's less then increment you can now establish our room's size
+00:21:41.880 and coordinates and create the room our issue now is since we're randomly
+00:21:47.880 smashing our rooms onto the map we're going to run into rooms overlapping and we don't want that now so heading back
+00:21:53.580 to our rectangular room class we're going to add a new method that returns a Boolean called overlaps this method will
+00:22:00.780 take in a list of rectangular room it's pretty simple we are using a 4H to
+00:22:06.179 cycle through all the other rooms checking if the area of the new room intersects with another room's area if
+00:22:12.480 it does it then returns true else it will turn false now save and go back to
+00:22:18.059 prop gen and add an if statement that uses our new method this if statement will have a condition
+00:22:24.299 that checks if the room overlaps with another and if it does it will then continue to skip using it alright with
+00:22:31.500 that out of the way time to dig out our rooms here we create a for Loop that handles
+00:22:37.740 the room's width before nesting another for Loop to take the room's height we then create an if statement that looks
+00:22:43.799 for the room's boundaries to build our walls I've decided to make a bullying method called set wall tile if empty
+00:22:50.520 that checks using a vector 3 inch given if there is a floor tile on the floor map within those coordinates it will
+00:22:56.880 return true which skips placing a wall down with continued otherwise it will place a wall
+00:23:03.600 however if it isn't a boundary coordinate it will remove a wall tile on that position if there is one before
+00:23:10.020 placing a floor tile down with our room created add a statement that checks if it's the
+00:23:16.440 first room created calling the create player method for map manager passing in our new rooms Center
+00:23:23.220 before finally adding rooms.ad new room you might be confused about the create
+00:23:28.320 play Method and that's okay we are heading over to map manager to rectify your confusion before we address this
+00:23:34.559 let's change our code to be more in line with what we just did we also want to make it look more readable in the editor
+00:23:40.620 start off by separating our variables and giving them meaningful headers
+00:23:45.659 you will notice that included are the variables at room Max size room Min size and Max rooms that are being used to
+00:23:53.400 create our dungeon
+00:24:00.179 ensure to include list rectangular room rooms and a getter method to access it
+00:24:05.520 before filing also including two getter methods for our tiles
+00:24:12.299 in the start method we're going to remove our test code up until our MPC instantiate
+00:24:19.140 before adding in What's Happening Here is that it's going to create an instance of prop gen before calling it generate
+00:24:26.640 dungeon method to do what we came here for create a new void method called create player which takes in a vector 2
+00:24:33.059 position within it we are just placing in our play instantiate that's been refacted to use a vector tube position
+00:24:39.659 parameter before going back to prop gen we're going to quickly import
+00:24:45.240 system.collections.generic if you decide to go back to the uni
+00:24:51.299 editor and press play you would have found many rooms but with no way to move between them so let's solve this issue
+00:24:58.260 by creating a new void method called tunnel between its parameters being to
+00:25:03.360 rectangular rooms representing both the old room and the new room
+00:25:10.020 we will make three Vector 2 in variables two to get the center most coordinates of the rooms and one to represent the
+00:25:16.740 corner of the tunnel as we will be using the briefs and ham line algorithm to generate an L-shaped
+00:25:23.159 tunnel we will create an if statement with its condition being random.value less than 0.5 which is
+00:25:30.360 basically a coin flip for deciding if the tunnel starts horizontally or vertically
+00:25:36.120 now introduce a new list Vector to ins called tunnel chords initialize it and call the breesenham
+00:25:44.460 line method twice the first passing in the old room Center
+00:25:49.919 tunnel corner and then tunnel cords the second passing in the tunnel Corner new
+00:25:55.320 room Center Den tunnel cords what's happening is that the first call creates a line of points from the old room
+00:26:01.919 Center to the tunnel Corner which are then stored in the tunnel chords list the second call does the same process
+00:26:08.520 but starts on the tunnel Corner before ending on the new room Center let's create the method quickly
+00:26:15.840 I won't be explaining exactly what happens so I'll leave that to the comment section and a few links in the
+00:26:21.840 description with that proceed back to the channel between method where we will create a for Loop which
+00:26:28.200 iterates using the tunnel chords count and then create an if statement to
+00:26:34.080 remove a wall tile if it exists in that coordinate it will then add a floor tile
+00:26:41.159 before surrounding that tile with balls using a nested for Loop along with the set wall tile if empty method
+00:26:49.740 which is basically a repeat of how we built the wall tiles for our rooms moved
+00:26:55.080 back to the generate dungeon method and add an else after the if statement that created our player
+00:27:01.980 within which will contain the dungeon between method which takes in the old room then the new room we can now test
+00:27:08.880 out the fruits of our labor and laugh we'll import our new fog Sprite and two
+00:27:15.659 scripts add a new visibility and visibility for our field of view links Down Below in the description once
+00:27:21.419 imported move the fog Sprite to the resources folder and the scripts to the scripts folder
+00:27:28.200 open our resources folder and add the fog Sprite to our
+00:27:33.299 traditional roguelike palette by repeating the steps from part two giving us a new fog tile asset to work with
+00:27:45.320 now opening the scripts folder we will create two new scripts tile data
+00:27:51.659 to store our state information and Greece and ham line the reason
+00:27:58.380 behind why soon create a folder called algorithms
+00:28:06.539 and place Adam Mill visibility visibility and breesenham line into it
+00:28:13.820 before opening tile data with tile data open remove mono Behavior
+00:28:20.580 and the start and update methods add to Boolean variables called is
+00:28:26.400 explored and is visible followed by adding a system not
+00:28:32.220 serializable within square brackets so we can see the class in the inspector
+00:28:38.580 and head over to prop gen starting from the top I notice a few
+00:28:44.220 unnecessary references to map manager in lines 52 and 60. as we already passed in
+00:28:50.400 the lists of rooms to be used in our generate dungeon method so change them to use that instead
+00:28:57.480 next copy lines 43-47 before scrolling down to set wall
+00:29:02.640 tile if empty we will then create a private void
+00:29:08.400 method called set floor tile which takes in a vector 3 inch names pause
+00:29:14.360 foreign into it before exchanging our new Vector 3 ins
+00:29:21.299 for pause doing the same for our set wall tile
+00:29:26.399 with empty method just to be consistent now let's Implement our new method
+00:29:32.760 changing lines 43 to 47 to set floor tile new Vector 3 ins passing X and Y
+00:29:43.700 and then changing lines 91 to 97 to set floor tile
+00:29:50.340 new Vector 3 and passing in the tunnel coordinates
+00:30:01.200 you may Notice Me removing zeros this is due to there being no requirement for it when creating new Vector 3 ins finally
+00:30:08.460 add a DOT compute to our Breeze and ham line calls
+00:30:13.799 before cutting the entirety of our breezenham line method and opening the breeze and the ham line
+00:30:20.760 class removing the modern behavior and the start and update methods adds static to
+00:30:27.059 our class declaration now paste in the code we cut and do the following
+00:30:33.059 add static to the methods declaration change privates or public
+00:30:39.299 its name to compute then changes parameters to start and and
+00:30:45.480 chords using change all occurrences
+00:30:52.020 I hope you all have been saving because now we're going to make a short stop at game manager
+00:30:57.720 here we're just going to add a getter method for our entities list before moving to map manager
+00:31:04.919 remove the colors due to a last minute decision on my part then add a tile Base called fog tile
+00:31:13.860 and tile map called fog map these will be used for our fog of War
+00:31:19.620 for adding a new list of type Vector 3 ins called visible tiles
+00:31:26.220 and initialize it we will also create a dictionary called tiles it's key being Vector 3 in its
+00:31:33.059 volatile position and value being tiled data initializing for making a getter method for our new fog map
+00:31:41.520 scrolling down we're now going to introduce four methods update fog map this method is
+00:31:48.539 pretty straightforward it takes in the player's field of view it proceeds to use a for each cycling each position
+00:31:54.720 invisible tiles setting a tiles is explored Boolean to True using an if
+00:32:00.059 statement with a condition checking if it hasn't been explored it then says it is visible Boolean to false before
+00:32:06.120 setting the position of that tile on the fog map to technically gray due to reducing its Alpha in half it then
+00:32:12.659 clears the visible tiles list before using another forage that Cycles through the players field of view set the tiles
+00:32:19.380 is visible booleans to True their color to clear and add it to the visible tiles
+00:32:24.840 list the set entities visibilities method uses a forage that Cycles through the
+00:32:31.140 game manager's entities list skipping the player to convert each entity's Vector 3 transform position to a vector
+00:32:38.279 3 in it then uses that Vector 3 ends to see if it matches any of the visible tiled positions if it does then that
+00:32:45.539 entity Sprite renderer components is enabled else it will be disabled
+00:32:51.059 the last two methods are just help a methods and toll map to dictionary takes
+00:32:56.340 in our tile maps to add entries to our tiles dictionary and set up FODMAP adds
+00:33:02.039 a tile to each position using the tiles dictionaries key with our methods created
+00:33:08.700 add three calls to our start method after our proctoring call
+00:33:14.100 to add tile mapped dictionary for our floor and obstacle tiles
+00:33:19.799 and one calling our setup fog map method now head over to our entity class
+00:33:25.260 and give it three new variables the first explains itself the second is
+00:33:30.539 our list containing natal positions The Entity can see and the third is used to create an instance of other Mill
+00:33:36.480 visibility in our start method we're going to change how we add our entity to our game
+00:33:42.659 manager entities list before adding what's happening is that we are initializing field of view creating an
+00:33:49.559 instance of Adam or visibility and then calling update field of view a public method that gets to Vector 3 in Grid
+00:33:57.299 position of the entity and clears its build of view list before calling the compute method in atom your's visibility
+00:34:03.059 algorithm if you want to know exactly what is happening you can check out the classes comments or check the link in
+00:34:09.300 the description referencing Adam Mill if you decide to delve further the update field of view method then uses an if
+00:34:15.239 statement to check whether the entity's game object has a player script attached if it does a call to map manager's
+00:34:21.359 update fog map is made passing in the entities field of view before calling set entities visibility make sure that
+00:34:28.580 systems.collections.generic is imported and move over to action class
+00:34:33.960 add entity.update field of view to our movement action save and open the uni editor duplicate
+00:34:41.639 our obstacle map rename it to FODMAP
+00:34:47.099 and give it a new sorting layer of fog
+00:34:53.399 going into our map manager and setting our fog tile and fog map
+00:35:01.080 then go into the resources folder click NPC
+00:35:06.480 and disable its Sprite renderer components now press play
+00:35:14.820 it's time to start adding entities other than our player and a single NPC so Opening Our entity script
+00:35:21.359 add a new blocks movement Boolean followed by a getter method referencing
+00:35:26.400 it save the script and proceed to game manager here
+00:35:32.760 we're going to create a public entity called get blocking entity at location method that takes in a vector 3 location
+00:35:39.000 we will then use a for each to cycle through the entities list checking using an if statement that an entity from the
+00:35:44.760 list has its block movement Boolean set to true and that its transform position equals the location given if both return
+00:35:50.640 true then the method returns The Entity if the 4-H finishes refer to entity being returned it will return null with
+00:35:56.760 our entities and check ready it's time to create a couple of new actions so open the action script now adding in our
+00:36:02.400 new bump and merely action let's break down what's going to happen here our bump action is a static public
+00:36:08.579 method that returns a Boolean and like the movement action we pass both an NC and Direction into it it uses these to
+00:36:15.060 call our game managers get blocking entity at location method passing the sum of entities transfer position and
+00:36:21.660 Direction into the call if a blocking entity exists at the location the local variable Target is set to it it then
+00:36:28.680 uses an if statement if it's conditioned that the target needs not to be null calling the melee action method if it
+00:36:34.320 exists passing in the Target while also returning false otherwise movement action is called passing in both the
+00:36:41.099 given entity and Direction before churning true our melee method is a void method that
+00:36:47.400 takes in an entity and it just debug logs a bit of text before ending the turn
+00:36:54.119 modifying the skip action to be more descriptive based on the entity provides us with FNL statements that consider
+00:37:00.480 which entity is skipping their action before displaying text thus ending their turn with our actions completed for now
+00:37:07.079 open the player script change the line containing our movement action to bump action
+00:37:14.760 and add move key Health equals to the start of it
+00:37:20.460 save and then open the editor open the resources folder select our MPC and player prefabs using
+00:37:28.200 control and set blocks movement to True honor entity component
+00:37:34.640 next select just MPC prefab and duplicate it
+00:37:40.500 renaming it to orc changing its image to lowercase o
+00:37:50.880 and color on the Sprite renderer components to Red 63 Green 127 and blue
+00:37:57.420 also 63. now duplicate the orc prefab
+00:38:04.079 rename it to troll change its image to an uppercase t
+00:38:10.380 and color on its right rendered components to Red zero and also blue zero
+00:38:17.640 now open the map manager add a new invariable called Max monster per room give it a default of two scroll
+00:38:25.500 down to the generate dungeon call and include it before rooms
+00:38:31.079 remove our NPC instantiate then use the rename symbol command to
+00:38:37.140 rename create player to create entity
+00:38:43.500 we'll add a new string parameter before exchanging the code within with a
+00:38:50.040 switch case then instantiates an entity based on the entity string given
+00:38:56.160 once exchanged move over to the prop gen script in sudanu inspirable into the generate
+00:39:01.980 dungeon method change line 48's if condition to
+00:39:07.980 if rooms.count not equal zero cut and paste our tunnel between call into the statement
+00:39:15.119 and then cut the create entity call and paste it outside the for Loop
+00:39:20.460 adding a player strings to the create entity call and renaming new room two rooms with an
+00:39:26.940 index of zero this is done when the player entity is instantiated and a call is made using
+00:39:33.540 the update field of view method within the entity that calls map managers to set entities visibilities method now
+00:39:38.880 scroll down where we're going to create a private void method called Place entities
+00:39:45.119 it will take in both a rectangular room new room an inch maximum monsters a ton
+00:39:50.460 is going on so let's start we first get the number of monsters using the random dot range zero being inclusive and
+00:39:56.520 maximum monster plus one being exclusive after we create a for Loop which Loops until monsters equal to the number of
+00:40:02.700 monsters we then much like when we created our rooms create X and Y end variables using random.rain before
+00:40:09.359 proceeding to use an if statement to ensure that the x or y isn't equal to a boundary position of the room if it is
+00:40:15.359 then the loop will start again else it continues to the next for Loop a for Loop that goes through each and see
+00:40:22.020 Within game manager's entity list ensuring that their position doesn't match the X and Y position if it does
+00:40:27.300 then it starts to loop again finally a simple if statement is used to decide what create entity calls made
+00:40:34.079 before incrementing monster now to finish up add Place entities before room.add in our generate dungeon method
+00:40:40.680 and proceed to the editor Now quickly heading to game manager
+00:40:46.680 we're going to set the time to 0.005
+00:40:52.500 and press play it's time that entities move around and
+00:40:58.680 attack us so first import both a star and node Intel algorithms folder using the links Below in the description once
+00:41:05.400 done create within the entity folder two folders one called Ai and the other types
+00:41:12.540 open the AI folder and create a new script called AI and then a folder called types
+00:41:20.339 this folder will contain the various AI types now open the types folder and
+00:41:25.560 create a script called hostile enemy make your way over to the types folder within entity
+00:41:31.740 create a new actor script before creating a folder called components
+00:41:37.859 we will also create a fighter script if in our components folder before Opening Our rectangular room
+00:41:44.579 class make all our variables private pasting them on one line while we're at it
+00:41:51.660 and give them their Getters and Setters this is to make it safer code and install good code practices we are also
+00:41:58.619 going to do the same for our tile data class
+00:42:04.740 before heading over to our game manager with game manager open we will start with implementing a few new variables a
+00:42:10.560 float called delay time a new list of type actor called actors followed by a Sprite called Dead Sprite
+00:42:18.000 add in headers called time entities and death
+00:42:23.880 before renaming time to base time and NCD num to actinum anti-num being
+00:42:29.640 renamed to actinum using the rename symbol command give actors and dead Sprite their
+00:42:35.280 getters then scroll to our start turn method we're going to be making a few changes
+00:42:41.640 here the first being we're going to change all entity references to active we're then going to be giving our else
+00:42:47.220 if statement a new condition that checks if the actor has a hostile any new component if so it will run its AI else
+00:42:53.579 it will just call Action dot skip next like start turn we're going to also exchange entities for actors in n-turn
+00:43:02.040 before changing time within our turn delay enumerator method to delay time
+00:43:07.140 remove the insert identity method and add four new ones
+00:43:12.540 I won't explain what they all do as they explain themselves however I will explain that unlike the helper methods
+00:43:18.480 for entities actors have a helper method called set time this method uses an arrow function that
+00:43:25.500 returns a float after dividing base time by the number of actors within the actors list and before leaving for map
+00:43:31.319 manager rename get blocking entity at location should get blocking actor at location
+00:43:37.140 using the rename symbol command before exchanging all entity references
+00:43:42.359 for ACTA add a dictionary called nodes it's key
+00:43:48.960 vector2 ins and value node create a getter for width and height
+00:43:54.839 followed by a getter and setup for no go to our update fog map method
+00:44:01.740 and change it to use tile Maps is visible and is explored getters before moving to procgen
+00:44:08.760 we'll scroll down to place entities method use the rename symbol command to change its name to place actors
+00:44:15.839 and change the code within to use our rectangular room getters
+00:44:22.200 with our modifications completed it's time to handle our new classes let's start by opening The Entity class
+00:44:28.440 copy the code within the class before removing everything except blocks movement it's getter and the move method
+00:44:37.859 we will then add a new public void method called add to game manager
+00:44:44.940 which will be used to add our entity to the entity's list in our game manager one last thing we're going to also give
+00:44:51.900 blocks movement a setup as we want to use it from the actor class Save The Script
+00:44:57.960 and open the actor class paste the code to be copied overriding the start and update methods
+00:45:04.500 change the inheritance to entity remove the block movement it's getter
+00:45:09.839 and the move method before making the following changes to our variable
+00:45:15.720 starting from the top we're going to rename is sentient to is alive set it to True by default and do the same to its
+00:45:23.339 getter before giving it also a setup the field of view now initializes its list and has a getter to boot as we will be
+00:45:29.819 using AI we'll also add an AI variable which we will set by using an on validate method
+00:45:36.000 which checks if an AI component is attached to the actors game object setting our AI variable to it next
+00:45:42.599 within our start method We'll add a call to add game manager replace entity with actor
+00:45:49.980 remove the unneeded if statement if its condition is sent yet followed by removing field of view
+00:45:56.700 now save and open the player class and give our fixed updates if statement
+00:46:01.920 a new condition of get component actor is alive this condition is placed here so our player
+00:46:08.339 can't move or attack when dead now save and open our fighter class change the public keyword to sealed in the class
+00:46:15.119 declaration and add a required component actor attribute
+00:46:20.640 now exchanges start and update methods with the following code so we are first creating our Max HP HP
+00:46:28.200 defense and power variables ins on one line before creating an active variable
+00:46:33.540 called Target we set about getting Getters for each variable except Max HP while also giving Setters to HP and
+00:46:40.740 target with the HP Setter we use math f.max to ensure that no matter how much damage the fighter is dealt the minimum
+00:46:47.700 HP is zero Max F dot Min is also used to ensure that no damage above the max HP
+00:46:53.760 is dealt once the HP is set we use an if statement to check if HP equals zero calling die if it does
+00:47:01.140 a ton is happening in the dimeth first we debug log text based on whether a
+00:47:06.540 player component is attached to the same game object as the fighter class then we get the Sprite render using the seted
+00:47:12.960 Sprite variable to the dead Sprite on game manager changing its color to red and sorting order to zero this is so
+00:47:18.720 other Sprites can be shown over it next we add remains of to its name before
+00:47:23.760 setting their attach actor classes blocks movement and is the live booleans to false using their Getters a final if
+00:47:30.119 statement is used to check if there is no player component attached which calls the game managers remove actor method
+00:47:36.359 passing in our active component now moving over to actions class all right here we rename everything
+00:47:43.079 entity related to ACTA
+00:47:50.220 then remove the parameter from skip action followed by its if and else statements finally it's time to show our
+00:47:57.720 melee action some love we'll start by giving it a new parameter of actor actor then create a damaged int using the
+00:48:04.740 actor's power minus the target's defense a string variable called attack the script is set up using the actor's name
+00:48:11.460 and Target's name before using an if statement with its condition being if the damage is greater than zero if it is
+00:48:17.640 then a debug log is used to signify damage being done along with utilizing
+00:48:22.980 the subtraction assignment operator with the target spider components HP getter
+00:48:28.260 on the left and the Damage variable on the right else it just debugs that no damage has been done before calling game
+00:48:35.640 manager's end turn method quickly add in the actor requirements in our melee action within bump action
+00:48:42.599 foreign and head over to the AI class now
+00:48:48.359 we're going to add the required component attribute to make actor and a star required components we then create
+00:48:53.940 an a star variable the requirement that you must serialize the fill and give it both together and setup we didn't make
+00:48:59.940 sure to use onvalidate to get the Acer components that's attached to the game object before adding a simple public
+00:49:06.119 void method called Move Along path that takes in a vector 3 int Target position
+00:49:11.760 the method will get the vector-free and grid position passing the transform position of the game object the script
+00:49:17.880 is attached to into a world to cell call it will then use the Acer algorithm to get a vector to direction we're passing
+00:49:25.200 both the grid position and Target position into its compute method note that they will need to be converted to
+00:49:31.500 Vector 2 ins via casting we then call the actor classes movement action passing in the scripts game objects
+00:49:38.099 actor components and our Vector 2 Direction pretty simple right let's open the hostile enemy class now
+00:49:44.819 we're going to proceed to do the following we're going to add a required component attribute to make fada required before
+00:49:50.819 changing the inheritance from mono Behavior to AI then we're going to add a finer variable of fighter a Boolean
+00:49:57.359 called is fighting and then an unvalidate method to set the fighter and a star variables so the components
+00:50:03.540 attached and then to bring everything all together we'll then create a public void method called run AI the method
+00:50:09.000 handles are attacking moving and turn skipping it does so by using an if statement to check if there isn't a set
+00:50:15.119 fighter Target setting a Target if there isn't otherwise it uses an if statement
+00:50:20.160 to check if there is a fighter Target and making sure it isn't alive this else if was solely created to counter the AI
+00:50:27.119 from killing the remains of the player continuing we then use an if statement to check if there is a target if there
+00:50:33.240 is we get the vector 3 into Target position by calling will to sell passing
+00:50:38.520 in the target's transform dot position and if statement is then used if its conditions being is fighting or that our
+00:50:45.060 attached actor components field of view contains the target position if it is true we use another if statement to make
+00:50:51.119 sure is fighting is true before creating a float variable called Target distance where we use vector3 dot distance to get
+00:50:59.640 the distance between the hostile enemy scripts game object and the target once again using an if statement its
+00:51:05.940 condition being Target distance less than 1 1.5 if the condition is true then
+00:51:11.160 we attack the target using action dot merely action passing into it our Active Components and Target before returning
+00:51:18.000 else it makes a Move Along path call passing in its Target position before returning finally if all statements
+00:51:24.780 weren't met then we call action.skip Action thus N is a saga of our AI so
+00:51:30.900 open the uni editor with the uni editor now open we're going to select every single NC prefab
+00:51:38.040 remove their entity components and adding the actor component
+00:51:44.640 set the Block's movement to true and select our player prefab with our
+00:51:49.800 player prefab now selected we're going to add the fighter component giving it a Max hbo30 HP of 30 a defense
+00:51:58.559 of 2 and a power of 5. before selecting both org and troll
+00:52:04.859 adding a hostile enemy component selecting just a York
+00:52:11.400 and giving it Max HP of 10 HP of 10 a defense of zero and a power of 3.
+00:52:18.480 going to the troll prefab give it a Max HP of 16 a HP of 16 a
+00:52:23.880 defense of 1 and a power of 4. now open the game manager
+00:52:30.059 set base time to 0.075 and setting the dead Sprite to the
+00:52:36.540 percent symbol press play
+00:52:42.720 and enjoy your AI I've got the picture for you to import
+00:52:48.240 into the resources folder the link is below in the description once imported right click in the hierarchy
+00:52:54.780 hover over UI and select canvas this creates both the canvas and event
+00:53:00.900 system game objects selecting event system and click replace of input system UI
+00:53:06.720 input module in the inspector now selecting canvas we're going to make the following
+00:53:12.839 changes we're going to set the canvas components render mode to screen space camera
+00:53:18.480 they're in the camera to our scenes camera I'll sorting layer to UI by first
+00:53:24.119 creating a UI layer before selecting it
+00:53:29.940 we're going to set camera scales UI scale mode to scale screen size reference resolution to 1920 by 1080.
+00:53:39.420 and set match to one if our canvas now done right click it in the hierarchy
+00:53:44.940 and give it a child slider game object rename it to HP slider
+00:53:51.319 select it and in the inspector set whole numbers within the slider component to true
+00:53:57.720 then we'll make a few quick changes to the rest of it so expanding your HP slider
+00:54:03.000 followed by expanding fill area use shift and select background fill
+00:54:08.940 area and fill before setting the react transform anchors to stretch
+00:54:15.839 we're then going to set top bottom left and right to zero now select background
+00:54:22.680 and set its image color to red 64. green 16.
+00:54:29.220 and blue 16. then selecting fill setting its image color to Red zero
+00:54:37.619 green 96 and blue zero lastly expand handle slot area
+00:54:44.760 select handle and deactivate the image component while we are done with the HP slider we
+00:54:51.180 are missing a vital text indicators so give it a new text mesh Pro object
+00:54:58.559 you'll get a pop-up click import TMP Essentials followed by clicking import TMP examples
+00:55:05.400 and Extras once done select our new text mesh Pro
+00:55:11.220 object and rename it to HP slider text set its anchor the stretch
+00:55:18.420 followed by setting top bottom left and right to zero the font assets are Roboto
+00:55:25.319 Auto size to True spacing options character 25. open extra settings
+00:55:32.520 and set margins left to 30. with our text set up place the HP slider
+00:55:38.160 in the bottom left corner with its anchor set to bottom left and size it as you wish
+00:55:43.859 once you are satisfied with the placement right click the canvas and create a scroll view game object
+00:55:52.020 select it and in the inspector set scroll reacts horizontal Boolean to false
+00:55:58.740 and set both its horizontal and vertical scroll bars to none
+00:56:04.559 now expanding scroll view in the hierarchy select both scroll bar objects
+00:56:10.319 and deactivate them next expand viewport
+00:56:15.660 select content and add a grid layout group component
+00:56:22.200 before setting its constraint to fix column count and one add a Content size fitter
+00:56:30.480 setting both the fits to the third size proceed to duplicate the scroll view object in the hierarchy
+00:56:37.740 renaming the original scroll view to the last five messages and to the following set its anchor to
+00:56:44.160 bottom left set the pause X to 10 18. pause y to 16.
+00:56:51.660 followed by its width to 1050 and height 130. you activate its image component
+00:56:59.099 and set scroll reacts vertical Boolean to false open the viewport child
+00:57:06.059 set the react transforms right to zero before opening the content child object
+00:57:12.720 here we're going to rename it to last five messages content set its anchor to bottom stretch
+00:57:20.700 set the grid layout group padding bottom to five and set cell size to 1040 by 25.
+00:57:28.859 and we're done with our last five messages now select the scroll view duplicate rename it to message history
+00:57:36.480 set the anchor to stretch sit top bottom left and right to 75.
+00:57:42.480 and set the image's source image to our imported message history PNG
+00:57:48.119 making sure to set the alpha to 255 . before selecting the viewport child
+00:57:56.220 setting its top to 30 and the rest 25 now opening its content child
+00:58:02.700 rename it the message history content and get the bottom stretch
+00:58:09.119 we're going to go ahead and set the grid layout groups padding left 10 and bottom to 20.
+00:58:15.240 it's cell size is 1724 by 25. before setting its spacing y to 7. we
+00:58:22.980 need to create a message prefab luckily it's simple to do credit text mesh Pro object within canvas
+00:58:29.640 rename it the message and set the font asset to Roboto and
+00:58:34.859 auto size to true drag the message object into the resources folder
+00:58:40.799 and delete it from the hierarchy now add five of the message prefabs into the last five messages content game
+00:58:47.280 object I'll explain why in a moment
+00:58:55.319 in our scripts folder I create a new script called UI manager
+00:59:01.140 and open it add the Imports you need engine.ui and TM Pro at a static instance variable
+00:59:07.799 referencing to UI manager and an awake method followed by the following variables and
+00:59:13.799 headers most variables are created to help us manipulate our UI game objects the instant string variables are to help us
+00:59:20.339 add messages and finally there is Method history open Boolean and its getter let the player entity know when it can move
+00:59:26.700 around add three methods the first set health max takes in a Max
+00:59:31.920 HP ins using it to set the max value of the HP slider the second set Health
+00:59:37.079 takes in both HP and a Max HP ends using them to set the HP slider value to the
+00:59:42.780 given HP and text using string interpolation to HB colon HP forward
+00:59:47.819 slash Mac HP and our third method is just to help us toggle the message history game object on and off and also
+00:59:54.599 set there is message history open State now add our following method which is a public void add message method that
+01:00:01.260 takes in two strings new message and color hair we give it an if statement of last message equals new message that
+01:00:07.079 helps us control duplicate messages which adds an incrementing value to the end of the last message before returning
+01:00:12.780 we also place in and else if statement is condition same message count greater than zero which sets same message count
+01:00:19.079 to zero if true if both statements aren't used we change the last message to new message followed by instantiating
+01:00:24.780 a message prefab as textmas Pro ugui we then set the text to the new message
+01:00:30.780 and since color to get color from hex methods return value passing in the color hex
+01:00:36.660 they get color from hex method is just a helper method that utilizes Unity engine's color utility we give it a hex
+01:00:42.540 code and it returns a color if we get no color it just returns White NOW continuing for our add message method
+01:00:48.000 we set the message prefab's parent to the message history content game object before using a for Loop which Loops over
+01:00:54.299 the last five messages content child count incrementing each Loop it has an if statement that returns If the child
+01:00:59.700 count is less than I else it moves forward getting the child textmas Pro your GUI components of the last five
+01:01:06.119 messages content and message history content which in turn sets the last five message content child's text and color
+01:01:12.180 to the other message history contents child now scroll up and at a start method that welcomes the
+01:01:18.000 player before opening the action class add a string variable called color hex below attack the script in Milli action
+01:01:25.020 giving it an empty string then create an if statement that gives color hex an actual hex code based on if
+01:01:30.900 our actor get component player returns true for exchanging our debug.log calls where
+01:01:36.480 our Union manager's add message method making sure to pass in color hex at the end now open the fighter class
+01:01:42.059 and within the HP setup add an if statement it's condition being get component
+01:01:47.819 player which calls uni manager's set Health method if true passing in HB and Max HP next create a start method but
+01:01:55.619 like the HP setup contains an if statement that checks for our get component player calling set health max
+01:02:00.960 and set Health if true for exchanging our debug.logs and die for calls to the UI manager's add message method open the
+01:02:08.280 uni edit backup navigate to The Entity folder double-click controls
+01:02:14.339 and add a new action called View setting The Binding to V
+01:02:19.859 making sure to also set the arrow keys Boolean to true save the asset before opening the player
+01:02:26.640 class here we're going to create a new if statement in the fixed update method
+01:02:32.280 that checks that the UI managers is message history open Boolean is false which of course stops the player from
+01:02:37.980 moving if it isn't finally we add a public void on view method which takes in our callback contact and
+01:02:44.220 it has an if statement that checks context are performed they'll be used to open and close the message history game
+01:02:49.680 object save and go back to the editor navigate back to Scripts and drag the UI manager onto the canvas scam option
+01:02:57.180 we're going to set up its components deactivate the message history game
+01:03:03.839 object opening the resource folder and drag the canvas into it
+01:03:10.740 just gonna quickly remove the new text messages
+01:03:16.200 and press play
+01:03:21.420 Thomas had the reason for us to be in dungeons in the first place items or more importantly hoarding items so
+01:03:28.799 heading to your entity's types folder and create a new item script
+01:03:35.819 then opening the components folder create two scripts the first called consumable
+01:03:43.440 and the second inventory now open the entity class
+01:03:49.740 we'll change the code within the add to game manager method to use the game manager's add entity method
+01:03:55.500 proceed over the game manager and add to that add entity method and if condition that checks the active state of an
+01:04:00.900 entity's game object turning it on if off with an entity.gameobject.setactive call passing
+01:04:07.200 intrude finally add another entity.gameobject.set activecall passing
+01:04:14.040 in false to turn off the entity's game object within our remove entity method with our quick changes out of the way
+01:04:20.400 open the actor class add a new inventory variable along with its getter
+01:04:27.900 data add an if condition to the on validate method checking if there's an inventory attached to the actor classes
+01:04:33.480 game object setting the inventory variable to it if true once done open the fighter class and
+01:04:41.099 we're going to add a hill method that takes in an INT amount and returns an inch value
+01:04:46.760 it will from the top first check with an if condition if HP equals Max HP
+01:04:51.900 returning zero if so else it will create a new local variable called new HP value
+01:04:58.020 which is the sum of HP and amount it then uses another if condition to check
+01:05:03.119 if new HP value is more than Max HP setting new HP value to Max HP if true
+01:05:08.880 before finally creating a new amounts recovered variable by subtracting HP from new HP value using the HP Setter
+01:05:16.559 equals new HP value and returning the amount recovered open the new item class
+01:05:22.160 changing its inheritance to entity we're going to add a private consumable
+01:05:27.839 variable alongside a getter then at an unvalidate method that checks for the consumable component setting
+01:05:33.960 consumable to it if true before using the start method to call add your game manager
+01:05:40.799 remove the update method and if I item class setup open the
+01:05:46.559 consumable class we're going to add a require components off of item attribute and enum called
+01:05:52.859 consumable type and two variables a consumable type variable and an intervariable called amount we're going
+01:05:59.400 to give both variables Getters before adding our active method that takes in an actor and item using a switch case
+01:06:06.420 that checks the consumable type which in this case is healing it will return the result of the healing method passing in
+01:06:12.480 both the actor and item into the healing call the healing method itself is a bullying method that takes as you
+01:06:19.500 can tell an actor an item it firstly creates a local int variable called amount recovered using the result of our
+01:06:25.260 Friday classes Hill method before using an if condition to check if amount recovered is greater than zero calling
+01:06:31.140 both add message and consume before returning true the consume method is a helper method that helps remove out
+01:06:37.020 items from the actor's inventory before destroying it back to the healing method Alsip calls add message and returns
+01:06:42.660 false time the cooling take care of our inventory so open the inventory class foreign
+01:06:49.400 component type of actor attribute two variables and ends called capacity and a
+01:06:54.780 list of item called items making sure to initialize it we're going to give both variables Getters before adding a drop
+01:07:00.780 method that takes in an item this method will remove the item from the items list setting its transform parent to null
+01:07:07.079 turning its Sprite render component on and calling to add to game manager method within the item class finally an
+01:07:14.160 add message call is made to signify that the item has been dropped open the action class remove the Escape Action as
+01:07:20.339 is not needed anymore before adding in our new actions starting with the pickup action that
+01:07:27.299 takes in an actor it uses a for Loop to go through the game manager's entities list checking if an entity has an active
+01:07:33.780 component or doesn't match the transform position of the actor object given controlling to the following entity in
+01:07:39.539 the list if either is true if both checks are false we check to see if the active's inventory account is greater
+01:07:45.720 than or equal to its capacity calling add message before returning if so we
+01:07:50.940 create a local item variable and set it to entities item components setting the entities transform to the actors by
+01:07:56.579 calling set parent and adding it to the Actis inventory list we call add message that the item has been picked up before
+01:08:02.819 removing the item for the game manager's entities list calling the remove entity method and ending the term
+01:08:09.420 moving on our drop action method takes in an actor and item it calls the actors inventories drop method using the item
+01:08:16.140 before closing the drop menu and ending the turn lastly we have the use action method which
+01:08:22.500 takes in an actor and an INT name index a local item variable is created setting
+01:08:27.540 it to the item within the actors inventory using the index we then make a Boolean called item used before checking
+01:08:33.839 to see if the item's game object has a consumable attached if it does item used equals what are consumable's active
+01:08:39.899 method returns a further check is made to see if item use equals false returning if true else we call toggle
+01:08:46.979 inventory and end the turn just want to clarify you didn't miss a step we'll get to those menus soon if you're wondering
+01:08:52.859 about the new toggles moving over to our map manager add in a new int variable called Max items per room with its
+01:08:59.698 default being two add it to the generate dungeon coal
+01:09:04.738 just before the room is variable if you're not starting before adding a new case potion of
+01:09:10.859 Health to our switch case in create entity
+01:09:17.219 we'll create this prefab after we've done our menus now go to the prop gen class add Max items per room to which
+01:09:24.420 generate dungeon method and the place actors call within it
+01:09:30.600 now scroll down to placed actors rename it to place entities with the rename symbol command
+01:09:37.920 and give it a new end parameter called maximum items from here create a new local int
+01:09:44.520 variable called number of items which is set to the number given using random.range with our maximum items
+01:09:50.939 parameter being passed in copy the for Loop and paste it below
+01:09:57.300 exchange monster for item and number of monsters for number of items
+01:10:03.440 lastly replace the if condition with a create entity call passing in potion of
+01:10:09.060 health and the vector position save and open the UI manager important
+01:10:16.080 you need engine.event systems and a variable referencing it
+01:10:21.600 as we'll work with multiple menus we also want to add an is menu open Boolean
+01:10:29.460 now create two headers inventory UI and drop down menu UI each having a Boolean called is inventory open or is drop down
+01:10:36.300 menu open we're going to give them two game object variables that we use to reference their future UI game objects
+01:10:41.820 inventory and inventory content followed by drop menu and drop menu content we're going to provide Getters for a newly
+01:10:47.880 implemented booleans so our player script can access them adding two methods to support our
+01:10:53.580 inventory and drop down menus they work in the same way as our toggle
+01:10:59.640 menu history method only we haven't added if statement that once the menu is opened it calls the update menu method
+01:11:05.940 passing in our actor component with a Content game object this method scrolling to the bottom
+01:11:12.600 first uses a for Loop to clear all UI game objects of their texts listeners as we're using buttons and turning them off
+01:11:19.560 within the provided content game object second it creates a local chart variable of a then uses another for Loop to
+01:11:26.280 increment over the items in the actor's inventory components we're using I to get the child within the content game
+01:11:32.400 objects which we use to set the text of that child's child text scam object incrementing the Char variable each Loop
+01:11:38.880 adding in two listeners the first based on if menu content equals a specific menu providing either the use action or
+01:11:46.020 drop action methods the second is a call to UI menu itself the child game object is then turned on once the for Loop is
+01:11:52.440 done it uses our event system variable to set the selected game object as the content game object's first child this
+01:11:58.860 is important as it lets us use our arrow keys to move up and down on the menu finally before moving on we'll add a
+01:12:05.280 method called toggle menu to provide a little Quality of Life by
+01:12:11.280 deactivating our menus with a single key open the uni editor back up and then pursue that open our controls
+01:12:18.719 we're going to add three new input actions called inventory
+01:12:23.820 which uses the I key cap
+01:12:29.100 which uses the G key and drop which uses the D key
+01:12:36.540 click save asset if auto save isn't turned on and open the play class changer is
+01:12:42.840 message history open for is menu open in fixed updates first if condition
+01:12:48.600 and add it as an or condition in the on view method along with UI manager
+01:12:57.000 dot instance that is message history open we also
+01:13:02.280 want to change the on exit method to call our UI managers toggle menu method
+01:13:08.760 then add in three new methods they function relatively the same as the
+01:13:13.980 on view method calling specific menu toggles after meeting certain conditions plaster added if statements condition of
+01:13:20.760 inventories items count is greater than zero except for the on pickup method which calls actions pickup action once
+01:13:27.840 performed go back to the editor open resources double-clicking the canvas prefab
+01:13:34.140 we're going to duplicate the message history object rename the duplicate to inventory
+01:13:42.300 set our anchor the top Center make it smaller
+01:13:48.420 and position it to the left deactivate the vertical Boolean
+01:13:55.980 and set the movement type to clamp now rename the message history content
+01:14:01.560 game object within to the inventory content
+01:14:08.280 set its anchor to top stretch padding to all zero
+01:14:14.100 cell size to 415 by 30. it's spacing y to one
+01:14:21.659 before giving it a new child button game object and I mean item placeholder
+01:14:29.040 said it's highlighted color and selected color to a light green
+01:14:35.340 it's pressed colors or dark green and set the disabled color to red
+01:14:42.360 select its text mesh Pro child game object make it spawn asset Roboto
+01:14:50.219 Auto size to true and character spacing to 30.
+01:14:56.280 now drag the item placeholder into the resources folder before duplicating it 25 times within
+01:15:04.080 the content game object next we're going to add a new textbook
+01:15:09.360 Pro Gamer object setting it as a child to the inventory game object
+01:15:15.239 we're going to change the text to select an item to use
+01:15:20.280 set respawn asset to Roboto order size to true and its character spacing to 10.
+01:15:27.900 and also its alignment to the center just before we move on we're going to go
+01:15:33.179 back to inventory and deactivate the image component now selecting our item placeholder
+01:15:40.500 prefab we're going to set the color to Black and it's text color to white
+01:15:48.840 I forgot to surf the target graphic so we're just going to change it to the text graphic instead
+01:15:54.000 now opening the canvas prefab again we're going to duplicate our inventory we're going to move our text mesh object
+01:16:01.440 just to the top
+01:16:07.100 I've just had to add an online to text mesh Pro object and I'll set the position X on inventory content zero
+01:16:13.679 anyways we're going to duplicate our inventory now rename it to drop menu
+01:16:20.820 rename the inventory content to drop in new content
+01:16:26.640 and change the text within dropping his child text mesh program object to select
+01:16:31.800 item to draw it's going to leave them deactivated or
+01:16:38.040 I'm going to use them and we're going to add our new objects to the UI manager script
+01:16:48.900 of course in the hierarchy we're going to add in our event system it's time to handle our entity prefabs
+01:16:55.140 and let's start off by creating a potion of health so first in the hierarchy we're going to create a 2d object Square
+01:17:03.480 I'm gonna name it potion of Health adding to it the consumable script
+01:17:12.480 we're going to give it a new sorting layout of entity
+01:17:18.840 the order and layer of course would be one and for the Sprite we're going to change it to an exclamation mark
+01:17:27.600 changing its color to purple to transform quickly and we can drag it
+01:17:34.500 into our resources folder so it's a prefab with our portion of Health prefab traded
+01:17:41.880 we're going to select all entities minus the potion of health of course we're going to make sure that their
+01:17:48.120 Sprite render is turned on and set the Sorting layer to entity
+01:17:54.600 and order in layout 2. next just selecting player
+01:17:59.760 we're going to add to it an inventory component set the capacity to 26.
+01:18:07.520 and let's actually set the amount on our potion of Health
+01:18:12.780 give it a four now pressing play
+01:18:22.320 the tutorial I used to create mine required individual keys for inventory and drop down menus I've opted to save
+01:18:29.100 time and use what Unity provided via its event system support we'll import our radius image link below in the
+01:18:35.520 description which we use for our player targeting we're going to set as pixels per unit to 16.
+01:18:41.699 it's filter mode to point Max size to 32 and compression to high quality before
+01:18:47.760 clicking apply from here we're going to open up our scripts folder head over to entity AI
+01:18:55.199 types and create a new script called confused enemy
+01:19:01.199 now go back into entity types components
+01:19:06.420 here we're going to create a new consumables folder head on into it
+01:19:12.120 and create the following Scripts confusion
+01:19:17.880 Fireball healing and lightning with our scripts created
+01:19:24.780 open the actor script create a getter for the AI and also a setup
+01:19:31.440 open the AI script we're going to create a public virtual void for our run AI method
+01:19:37.380 then opening our hostile enemy we're going to add override to our public void Runner method
+01:19:43.199 and head over to our confused enemy class remove the start and update methods
+01:19:48.840 and change inheritance to AI give it a required component attribute of type of actor
+01:19:55.080 I've also added a little summary so you know what it's all about we're going to give it two variables which is previous
+01:20:00.420 Ai and turns remaining turns remaining of course being an ins variable followed by both Getters and Setters for
+01:20:07.500 them and of course we're going to add in our logic which once again we're creating a public override void method
+01:20:12.659 of run AI which would do the following it's going to use an if statement to check if terms remaining is less than equal zero calling add message before
+01:20:19.620 changing the AI back to the previous Ai and calling its run AI drawing the script else it's going to get a random
+01:20:26.100 Vector to int direction using random.range and a quick switch case before calling action dot bump action
+01:20:33.420 passing in get component actor and the direction for decrementing turns remaining it's been about a week since
+01:20:39.900 the last video and in that time I made a design change from using enums in a simple switch case to given consumables
+01:20:46.679 their own individual classes so in our changes we're going to quickly grab the amounts healing and activate methods
+01:20:54.540 and drag it into the new healing class [Music]
+01:20:59.640 next going back to consumable remove the enum we're going to add in three virtual
+01:21:05.280 Boolean methods the first being activate which takes in an actor and the LR2
+01:21:10.860 being to cast methods they're taking an actor and a Target actor or an actor and
+01:21:16.679 a list of actors finally we're going to remove the item parameter from consume rename actor to consumable
+01:21:24.540 and change it to a public method next we're going to add a new if statement
+01:21:31.260 which is going to be checking our inventory for selected consumable and check if it matches up with this consumer wall if it does it's going to
+01:21:37.440 selected consumable to none and lastly since we have removed item and rename actor to Consumer we're just going to
+01:21:43.560 quickly fix that by code a bit you'll notice now that I'm using get components items to select the item open
+01:21:50.159 up the inventory script and add in our new selected consumable variable along with it both I get it and set it
+01:21:56.820 for it put that out of the way head over to Healing remove the item parameter from activate
+01:22:02.100 we name act the consumer and cut and paste the code within the healing method to the activate method
+01:22:08.580 moving the healing method in the process remove item from consume and change actor to Consumer now
+01:22:16.320 changing inheritance to consumable and making sure that I'd override
+01:22:23.040 head over confusion I'll fast track a little bit we're going to change the mono Behavior
+01:22:28.620 inheritance to consumable we're going to add in a new inspirable called number of turns we're going to set to a default of
+01:22:33.840 10 and provide it a getter then we're going to create a public override Boolean activate method which takes in a
+01:22:40.199 consumer which will get the consumer's inventory component and set the selected consumable to this next you'll also grab
+01:22:46.380 the consumables player component and toggle Target mode a method will set up shortly before finally calling add
+01:22:52.440 message and returning false we then create a public override Boolean cast method which takes the consumer and
+01:22:58.800 Target actors using an if statement to check if a target has a confused enemy component if it does it uses another if
+01:23:06.300 statement to check turns remaining greater than zero if turns remaining is greater than zero then it calls that UI
+01:23:12.420 manager's instance dot add message before setting the inventory selected consumable to null and once again
+01:23:17.820 calling the play at toggle Target mode before returning false else it's going to say confuse enemy equals Target Dot
+01:23:25.199 Game object Dot components confused enemy after adding the components it's
+01:23:30.360 going to set the confused enemy's previous AI variable to the target's Ai and its turns remaining variable to the
+01:23:36.120 number of turns before calling add message setting the target's AR to confuse enemy before consuming the
+01:23:41.699 confusion consumable finally it calls players toggle Target mode and returns true opening Fireball
+01:23:48.540 will change normal behavior to consumable give it to invariables damage and radius giving them a default of 12
+01:23:54.540 and 3 and they're giving them Getters next we create two methods activate and cast one taking consumer and the other
+01:24:00.900 taking consumer and targets the activate method much like the confusions affiliate method sets the selected
+01:24:06.600 consumable within the inventory component to this before calling the player's toggle Target mode passing in
+01:24:12.120 both true and the radius before calling add message and returning false the cast method uses a list active targets within
+01:24:19.920 a 4-H calling add message and getting each individual targets by the components using the HP Setter within it
+01:24:27.120 the minus equal the damage dealt by the fireball once the loop is complete it consumes the consumable and calling the
+01:24:33.300 player's toggle Target mode method returning true lastly opening up lighting we changed inheritance to
+01:24:38.940 consumable we give it to int variables damage maximum range and the fault of 20 and 5 providing them Getters and two
+01:24:45.960 methods activate and cast the active method works the same is the confusion activate method while the cast while the
+01:24:52.320 cast perfect calls add message reduces the target's Fighters HP using its setup
+01:24:57.900 before consuming the item calling the player's toggle Target mode method and returning true now opening the action
+01:25:04.199 script we're going to change the ink parameter we can use action to item item
+01:25:09.900 move the slider code adjusting what I activate method takes in
+01:25:15.360 and we're going to do a bit of a change around placing toggle inventory above the if
+01:25:20.699 statement for the item used and changing the not equal item used to just item you use
+01:25:27.239 just changing the parameter for a little bit of a clarity now head down to the skip action and username symbol to change it to
+01:25:34.620 weight action this doesn't make much sense having it called skip action anymore finally as we are using spells we're
+01:25:42.000 going to create two cast actions importing system.collections.generic
+01:25:48.840 both cast action methods work relatively the same it takes in a consumer Target
+01:25:54.000 or targets and the consumable before creating a local Boolean car success variable which equals consumer.cast
+01:26:00.900 consumer targets or targets if the cast is a success then it calls game managers
+01:26:07.020 and turn method open there to the back up double click controls and we're going to create a new confirm
+01:26:13.380 action setting its binding to enter included in the arrow keys control
+01:26:18.840 scheme and save the asset alright heading back into our scripts we're going to open the game manager and we're
+01:26:24.900 going to scroll down and we're going to change the get component hostile enemy to AI
+01:26:31.620 scrolling down we're going to rename get blocking act at location to get actor location using
+01:26:38.460 rename symbol now heading over into player I made a
+01:26:43.500 mistake we're going to consider to actors actor num dot AI not equal null we're going to cut is valid position
+01:26:50.600 opening the map manager scrolling down and paste it get rid of future position
+01:26:56.520 equals transform.position from the if statement and tweak the code a little
+01:27:03.480 open entity and within the move method we're now going to change it so it actually uses the is valid position from
+01:27:10.980 map manager make sure it also change private to
+01:27:16.260 public for our is valid position method heading back to play out rename move player to move
+01:27:22.139 and get rid of the if statement Now navigate back to the top we're going to add in two new booleans followed by a
+01:27:28.860 game object they being Target mode is single Target and Target object we're also going to
+01:27:35.280 rename move key held to move key down the on movement method
+01:27:41.699 we'll be using an if statement to check if the context has started and we're also going to check if the actor is
+01:27:47.159 alive if this is true then it's going to check for Target mode equals true and move key down is not true and if that's
+01:27:54.179 true it's going to set move key down to true and call the move method else if Target mode is not true it will set the
+01:28:00.900 move key down to True finally else if context.cansled is true then the move key down will equal false you know on
+01:28:08.159 exit method we'll be making another check checking if there is menu open variable is set to
+01:28:14.100 True within our UI manager and if it is then we're going to call toggle menu else if it's Target mode we're going to
+01:28:20.400 call toggle Target mode which navigating down is a public method that takes in a
+01:28:25.679 Boolean is area and an ins radius it's going to set Target mode to true or false depending on its States before
+01:28:32.159 using an if statement to check if Target mode is true and if it is it's also going to check Target object.transfer
+01:28:39.060 position is not equal to the transformed opposition of the player if the condition comes up true then the target
+01:28:44.520 object dot transform.position will be changed to the player's transform position another if statement is then
+01:28:49.980 used to check if his area is true causing out is single Target to equal false and setting the local scale of the
+01:28:56.219 target object accordingly but also turning on the child object of Target object else it will set is single Target
+01:29:02.639 true before setting Target object to True before turning on the target object else it's a Target object's child is
+01:29:10.199 turned on it's going to turn it off before turning off the target object game object and setting the player's
+01:29:16.199 inventory components selective consumable to null scrolling back up we're going to add a new if statement on
+01:29:23.100 pickups called Cana this is just the help of method that deals The Player's state
+01:29:29.460 checking if Target mode is true if the menu is open and if the player actor isn't alive we're turning false if so
+01:29:35.940 else it returns true in the on inventory method we exchange UI manager.instance
+01:29:41.760 dot is menu open not equal to True with the can act method
+01:29:46.800 doing the same to the on drop method we then Implement our new on confirm method
+01:29:52.080 due to us adding a new input action which checks if the context has been performed if the target mode is true and
+01:29:58.320 if it is single Target is true if it is single Target is true then an active Target is set using single Target checks
+01:30:06.719 a helper method that uses a vector-free Target position to create a local variable actor called Target using the
+01:30:14.400 game managers.instance dot actor at location passing in said type position whereupon if no target is found it calls
+01:30:21.179 UI manager.instance.admessage before returning null it also further checks if the target found is the actor that is
+01:30:28.679 the player itself calling another ad message before returning null else if it just returns a Target actor we do a
+01:30:35.760 quick check to see the target is not null before calling the action.cast action passing in our actor the target
+01:30:42.000 film and our inventory is selected consumable else adding in a
+01:30:48.020 system.collections.generic import we get a list of actor targets using area Target checks our final help method
+01:30:54.420 scrolling down that takes in a vector 3 Target position present into radius using the target
+01:31:00.719 objects child local scale minus one to account for the center and then creates a local variable bounds Target bounds
+01:31:08.400 using the tighter position as the center before creating a radius around it using Vector 3.1 times radius times two it
+01:31:16.020 then creates a target's list initializes it and uses a for each Loop to cycle through all the actors within the bounds
+01:31:23.400 using an if statement Target bounds dot contains target.transform.position before adding
+01:31:29.639 it once the 4H is done it checks to see if the Tiger's thought counts is equal to zero if so it calls add message and
+01:31:36.719 returns null else here it turns to targets coming back to on confirm we check if
+01:31:42.179 Target is not equal now before calling action.cast action passing in our actor component the targets and then selected
+01:31:48.780 consumable for my inventory in our fixed update method we're going to add another condition to our first if
+01:31:55.080 statement checking to see that Target mode is set to false this is done so our player doesn't move while we're in
+01:32:00.960 Target mode and vice versa now heading back to our move method we're going to get rid of the code after future
+01:32:06.840 position followed by adding in a new if statement to check if it's Target mode which if so
+01:32:13.500 will set the future position to the Target object plus a rounded Direction else it sets the future positions the
+01:32:19.199 transposition plus around the direction finally we add a further if statement once again checking if it's Target mode
+01:32:25.980 which if true creates a vector 3 ins Target grid position using map manager's
+01:32:31.320 instance 4 map Dot World to sell passing in our pitch position we then called map managers is valid position passing our
+01:32:38.040 future position and also check to see that our players field of view contains the target grid position setting our
+01:32:43.920 Target object.transposition to that future position if so else we set the
+01:32:49.020 move key down stage to the return value of action.bump action passing in actor and around the position going to our map
+01:32:55.860 manager we're going to add in three new cases we're going to create entity method which creates a fireball
+01:33:02.639 confusion and lightning scroll opening prop gen we're going to go to place entities and exchanger
+01:33:09.620 bankmanager.instance.create entity with a local variable called random value which gets a random value between
+01:33:16.080 0 and 1 and goes for a set of if and else statements to decide which entity to create Now quickly heading over to
+01:33:22.320 our UI manager script we're going to give a bit more meaning to our for Loops So within the first for loop we're going
+01:33:28.080 to rename the I to reset num and the second for Loop to item num
+01:33:36.179 we're going to add a new local variable of item item which is set to the
+01:33:41.960 actor.inventory.items item num and we're going to change the actor.inventory the items dot name to item.aim making use of
+01:33:51.179 our new local variable followed by exchanging the IE minus one with item foreign
+01:33:57.440 ER back up we're going to go to resources double click outpatient of healing
+01:34:02.880 and add the healing script to it get rid of the consumable scripts
+01:34:08.159 and drag our healing script onto the consumable variable set them out to four
+01:34:13.679 now we're going to duplicate the potion of healing delete the healing script
+01:34:19.380 and change the Sprite to the following icon will change this to Yellow
+01:34:26.880 add the lightning script and then rename it to lightning scroll
+01:34:32.520 duplicate the lightning scroll change to red and the fireball script
+01:34:39.239 and of course rename it once more but for the confusion scroll
+01:34:51.540 all right double clicking the play prefab we're going to right click on the player go to see the object Sprites
+01:34:57.600 Square set the Sorting layer to entity and the orderly it's a three rename it
+01:35:05.400 to Target right click on target to the object Sprites and double square and call it
+01:35:11.880 radius sets a sorting layer to fog and ordering layers one we're going to
+01:35:17.639 change the Sprite to our new radius PNG we're going back to Target and setting
+01:35:22.860 the alpha to I suppose about half now selecting both Target and radius we're
+01:35:28.380 going to turn them off click on play out and we're going to drag Target into the target object
+01:35:34.139 variable clicking play
+01:35:39.420 and it's that easy we're gonna go to odd inspector's download page link will be down below in the description and we're
+01:35:45.659 going to click open source serializer from here we're going to Simply click download which will give you the Odin
+01:35:51.000 serializer uni package you're going to go ahead and right click it open with and choose another app we'll be using
+01:35:57.060 Unity 2021.3 as it's the current version that we're using for the project and click OK import everything create a new
+01:36:03.840 folder called plugins dragging both open serializer and text mesh Pro into it
+01:36:10.080 now open the scenes folder rename sample scene to dungeon and create a new scene called main menu
+01:36:18.780 press file build settings and drag main menu into the scenes and
+01:36:24.960 build making sure that it's an index of zero all right Opening Our scripts file
+01:36:30.719 though we're going to create two new scripts one save manager and the other main menu
+01:36:36.199 open up our site manager I'm going to Fast Track a little bit starting for imports we're going to be using uni
+01:36:42.000 engine Odin serializer system.io systemscollections.generic and uniengine.scene management we're going
+01:36:48.659 to create a save manager instance three variables and in a string and save data which are current flow with a default of
+01:36:55.560 zero save file name being of the thought of save the dot koala and Save which we
+01:37:01.320 initialize this is followed by creating Getters insteaders for both our current flow and save variables before using the
+01:37:07.380 awake method we create an instance making sure to pass into the if statements don't destroy unload passing
+01:37:12.420 in the same Magic game object we have a public Boolean method called has save available which is a local string
+01:37:18.540 variable called path which is a combination of both application persistent data path and the same file name it checks if a file doesn't exist
+01:37:25.440 using the path returning false if so otherwise returns true we forecasting about Memphis we're going to scroll down
+01:37:31.620 here we have two public classes called save data and scene States now you should add to both of them as
+01:37:37.400 system.civilizable attribute within the same data class we have two variables
+01:37:42.480 the first being an ins called save floor and the second being a list of scene States called scenes each of them have
+01:37:47.639 their regulars and Setters followed by a Constructor which sets them to their defaults within the scene State we have
+01:37:53.520 three variables an ins called floor number a game State called game State and a map State called map State they
+01:37:59.580 also have their own Getters and sitters followed by a Constructor which sets the variables to the parameters given
+01:38:05.159 scrolling back up within the public voice said game method
+01:38:10.440 we set the save variables say floor variable to the current floor followed by creating a local Boolean method
+01:38:15.540 called has seen which is set the true or false using save.scenes.find looping through all the available scenes to see
+01:38:22.139 if we can find a floor number variable that matches the current floor making sure it's not null and if statements in
+01:38:27.900 use checking if has seen is true calling the update scene passing in save states else as seen passing in safe State this
+01:38:34.920 is followed by creating a path combining application of persistent data path and it's a file name a local byte array
+01:38:41.159 called save Json which uses Odin serializers civilization chili.civilize value passing save and then sit in the
+01:38:47.340 data format to Json before using file.write or bytes passing in both the path and the local save Json variable
+01:38:53.820 I'll explain to save save in just a moment moving on to our load game method we create a local variable called path
+01:38:59.520 once again passing in both our persistent data path and I say file name creating a local byte array of safe Json
+01:39:05.219 which is set to file read all bytes passing in the path and then we set the save variable to what is returned using
+01:39:11.100 civilization utility the serialized value with a type of saved data passing out save Json local variable and Signal
+01:39:17.639 data format to Json our current four variables then set the same floor variable followed by using an if statement to check for active scene's
+01:39:23.940 name is not dungeon which will use scene managers.load scene passing in Dungeon else a new local variable scenes that
+01:39:31.020 it's created which is set to whatever is returned by using save.scenes.find looping through every single available
+01:39:36.480 scenes and check it if their floor number matches the current floor if the same state is not null it then proceeds
+01:39:42.360 to load the state passing the scene State House uses debug.log error informing us that there's no save data
+01:39:48.600 for the floor the delete save method is pretty simple it simply it gets the path as usual before using file.delete and
+01:39:55.380 passing in the path to get rid of our save file there are two of our helper methods as seen an update scene which
+01:40:00.540 both take in a scene states with ad seen using an arrow function to add the Sensei to saves list of scenes meanwhile
+01:40:07.500 with update saying it sets one of the scenes within the scenes variable within our save variable making sure to pass in
+01:40:14.460 the index which would be current flow minus one to equal the same state as mentioned earlier we have two other
+01:40:21.719 methods they being saved State and load state which Save State returning a scene state which uses an error function new
+01:40:28.260 scene State passing in the current floor the game range is instance.save State and the map managers.instance.save state
+01:40:34.620 with the load State taking in a scene state to call mapmanager's Dot instance load State and also the game
+01:40:41.100 manager.instance to load State passing into those load States their own separate states contained within the
+01:40:46.500 scene State now opening up our main manuscripts we'll be using four Imports in the engine uni engine.c management
+01:40:52.920 uni engine dot UI and uni engine Event Systems you'll have two variables a
+01:40:58.080 private event system called event system and a private button called continue button it will make use of the start
+01:41:03.540 method you use an if statement that calls save managers has save a valuable method checking if the bullying returned
+01:41:09.719 is false which will set the continue button interactable to false else you
+01:41:15.060 use the event system variable the call set selected game object passing in the in your button Dot Game object we're
+01:41:21.719 gonna have three methods new game continue game and quit game all of which are public voids with new game which
+01:41:28.620 uses an if statement the call Save managers has saved available which Upon returning true we'll call Save managers
+01:41:34.380 delete save method it will then set save manager's current floor variable to one before calling C managers load scene
+01:41:41.040 passing in Dungeon they both continue game and quick game being pretty straightforward now opening up the AI
+01:41:46.440 class we're going to create a new public class called AI state it will have a private string variable called type
+01:41:52.619 providing both a getter Setter and Constructor with a string parameter called type with a default empty string
+01:41:58.920 we slap on a system dot serializable followed by adding a public virtual AI State Save State method to the end of
+01:42:05.520 our AI class open the confused enemy script create a public class called confused
+01:42:12.000 state which inherits the AI State the class will contain two private variables a string called previous Ai and an
+01:42:17.639 integral terms remaining they get as insetters followed by a Constructor whose parameters are a string called
+01:42:23.159 type an AI called previous Ai and an ins called turns remaining each parameter
+01:42:28.260 has its default set accordingly the Constructor uses the best AI state to handle our type string before adding a
+01:42:34.679 system dot serializable to the top of our confused state within that confused enemy class we add
+01:42:40.380 two methods the first is an override method for the Save State method we use an arrow
+01:42:45.480 function to create a new confused State passing in a confused enemy string for the type and confuse enemy's previous Ai
+01:42:51.659 and turns remaining the second is a public void load state that takes in a confused state which we named State we
+01:42:58.500 use an if statement to check if the state's previous AI is hostile enemy setting the previous IO to it if true
+01:43:04.380 using get component hostile enemy we then set the confused enemy's turn remaining to the states Now quickly
+01:43:10.320 opening their hostile enemy script and a public override safe state to clarify that the AI type is hostile
+01:43:16.800 enemy during civilization onwards to our entity Scripts we create a public class called entity
+01:43:22.440 States we give it an anti-type enum to differentiate entities in both serialization and even serialization
+01:43:28.500 five variables anti-type type type A String called name two booleans blocks
+01:43:33.719 movement and is visible followed by objective 3 position as always give them Getters and Setters and a Constructor
+01:43:39.840 that takes in each variable we add a system.serilizable to the top of entity States and head on up while creating
+01:43:45.420 part 10 I changed how I handle the ad to game manager method so we add in a virtual keyword
+01:43:52.080 to the method an if statement that checks for the player component calling game manager's insert entity method if
+01:43:58.440 true else it calls its add entity method instead throw in a public virtual Save State method that returns an entity
+01:44:04.920 State and open our actorscript we're going to create a new act the state class that inherits The Entity States
+01:44:11.400 give it three variables a bullying chord is alive and are a state called current
+01:44:16.500 Ai and a fighter State called fighter State providing them both Getters and Setters we also create a Constructor
+01:44:22.139 that takes in each Parable that also makes use of the base AI States Constructor scrolling to the top
+01:44:28.860 we're going to add a new fighter variable called fighter and another if statement
+01:44:34.080 to check if we have the fighter component attack in the on validate method next create a new public override
+01:44:39.840 void add to game manager method which uses the base at the game manager method and copy and paste in our if
+01:44:47.100 statement above in the start method we're going to exchange our algorithm equals new atom visibility and update
+01:44:52.980 field of view with a new if statement and else if statement where we check to
+01:44:58.080 see if the actor is alive we should call our algorithm equals new atom visibility and update the field of view else if it
+01:45:04.560 isn't alive it checks to see if the fighter is not equal to null which will call the Fighter's die method you will
+01:45:09.900 notice that die is currently sending an error that's due to it being a private method but we'll get back to it
+01:45:16.080 scrolling down we add in a public override Save State method which returns an entity State and a public void load
+01:45:22.619 state which we pass into inactive State now starting with the Save State we use an error function to create a new active
+01:45:27.659 State using the access Constructor which would pass into the name of the object if it blocks movement or not if it's
+01:45:34.080 alive if it's visible by checking map manager's visible tiles which currently passes an area due to their not being a
+01:45:41.159 getter for the visible tiles and passing in the vector-free in position of the entity to it then passing in the transom
+01:45:47.820 dot position and checking if AI is not equal to null which if true calls AI dot
+01:45:53.280 Save State otherwise it sets it to null we then check if the fighter variable is not equal to null which if true calls
+01:45:58.800 Fighter's Save State method else it sets it to null in our load State method using the access 8 provided we set the
+01:46:05.280 transform position of the entity to the states position it is a live Boolean to the states is alive Boolean we then use
+01:46:11.699 an if statement to check if the entity isn't alive whereupon we remove the actor from the game manager followed by
+01:46:18.179 another if statement which checks to see if the is visible variable within our state is set to false if that's true it
+01:46:25.560 uses get component Sprite renderer.enabled and says it's false another if statements then used to check
+01:46:31.199 if the current AI is not equal to null if true it checks to see which type it is getting the component offset type and
+01:46:37.739 setting the AI to it if the type of the AI equals hostile enemy then it simply sets the AI using get component hostile
+01:46:44.639 enemy else if the type is confused enemy it adds a new component confuse enemy to
+01:46:50.280 the game object setting the AI to its before creating a new confused State using state DOT current AI as confused
+01:46:58.260 States and casting our AI variable so we can access the confused enemy load State
+01:47:03.960 method passing in a confused State lastly we use another if statement to check if the state.fighter state is not
+01:47:10.560 equal to null which if true calls Fighters dot load State passing the state of fighter State opening the item
+01:47:16.560 script so we can start there to use an arrow function so it's a one-liner we're going to create a new item state which
+01:47:22.199 inherits The Entity State giving it a string variable called parents providing both a getter and setup for it and a
+01:47:29.159 Constructor which like their active State Constructor makes use of the base entity States Constructor we add in as
+01:47:36.719 usual two methods a safe State and a load State the safe State being an override for the virtual which uses an
+01:47:42.600 error function to get a new item State passing in name blocks movements checking to see if the visible tiles
+01:47:48.360 contains our vector-free in position the transform block position and it checks that the transform.parents is not equal
+01:47:54.960 to null setting parents the transform parent.game object's name otherwise it sends it to a blank string you're false
+01:48:01.139 in our load method it uses the item state state parameter to check if the state DOT is visible is false setting
+01:48:07.980 using get component Sprite renderer.enable turning off the Sprite renderer in our game object if so if the
+01:48:13.980 state thought parents variable is not equal to a blank string then it creates a game object parent local variable
+01:48:19.980 which equals gameobject.find passing a state DOT parent string which then uses the parents.get component Inventory
+01:48:27.239 calling dot add a method that we're passing in this script and is a new method that we'll get to soon we then
+01:48:33.600 set the transform.position to the state's position now open the consumable script we're going to add another line
+01:48:39.060 of code to it which calls the game manager's remove entity passing and get component item opening the fighter
+01:48:45.119 script we're going to change the seal declaration to a public one navigating to our die script
+01:48:51.420 we're going to change it to public we're going to add a new if statement to it
+01:48:56.520 which checks to see if the actor entity is alive and wants to making a normal process is going to set the actors is a
+01:49:02.820 live variable to false we're going to remove the unnecessary git component actor that is a low variable
+01:49:09.239 before scrolling down we're going to create a new public fire to State class which holds five
+01:49:14.820 variables four of them being ins Max HB HB defense and power and a single string
+01:49:21.360 called tiger providing them Getters and Setters and a Constructor that takes in all its variables scrolling up
+01:49:27.960 we had two methods a save state that returns a fighter state which uses an error function to get a new fighter
+01:49:34.320 State passing in a Max HP HP defense power and checking if the target is not
+01:49:39.600 equal to null if true it says it's a Target name otherwise it sets it to null second the load State method that uses
+01:49:46.320 the fighter state to set the four invariables of the fighter class to those of the fighter States invariable
+01:49:52.199 before making call to the game managers that actors variable which uses the find method to check to see if any of the
+01:49:59.040 names within the actors list is that of the state for targets setting the target
+01:50:04.139 to it opening the inventory as informed earlier we're going to create a public void ad method that
+01:50:10.739 takes in an item it uses items dot add to add the item to the items list using
+01:50:16.159 item.transom.set parents passing in the transform of the items game object for making your final call to the game
+01:50:22.139 manager to remove the entity passing in the item now open Action we're going to exchange these two lines item that
+01:50:29.219 transform set parents and actors on inventory inventory dot add passing in the item
+01:50:35.100 while also removing game manager.instance remove entity heading into the game manager script
+01:50:40.619 we're going to import unit engine.c management navigate to the bottom we're going to
+01:50:46.260 create a public class game states which has a private list entity State called entities ghetto and seller for it and a
+01:50:53.340 Constructor that takes in the list entity State going back to the top we're going to make use of the scene manager
+01:50:58.619 subscribing to on-scene loaded which is scene manager.cn loaded Plus or equals
+01:51:03.900 on scene loaded which allows us to use the Unseen loaded method which creates a local scene State using save manager
+01:51:10.020 instance save.scenes.fire method which lives through the scene's variable checking to see if a floor number matches the same
+01:51:16.020 energy instance current floor variable we then use an if statement to check if the scene state is not null which calls
+01:51:21.360 a load State method passing in scenes that block game State else it initializes entities and actors
+01:51:26.699 scrolling up scheduling within neutralization I'm starting to add entity we're going
+01:51:33.000 to add in the new insert entity method that we talked about earlier which much
+01:51:38.159 like that entity method it checks that the game object is not active before setting it to true and then inserting it
+01:51:43.980 into the Anthony's list finally navigating we're going to add in three methods called Save State load State and
+01:51:50.340 load entity States the Save State method returning a game state which uses a 4-H the cycle through
+01:51:56.580 every single item within the player's inventory checking if the entity list contains said item which if so will
+01:52:02.580 continue the loop also call the add entity method passing in the item this is followed by creating a game State
+01:52:07.980 called game state which will equal a new game State passing in entities dot convert all and using X to Loop through
+01:52:15.239 every single entity calling save say it we then use a new forage the cycle for every single item within the inventory
+01:52:21.420 items list calling remove entity passing in the item before returning the game State variable
+01:52:27.360 in the low State method which takes in a game States called State we first said there is player turn Boolean to false
+01:52:33.600 which prevents the player from moving during the load we use an if statement to check if the entity's list dot count
+01:52:39.000 is greater than zero if so it uses a four each that go through every single entity destroying its game object before
+01:52:45.480 clearing both the entities and actors list we then use the start co-routine method passing in load entity States
+01:52:51.300 along with our state DOT entities the low entity States method is a private method that takes in a list of entity
+01:52:57.540 States called entity States it creates a local int variable called entity state which is set to zero and then uses a
+01:53:04.320 while loop with its condition being entity state is less than entity states.count we use year return new wafer in the
+01:53:11.340 frame before creating a local string variable called entity name which uses a ternary with its condition being entity
+01:53:17.880 States passing an entity State as the index dot main dot contains remains of if this is true entity name equals
+01:53:25.080 entity States passing entitystate.name Dot substring and within the substring
+01:53:30.119 we pass in empty States index entitystate.name.lust index of space
+01:53:35.940 plus one if not true entity name simply equals entity States index of entitystay
+01:53:42.179 dot name and if condition is then used where if the entity States index
+01:53:47.420 entitystate.type equals entitystate.ensitytype.acta a local actor State called act estate is created
+01:53:54.060 with the entity State as an active State we then create a local active variable with
+01:53:59.600 mapmanager.instance.create entity passing in the entity name at the state.position and using dot get
+01:54:05.100 component actor before loading the access State else if the entity state DOT type equals entitystate.ensity type
+01:54:11.100 that item and item state is created with that entity State as an item state for creating an item using once again
+01:54:18.619 mapmanagers.instance.create entity passing the entity name itemstate.position dot get component item for loading the item state with an
+01:54:25.739 increment item state which will continue the process until entity State equals entitystates.com there is player term
+01:54:32.580 bullying is instead to True which allows the player to move heading on over to the tile data class
+01:54:38.940 we're going to add in a new private string called name it's getter and setup and then we're going to create a
+01:54:44.219 Constructor which takes in every single variable before going to the map manager script starting from the bottom we're
+01:54:49.739 going to create a map State class which will hold a private dictionary of a vector 3 tile data called stored tiles a
+01:54:57.119 list of rectangular room called stored rooms they Getters and Setters and a Constructor that takes in both the
+01:55:03.179 dictionary and list our stored tiles will be set using tiles.to dictionary making sure to import system.link which
+01:55:10.500 will cycle through every single key within the tiles dictionary casting every single key to a vector 3 in the
+01:55:16.619 process while I've stored rooms I just set the rooms going to the top we're going to import in the engine.scene
+01:55:23.040 management remove all initializations from rooms visible tiles and tiles
+01:55:30.960 creating a getter for Visible tiles before like game manager we're going to
+01:55:36.239 subscribe to on scene loaded a method that will use the Creator scene State variable called scene state which we'll
+01:55:41.340 find using save under instance.save.scenes.find looping through all available scenes check and
+01:55:47.580 see if their floor number matches the state manager.instance.com floor within we then use an if statement to check
+01:55:52.619 that the scene state is not null calling load State passing in our scene state.map State else we call generate
+01:55:58.920 dungeon a method that cutting out our code here we'll initialize our rooms tiles
+01:56:05.580 invisible tiles followed by drowning our dungeon as per novel before moving to the create entity method and refactoring
+01:56:12.119 what we're using here so you may notice that a lot of this code is just duplications of one another so what
+01:56:17.760 we're going to do is make use of string interpolation to cut it down to creating a local game
+01:56:22.800 object called entity object instantiating the said game object passing in our entity string using
+01:56:29.940 string interpolation a new Vector 3 our position and the identity before renaming The Entity object to the entity
+01:56:36.840 string and returning it making sure that it returns a game object and not avoid scrolling down we're going to making use
+01:56:44.340 of our tile data Constructor with name echoing tollmap.getile return.name and is
+01:56:52.020 explored and is visible since the false going down to setup fog map within our forage statement we're going to add a
+01:56:58.860 new if statement setting that tiles Alpha to half else it sets it to one adding in the two State methods if our
+01:57:06.060 public safe State returning a map state which uses an arrow function to return a new map State passing in tiles and rooms
+01:57:12.179 before finally our load State taking in a math state it will set our rooms variable to the map State stored rooms
+01:57:19.020 and tiles to our match States stored tiles which will use the two dictionary method the cycle through every key
+01:57:25.380 within our store tiles dictionary our tiles all equal a map state store tiles but I'll call to dictionaries so it
+01:57:32.400 Cycles from every single individual tile casting it to a vector 3 int with the value remaining the same and if
+01:57:38.219 statement is then used to check if the visible tiles dot count is greater than zero clearing it if so before using a
+01:57:44.520 four Reacher cycle for every single tile key checking if the name equals floor tile calling floor map dot set tile if
+01:57:52.320 so else if the tile name equals a wall tile or then called obstacle map.setile
+01:57:57.659 otherwise before calling setup fog map opening the UI manager scroll down we're
+01:58:02.940 going to be adding a new Escape menu UI so we're going to add in a header attribute
+01:58:09.300 called Escape menu Y and a new Boolean called is escape menu open setting it to
+01:58:14.639 false by default and a new game object called Escape menu providing the bully
+01:58:19.800 and its own getter before scrolling down here we're going to create a new public void method called toggle Escape menu
+01:58:28.679 it works the same as the other toggle menus but in our if statement it uses our event system variables set selected
+01:58:35.580 game object passing our Escape menu's child game object going to the toggle menu method
+01:58:41.460 we're going to refactor all our if statements with a switch case
+01:58:46.560 the switch case will go through every single menu Boolean checking which one is true calling it in the process
+01:58:51.900 finally going to just below toggle Escape menu we're going to add in three new methods
+01:58:58.380 save load and quit however with the load method not only will call load game for
+01:59:03.780 the save manager it will also call toggle menu this is due to the fact that we don't want the menu open if we loaded
+01:59:09.659 the game while in a scene open the player script and within the on exit method we're going to add a new if
+01:59:15.480 statement that checks if the UI managers is escape menu open is set to false and
+01:59:20.760 if the UI manages is menu open to set the false calling its toggle Escape method if so now as we don't want two
+01:59:27.060 calls we're going to set the if statement after to an lcf hoping you need to back up within the
+01:59:33.300 floor one scene we're going to go ahead and expand the canvas game object drag in the event system before creating a
+01:59:41.280 new game object that's going to be centered in our canvas expand it just a bit
+01:59:49.320 so that's called the black rename it to escape menu we're going to give it a button child
+01:59:55.560 object remove the button's image
+02:00:01.080 call it call it returns a game setting its anchor to top
+02:00:07.380 we're going to expand the button within hierarchy rename the text to return to game it
+02:00:13.260 spawn asset to Roboto selecting Auto size make it bold and change the vertex color to white
+02:00:21.659 returning to the button we're going to drag in our text game object into Target graphic
+02:00:26.880 adding a new listener on click dragging in our canvas clicking the drop down menu we're going
+02:00:33.179 to hover over UI manager and select toggle menu duplicate it three more times
+02:00:38.780 positioning it as you do we know the first duplicate to load game
+02:00:49.679 the second to save game and the last to exit
+02:00:55.860 returning to load game we're going to set in the drop down menu instead of calling UI manager's topper menu we're
+02:01:01.440 going to instead call load repeat this process for the other buttons
+02:01:08.580 cuddle them if you wish
+02:01:14.880 foreign
+02:01:20.840 canvas game object we're going to scroll down and drag in the Escape menu game object
+02:01:26.580 into our Escape manual variable scroll up and selecting overrides we're
+02:01:31.619 going to apply all making sure that escape menu is also
+02:01:38.219 turned off when doing so before proceeding to our main menu scene alright with our memory open we're going
+02:01:45.000 to go ahead and import whatever landscape image that you want to see would represent your main menu I've
+02:01:51.300 opted for a nice dark background with her face but you can generally do whatever you want from there we'll
+02:01:56.520 create a save manager game object adding the component save manager next we're going to create a new canvas
+02:02:04.560 setting the render mode to camera the UI scale mode to scale screen size
+02:02:10.860 the reference resolution to 1920 by 1080. and hyped to one
+02:02:17.460 at the component main menu and before we set the main menu's variables we need to First create
+02:02:23.280 continue button so first we're going to create an image child object of the canvas
+02:02:28.500 name it background setting it to the image that you imported
+02:02:34.320 if it's anchor to stretch okay new text mesh Pro game object
+02:02:39.900 called title you can position it however you want
+02:02:52.619 and finally a panel I'll just call it menu panel
+02:03:00.960 I'm going to set the anchor to Middle right foreign
+02:03:08.699 now within this panel we're going to create three buttons the first being play a new game
+02:03:22.860 the second continue last game
+02:03:33.420 and the last quip
+02:03:38.880 foreign
+02:03:44.719 listeners to them but plus we're going to drag in the canvas object
+02:03:50.460 selecting the drop down menu of our main menu and press new game continue for the
+02:03:55.980 rest
+02:04:01.080 now selecting canvas we're going to drag in our event system until our event system variable for main
+02:04:07.860 menu and the continue button now just before we click playing we're going to select event system and replace
+02:04:14.580 the import system and play our continued button has been disabled since there is no save so we can go
+02:04:20.460 ahead and press play and Save in here
+02:04:30.540 and loading now let's test it from the main menu our continue button is not disabled so
+02:04:37.380 we can go ahead and click that and it loads the game perfectly fine we're learning how to Traverse the
+02:04:43.020 dungeons moving up and down floors and to start we're going to go ahead and import two new images one called
+02:04:50.400 character information and the other level up links can be found Down Below in the description once they're imported
+02:04:56.880 we're going to open up our tile palette expanding the deja vu Sprite sheet
+02:05:03.000 and we're going to import both the less than and greater than symbols
+02:05:09.540 we'll be using them as our downstairs and upstairs lastly opening up the scripts folder
+02:05:16.800 we're going to navigate to the components folder and create the level from here we're going to head back into
+02:05:23.099 the entity folder double clicking controls we're going to add a new action called
+02:05:28.920 info setting its binding to C now opening up the safe manager script
+02:05:35.639 we're going to be implementing temporary saves as we want to move across flaws without committing to anything so in the
+02:05:42.360 save game parameters we're going to add a Boolean called temsafe setting it to true
+02:05:47.760 before adding an if statement with this condition being temp save false
+02:05:54.300 and moving into the load game method we're going to cut out lines at 78 to
+02:05:59.880 86. creating a new method called load scene
+02:06:05.639 this will be a public method that has a Boolean parameter called can remove player with it being set by default to
+02:06:12.540 true and often we're going to paste that previously cut code to fix that error we're going to go into the load States
+02:06:17.580 method give it a parameter of Boolean can remove player and adding it to the game manager call
+02:06:24.300 heading over to the game manager script we're going to add in a new method called refresh player which just calls
+02:06:29.760 the player's update field of view method scrolling down to save State we're going to get rid of this if statement of
+02:06:35.480 entities.contains item as it was producing a duplication bug we're then going to within the load
+02:06:41.820 State method add in a new parameter of Boolean can remove player cutting out its if statement
+02:06:48.540 leaving a new method called reset passing in Canada roof player into place
+02:06:54.360 and also adding it to the load entity States calling just below density States we're
+02:07:00.480 going to add in the reset method which as you can predict takes in a Boolean uses our if statement of entities dot
+02:07:07.260 count is greater than zero using a four each to go through every single entity within entities which is an if statement
+02:07:12.840 to check if we can remove the player and if a certain entity has to play a components which simply uses continue if
+02:07:19.080 true otherwise it destroys the entity game object once the loop is complete it checks to see if the can remove player
+02:07:25.380 is true within the if statement clearing both entities and actors otherwise it
+02:07:31.080 simply removes every single entity or actor besides the player now if in low entity States we're going to add a new
+02:07:37.560 Boolean parameter called cam Place player a new if statement within the F7 that
+02:07:43.320 checks if the entity State type is an actor where if the entity name is player and they can place player Boolean is set
+02:07:50.639 to false it will set the player's transform position to an empty State position before refreshing the player
+02:07:56.639 and incrementing anti-state before continuing within the alsif statement we're going to be checking that the item
+02:08:02.460 States parent equals player and also checking if the cam Place player only
+02:08:07.860 intercept the false incrementing entity state if true before continuing one last thing heading on over to the top to
+02:08:14.159 on-screen loaded we're just going to add a true to the load State call now opening the map manager we're going
+02:08:21.000 to add in two new tile base variables for our dancers and upstairs we're also providing them getters
+02:08:27.480 now scrolling to on scene loaded we're going to add a true Boolean to the generate dungeon call
+02:08:33.960 because heading to the generate dungeon method we want to differentiate between a current game and a new game so adding
+02:08:40.260 a new parameter Boolean called is new game which has a default of false we're going
+02:08:46.980 to add that Boolean to the generate dungeon procten call before creating a new if statement of
+02:08:52.739 not equal new game at the bottom passing into it a game manager.instance.refresh player call one
+02:08:59.520 last step before we leave the generate dungeon method we're also going to add a new a new if an else statement
+02:09:04.739 the if statement condition being floor map cell bounds size X is greater than
+02:09:10.320 zero which if true calls the reset method which scrolling down
+02:09:15.719 which is pretty self-explanatory it clears every single list and dictionary before clearing every single tile map of
+02:09:23.159 all their tiles heading back up and if it's false it's just as usual instantiates rooms tiles and visible
+02:09:29.699 tiles one last thing heading to our load State method just like the generate dungeon method
+02:09:35.219 we're going to add the same if statement for adding a couple of else if statements checking for both our
+02:09:41.699 upstairs tiles and downstairs tiles now heading to rectangular room we're
+02:09:46.860 going to add in a new helper method called random point the random Point method uses an arrow
+02:09:52.020 function to return a new Vector to end which passes in a random.range of X plus
+02:09:57.719 one inclusive and X Plus width minus one exclusive for its x value and random dot
+02:10:04.560 range passing in y plus 1 for its inclusive and Y plus height minus one for its exclusive from its y value
+02:10:11.880 now opening up prop gen scripts we're going to add in the new Boolean of is nugain to its parameters
+02:10:20.340 before scrolling down exchanging our entity creation for the
+02:10:25.739 player with the following we're first going to set the downstairs tiles using a random
+02:10:31.980 point before getting a vector 3 and of player pause for creating a new local vector3 inspirable called player pause
+02:10:39.540 which is set to a random Point within the first room that's been hardcasted with vector-free int we then use a while
+02:10:46.500 loop that uses the get actor allocation method passing in player pause checking that it's not null if there is an actor
+02:10:53.099 in that location then it gives a player pause a new random point until they get
+02:10:58.260 act out location call returns null we then set the upstairs tile using player pause before using an if statement
+02:11:05.099 checking if it's not a new game which will set the player's position to the player pause position accounting for the
+02:11:11.219 title else it creates a new player passing the player pause that's been hardcasted with Factor two ends all
+02:11:17.460 right moving over to our level scripts it's time to implements our code we're going to add a required component type
+02:11:23.460 of actor attribute to the top of the class before adding in six inch
+02:11:28.679 variables called current level settings are the fault of one current XB XP to the next level level up base for the
+02:11:35.460 fault of 200 level up factor with a default of 150 and X be given we're
+02:11:40.619 going to provide current level current XP XP to the next level and XP given with Getters we're also providing a
+02:11:47.880 setup for XP given an invalidate method would be used to set the to the return on XP to the next level a helper method
+02:11:54.000 that first multiplies the current level and level up Factor before adding its level up base next have a method called
+02:12:00.540 requires level up which returns a Boolean based on current XP greater than equal actually to the next level the add
+02:12:06.420 XP method takes in an in-premma called XB uses an if statement to check if XB
+02:12:12.060 is equal to zero or level up base is equal to zero returning true if so if it
+02:12:17.880 isn't it proceeds to add the XP the current XP calling the add message method from our UI manager before lastly
+02:12:23.820 using IF statements if it's conditioned B Because level up is true call when you are managers toggle level up menu method
+02:12:30.300 passing in the actor components we'll get to this a bit later in the video for filing the method calls UI manager's add
+02:12:36.780 message method to indicate that the player's advanced level we didn't have four more methods The increased level
+02:12:43.260 method being private which sets the current XP to zero increments the current level and sets XP to the next
+02:12:49.679 level variable to the return of experience and Next Level method increased Max HP increase power and
+02:12:55.860 increase the fence all have a parameter takes in an amounts with the first being set to 20 by default and the last two
+02:13:03.179 set to 1 by default the amounts given I used to set the specific variables of each method all three methods make use
+02:13:10.199 of the amount parameter to increment their specific variable before calling UI managers add message method before
+02:13:16.920 calling increase level finally we Implement both a safe site method and
+02:13:22.139 a load State method which both saves and loads the current level the current XP and the XP to the next level of course
+02:13:29.340 both these methods be using a level stage the level State class containing three integers current level we've just
+02:13:36.239 set to one current XB and XP to Next Level all three variables have their own Getters and Setters followed by a
+02:13:42.780 Constructor now open the actor script as we want to support our new level components starting with adding a new
+02:13:48.599 level variable and again instead of both the fiber and level variables a new if statements you don't validate
+02:13:55.800 method for the level components heading over to the active State class adding a new level State variable a getter and
+02:14:03.300 Setter for it probably adding a new parameter to the Constructor and also adding a new line of this dot
+02:14:09.420 level State equals level State scroll up to save state we're going at a level state is set to
+02:14:15.060 using a ternary level nautical null and get player is true setting it to level
+02:14:20.820 dot save states return our setting it to null before in the load State method adding another if statement just like
+02:14:28.380 the fighter states only for the level state where it calls levels load State quickly heading over to the fighter
+02:14:34.619 skips we're going to add a new getter and Setter for the max HP variable followed by adding a Setter to both
+02:14:40.440 defense and Power then within the die method we're going to add to the else statement game
+02:14:47.599 manager.instance dot actors the index of zero which is the player we're going to get its level components before calling
+02:14:54.719 ad experience which passes in the level components XB given inspirable which is
+02:15:00.540 attached to the same game object as despite a script alright heading on over to by manager scripts we're going to be
+02:15:06.540 adding support for three new UI Elements which is our dungeon floor text our character information and our level up
+02:15:13.079 elements so adding a new text Miss Pro you GUI variable then we get dungeon floor text we're going to head on down
+02:15:19.159 and following the trend we're going to add in a Boolean support our menus followed by a game object however we're
+02:15:26.099 going to also add another game object for our level up menu as we need to support its content how to get it for
+02:15:31.440 the character information menu before once again scrolling down we're going to add a helper method called set dungeon
+02:15:37.440 floor text this will have a parameter of implore we'll be setting the dungeon floor text Dot text components to two
+02:15:44.460 dungeon floor colon using string interpolation we'll be changing the start function so instead of using an
+02:15:50.099 error function it's going to set dungeon floor text to the current flow within the save manager instance before using
+02:15:56.520 an if statement to check if the save managers save dot save floor variable is zero calling add message to welcome the
+02:16:03.960 adventurer to yet another dungeon else it calls add message welcoming the player back moving on down
+02:16:10.199 you will notice that all these toggle methods all have something in common with is menu open being set to the
+02:16:15.900 active self of the menu and the menu's active State being set to the opposite of itself so we're just going to go
+02:16:21.599 ahead and Implement a new method called set booleans this will be a private method and will
+02:16:26.880 take in a game object of menu and a Boolean of menu ball whether is menu open Boolean is set to menu ball with
+02:16:33.360 menu's active State being set to menu ball just going to implement it in the toggle methods
+02:16:39.321 that out of the way I'm just going to get rid of the if condition of is menu open
+02:16:45.299 before adding a new method called toggle level up menu this method has an active parameter
+02:16:51.120 called ACTA it follows the trend of setting the Boolean to the opposite of itself before calling said booleans
+02:16:56.821 passing in its menu and the Boolean itself three game objects all consisting of the child game objects within our
+02:17:03.840 level up menu content more on that soon it gets all the components of the text message you gui's for those elements
+02:17:09.420 getting their texts before using string interpolation it sets the text according
+02:17:14.700 to what child object is on with the Constitution button being set to a constitution bracket plus 20 hp from
+02:17:22.860 then passing in actor.get component fighter Max HB the same process is
+02:17:28.138 continued for the next two buttons but each using different variables within user for each going through every child
+02:17:33.478 transform within the level up menu content dot transform where we remove every listener within
+02:17:39.781 the child's button components we then add a new listener based on the child game object itself where if the
+02:17:45.000 Constitution button variable equals a child.game object it adds The Listener active.get component level increase Max
+02:17:51.179 HP before using else if statements going for the same process where if it's the strength button then it calls increased
+02:17:57.599 power although Julie button calling increase defense instead as a safety we use an else statement to use debug.log
+02:18:04.500 error saying no button found finally it calls top level up menu passing an actor
+02:18:09.900 as we want the menu to close when a button has been selected lastly we use eventsystem.select the game object
+02:18:16.379 setting it to level up menu content moving on to our next method which is toggle character information menu where
+02:18:22.321 it has that parameter of actor called ACTA with a default of none it follows the same Boolean process before using an
+02:18:28.799 if statement checking if actor is not null for saying every child game object will be part of a character information
+02:18:34.379 menu UI game objects the reason if statement to check Act is not null before setting every single child game
+02:18:40.679 object within our character information menu game objects getting the text mesh Pro ukui components sending their text
+02:18:48.058 to the player's stats the first game object being the level sets its text using string interpolation to level
+02:18:53.638 colon space actor.get component level getting its current level the second XP
+02:18:58.920 going for the relative of the same process except it gets current XP instead XP for the next level uses the
+02:19:05.099 XB to Next Level variable and the last two attack and defense gets the actor's finer components power and defense
+02:19:11.638 heading to our save method due to our changes we're going to be saying it's the false as if the save button is pressed we want
+02:19:18.599 to inform the save manager that it's not a temporary save we'll also add a call to add message that the world stops for
+02:19:24.240 a moment before doing the same for the load method scrolling up the toggle menu we're going to add a new case for our
+02:19:29.821 character information menu before moving over to the player script here we'll be making a couple of slight
+02:19:35.340 changes where we're going to move the else if statement of Target mode finner on exit method to the top
+02:19:42.599 this is the correct the menu behavior issues within the game before moving to the on confirm method where we're going
+02:19:49.020 to be adding an else if statement that checks the Boolean return of can act before calling action not take stairs
+02:19:55.200 action passing in our actor components an action that we'll be taking a look at shortly we're then going to be adding a
+02:20:00.840 new method called on info which like the others has a parameter that takes in the input action.callback
+02:20:06.960 context within it we use an if statement that checks context.performed is true if
+02:20:12.540 so another if statement is used checking the return value for can act is true or
+02:20:18.240 UI managers is character information menu open is true which leads to calling UI manager's toggle character
+02:20:23.880 information menu passing an actor component if so opening the action scripts and importing Unity engine.scene
+02:20:30.060 management we're going to add in our new tech stairs action method that we saw earlier
+02:20:35.580 which has a perimeter of actor called actor where upon being called it creates a vector three inch called pause setting
+02:20:42.960 it to the value provided by floor map dot will to sell which we pass into the actors transform position it then
+02:20:49.380 creates a local string variable called tile name which is set to return string provided by floor Matlock get tile
+02:20:55.680 passing in pause dot name and if Siemens then used to check if the tile name is not equal to either the upstairs tile's
+02:21:02.160 name or the downstairs tile's name which if true it calls UI manager's add message method saying that there are no
+02:21:08.460 stairs here before returning else if there are stairs there it then checks to see if the save manager's current floor
+02:21:14.760 equals to one and that the tile name equals the upstairs tile's name which we'll call UI managers add message
+02:21:21.180 method again to notify the player that a mysterious Force prevents them from going back for column return this is
+02:21:26.819 done because currently there's nothing implemented for a player to leave the dungeon however if both checks fail it
+02:21:33.060 moves on to saving the player's instance to be using the temp sane before incrementing or decrementing save
+02:21:39.479 manager's current floor by using a ternary to check if the tile name equals the upstairs tile's name decrementing
+02:21:45.540 the current floor by one else incrementing it and if statements send used to check if a scene exists within
+02:21:51.240 the save that equals the floor number calling save manager's load scene passing in false else it calls game
+02:21:57.540 manager's reset method passing in false before pulling map managers generate dungeon method
+02:22:03.540 we then send a call to UI manager's add message for also calling it set dungeon floor text passing in save manager's
+02:22:09.660 current floor now within the uni editor we're going to go into our resources folder open up our canvas prefab
+02:22:16.920 within the canvas we're going to create a new text Miss Pro object call it dungeon floor
+02:22:22.620 set the default text move it to the bottom left corner just below our HP slider
+02:22:29.399 and size it to your preference making sure the surf the anchor to
+02:22:34.800 bottom left now we're going to be implementing the character information menu So within the canvas create a new image object
+02:22:42.660 give it the source image although character information menu move it to the top left
+02:22:48.780 setting its anchor the top left also and just sides a little bit
+02:22:56.280 just going to name it character information within the hierarchy and we're going to give it a text
+02:23:01.920 message Pro text object name it level we're going to set its anchor to top
+02:23:08.100 left Auto size style to Roboto it's character spacing to 30.
+02:23:15.060 we're just going to expand it to the right or making the text a bit smaller
+02:23:21.600 duplicate it four times before giving it a default text of level colon space one
+02:23:28.200 then the answer to the following xB giving a default text of XB colon zero
+02:23:36.420 required XP giving it the default text required XP column zero and repeating the same for
+02:23:43.260 the last two which is attack and defense separate them from each other
+02:23:52.200 and that's that character information menu done just go ahead and turn it off moving on we're going to be adding in our level up
+02:23:58.260 menu game object so if in the canvas we're going to create a new image UI game object name it level up menu
+02:24:05.100 set its source image and move it to the top right corner settings anchor the top right
+02:24:12.120 just going to stretch and size it to my tastes
+02:24:17.340 thank you give it a child text object it's sex being congratulations you level
+02:24:24.120 up it's like an attributes increase set the auto size spawn acid to Roboto
+02:24:33.780 we're also going to give it a character spacing with 25 and a word spacing of 50. set against the middle alignment
+02:24:40.200 next create a new game object within the level up menu call it level up content
+02:24:46.439 set up the stretch it's left to zero right to zero
+02:24:52.560 and just moving it ever so slightly down now give it a button child object within the content we're going to remove the
+02:24:58.740 text child object within it also removing its image or adding a text mesh Pro component to it
+02:25:06.120 set the target graphic to the text mesh Pro by dragging in the component and set the anchor to top
+02:25:12.180 no justice position we're going to stretch it to the right
+02:25:19.680 well then as usual said it spawn assets or a Botto Select Auto size set its
+02:25:25.380 character space into 30. before duplicating it two other times
+02:25:30.600 adjust their positions and rename them to Constitution strength
+02:25:36.660 and Agility selecting the Constitution object we're going to say it's text to Constitution
+02:25:42.899 plus 20 hp from 30 the strength objects to strength plus
+02:25:48.420 one attack from five and the agility object to see agility plus one defense from two we're going to
+02:25:55.020 make the buttons a bit more responsive by showing color changes depending on how the play interacts with the button
+02:26:05.060 and with that done we're going to close the level up menu component
+02:26:10.080 setting its Boolean to false before selecting canvas adding a dungeon floor game object to
+02:26:15.840 the dungeon floor text text message GUI variable within our UI manager character information security
+02:26:21.720 information menu UI the same being done for both level up menu it'll level up menu content now
+02:26:28.020 selecting the all player and troll prefabs we're going to add a level component to them
+02:26:33.600 before selecting orc and setting is XP given variable to 30.
+02:26:39.180 with troll being set to 100. now opening the scenes folder we're going to open the dungeon scene
+02:26:45.420 select map manager and set both the upstairs tile and downstairs tile
+02:26:50.640 upstairs being less than and downstairs being greater than make sure to save the scene let's see back
+02:26:57.120 from the main menu now pressing play Let's test out if everything works pressing save
+02:27:05.520 moving to the next level up menu seems to work fine
+02:27:13.740 and we're done a big thank you to H Regal for being the first sponsor to help support my projects cheers for that
+02:27:19.500 it's time to add in a sense of difficulty where as the player continues through the dungeon more and more
+02:27:24.960 monsters will begin to spawn to defend their home and of course Loop so we're going to start by adding a utils folder
+02:27:31.200 within our scripts folder opening it and creating a new script called random utils
+02:27:38.160 opening random utils we're going to be removing the unity engine import as well as our system dot collections replacing
+02:27:44.100 with system instead add a static declaration to our class and remove extend one Behavior
+02:27:50.760 we're going to replace the start and update methods with choice and choices I won't go into detail but what we're
+02:27:56.580 doing is we're working with the python the choice function a feature usually only available python however we've
+02:28:02.520 created a class extension to system.random to make use of it the original source code can be found in stack Overflow and it's attributed to
+02:28:09.120 Anon coward link found both above and below in the description opening up procten scripts we're going to import
+02:28:14.939 both system and system.link followed by also importing system.random and uni.random giving them both aliases with
+02:28:22.740 systems not random being given CIS random and uni engine not random and given uni random within the generate
+02:28:28.140 dungeon method we're going to replace random with uni random while also removing both Max monsters
+02:28:33.899 per room and Max items per room from the parameters this is because we're going to be introducing four new lists the first two
+02:28:41.399 being Max items by floor and Max Monsters by floor there'll both be a list of tuples with two ins where the
+02:28:47.880 first int is the floor number and the second ends being the amount of items or Monsters
+02:28:53.580 the last two are both the item chances and monster chances however they're tuples however their Tuple is the floor
+02:28:59.939 number the name of the item or Monster followed by the weighted chance we
+02:29:04.979 didn't have two helper methods get max value for floor and get entities at
+02:29:10.020 random with get max value for four taking a list called values and also into floor and also an inch called floor
+02:29:16.620 where we Define a local intervariable called current value giving it a default of zero within user 4H to check every
+02:29:22.319 value in values using an if statement to check if floor is greater than equal value dot item one so to floor number it
+02:29:30.120 will set the current value variable to equal value dot item two so the second int value within the Tuple entities at
+02:29:37.859 random takes in a list called chances and ends core number of entities and also an ends called floor If it creates
+02:29:43.920 two local string variables one being a string and the other an ins before initializing them and then uses a 4H to
+02:29:49.979 check every chance in chances using an if statement to check that the floor is greater than equal chance that item one
+02:29:56.580 so once again the floor number using entities.ad chance dot item two adding in a string value to entities and where
+02:30:03.420 the chances.ad chance dot item three adding in the weighted chance value once the 4H is complete we create a new
+02:30:09.180 instance of sys random for creating a new local list of string called chosen entities where it's going to equal the
+02:30:15.180 return of random.choices passing in entities weighted chances and number of
+02:30:20.580 entities before returning chosen entities going back to our generate dungeon method within our place entities
+02:30:26.160 call we're going to add to the end of it save manager.instance.current floor going to
+02:30:31.319 channel between replace random of unity random before heading over to our place entities
+02:30:37.080 method replace both ins maximum monsters and ins maximum items with int floor
+02:30:43.740 our local ins variables number of monsters and number of items were placed with the following so we're first
+02:30:49.560 renaming random to UNI random then within the range call we're changing our explicit to use our new helper method
+02:30:55.680 get max value for floor using both the max Monsters by floor and Max items by
+02:31:00.720 floor variables passing our floor number plus one we then replace the four Loops to a number of monsters and number of
+02:31:06.899 items with three new list of string variables called monster names item names and
+02:31:13.740 entity names with monster names and item names using the get entities at random method passing in either monster chances
+02:31:21.120 or item chances our local invariables number of monsters or number of items followed by the floor number with
+02:31:27.840 Nancy's names it's set to monsters names concat item names to list as we want to
+02:31:33.060 combine both the monster names and item names before running it through a four each where with every empty name and
+02:31:38.819 entity names it gets a random Point within a new room making sure the hard cast of the vector 3 ends before using a
+02:31:45.899 while loop calling game managers get act out location using entity pods checking if it's not null where if so it's going
+02:31:53.160 to constantly Loop until it finds a position that is null before calling map managers create entity passing in both
+02:31:58.680 the entity name and entity pause hardcasting it to Vector two ends finally opening up the map manager
+02:32:03.960 scripts we're going to remove both the max monsters per room and items per room variables scrolling down to generate
+02:32:09.660 dungeon and removing it from the production.generate dungeon call now open the uni editor and press play
+02:32:25.680 you would notice that as you progress down into the depths of the dungeon the loot drops will progressively get better
+02:32:31.740 and better as on floor one we could only see a few Orcs And Only patients of
+02:32:37.140 healing but now as I'm on floor four I can now pick up lightning Scrolls and also fight trolls and with that we're
+02:32:43.920 done for the final part of this tutorial we're going to be implementing something that most Road likes have equipment but
+02:32:49.740 before doing so we're going to go to our resources folder as we seem to have a large amount of clutter with our images
+02:32:56.340 mixing with our prefabs so I'm going to go ahead and create our images folder and just drag every single image file
+02:33:02.880 onto it from here navigate to the components folder create two new scripts equipment
+02:33:08.220 and equippedable followed by a new folder called helpers
+02:33:13.439 opening it and creating a script called equipment types opening it we're going to place all the
+02:33:19.620 code for public enum to Define our types which for the time being would just be a weapon and armor opening the equippable
+02:33:26.280 script we're going to remove both the start and update methods adding in three
+02:33:31.319 variables equipment type being equipment type and two inch variables power bonus and defense bonus both having a default
+02:33:37.560 of zero we're going to provide them Getters and Setters followed by giving the class A require component type of
+02:33:43.439 item attribute as the equippable is also an island just like the consumable we're going to add a new equippable variable
+02:33:50.700 within our item class followed by its get up I think the equipment script we're going to start
+02:33:56.700 off by adding our quiet components up of actor attribute above the equipment class followed by two variables both
+02:34:03.180 equippable gold weapon and armor for what birthday Getters and Setters we can add two methods of returning ins called
+02:34:08.700 defense bonus and power bonus which both create a local Inked variable called bonus giving it the fold of zero where
+02:34:14.880 they use if statements to check that weapon and armor are not null and if their defense bonus variable is greater
+02:34:20.939 than zero if so use the addition assignment operator to add the defense bonus of either the weapon or armor to
+02:34:27.180 the local bonus variable before returning it we then created a helper method called item is encrypted which takes in an item
+02:34:34.380 and returns a Boolean the method itself uses an if statement to check that the item equippable variable is null
+02:34:39.840 returning false if so otherwise it returns true if the crypto variable equals either the weapon or armor
+02:34:45.840 variable we didn't have two helper methods called unequipped message and equip message which both taking a string
+02:34:51.960 of name or more importantly takes in the equippable name both calling the UI manager's add message method moving on
+02:34:57.600 we have the equip the slot method which takes in a string called slots an item
+02:35:02.819 and a Boolean of add message we created a local equippable variable called item which is the attorney operator to check
+02:35:09.180 if slot equals weapon which says it's the weapon if true or armor if false and if statements then used to check if
+02:35:15.300 current items not null calling unequipped from slots passing in our slot variable and add message Boolean
+02:35:21.180 the unequipped from slot method being a method that takes in both the slot and add message Boolean as you could tell
+02:35:26.880 where it creates a local equippable variable called iconic item checking once again if slot equals weapon setting
+02:35:33.840 the weapon of true and armor false it then sets the current item's name to current item not replace e with nothing
+02:35:40.020 using an if statement to check if the add Boolean message is true calling unequipped message passing the current
+02:35:46.560 item's name before once again checking if the slot equals weapon setting weapon to null else armor to null moving back
+02:35:52.620 to equip slots and where we left off we use an if statement to check if the slot equals weapon setting our weapon
+02:35:58.620 variable to item's equippable variable else the armor to the items variable before using another if
+02:36:05.340 statement the check if add message is true calling equip message passing in the item's name we've been set the
+02:36:11.040 item's name using string interpolation passing in the item name and ending it with an space e to let the player know
+02:36:18.180 that the item's encrypted within the inventory finally our last method within the equipment scripts is called toggle
+02:36:24.180 equipped which takes in an item calling it equippable item and a Boolean of add message with a default of true it
+02:36:31.439 creates a local string variable called slots which checks to see if the equippable item is a crippled or variable has an equipment type equal to
+02:36:38.939 equipment type dot weapon using the attorney operator setting the string to
+02:36:44.280 weapon if true an armor is false and if statement is then used calling item is encrypted method passing in the
+02:36:50.640 equippable item where if true it calls unequipped from slots passing in both the local slots ring and add message
+02:36:57.859 Boolean else it calls equipped a slot passing the slot variable equippable
+02:37:03.720 item and add message Boolean opening the fighter scripts we're going to rename both the defense and power of variables
+02:37:09.720 along with their Getters and Setters due to the fact that we're now using equipment renaming defense to base
+02:37:14.880 defense and power to base power and then within our Max HP Setter we're going to
+02:37:20.460 change it so once it sets the max HP value it's then going to use an if statement to check if there's a player
+02:37:26.100 component before calling UI manager said health max method passing in the max HP
+02:37:31.620 value that done we're going to add four new helper methods with them being called Power Defense defense bonus and
+02:37:38.160 power bonus they each return an ins variable the power and the fence methods return the base power or base defense
+02:37:45.780 plus their respective bonus method which could being either the fence bonus or
+02:37:50.939 power bonus the defense bonus method checks to see if the equipment component is not null before returning the defense
+02:37:56.880 bonus call made using the equipment component else it returns a zero the power bonus method working much the same
+02:38:03.000 way with it using an if statement to check if the equipment component is not null before returning its power bonus
+02:38:08.700 call Alice returning zero opening the active script we're going to implement a new equipment variable It's gotta
+02:38:15.240 followed by an unvaluate call opening a little script we're going to replace get component actor.fighter with
+02:38:22.319 just a get component fighter and then change power to base power and defense to base defense as we rename
+02:38:30.060 the variables within the fiber script now we need to work on some safe support So opening the game manager navigate
+02:38:35.819 down to load entity States we're going to bring the local string entity name variable within the first if statement
+02:38:42.660 followed by creating a new local string variable called entity name within our else if statement where upon load we're
+02:38:50.220 using attorney operator it's going to check if the entitystate.name contains an e within parentheses replacing the E
+02:38:56.580 with nothing if true otherwise it just returning a name of false opening the item script we're going to add another
+02:39:02.939 if statement but this time we've in the state.parent if statement for now load
+02:39:08.100 state which actually if the equippable variable is not null and that the state.name contains an e within
+02:39:15.060 parentheses pulling the parent game objects equipment equip the slot method passing in both the dot
+02:39:21.060 equipment types string the item and false for the add message Boolean now
+02:39:26.399 even though we supported our group for items there's not much Point without having an actual action to equip them so
+02:39:31.859 heading over to the action script and firstly correcting only action method where we're just going to add parentheses to our power and defense
+02:39:39.000 before scrolling down and adding a new method called equip action we're taking both an actor and item it uses an if
+02:39:45.420 statement the chair gets the item equivable variable is null whereupon it calls UI manager's add message method
+02:39:51.720 informing the player that the item cannot be equipped before returning otherwise it calls active equipments
+02:39:57.899 toggle equipment method passing in the item before calling UI manager's toggle inventory method before ending the turn
+02:40:05.160 we're going to make some slight Corrections so navigating to the drop action method we're going to add an if statement which checks to see if the
+02:40:12.960 item variable is equipped by calling actors equipment variables item is
+02:40:18.060 equipped method passing in the item where if the item is equipped it calls the active equipment's variables toggle
+02:40:23.939 equipped method passing said item before continuing with in the use action method we're going to replace the first if
+02:40:29.939 statements condition with item.consumable is not null this is due to item having both the bigger symbol
+02:40:36.300 variable and equippable variable and we don't want the item to call the consumable variables activate method as
+02:40:41.880 there wouldn't be a consumable in the first place due to the numerous changes that would have made we have to tweak the UI manager a little bit so within
+02:40:47.819 the toggle level up menu method we're going to add parentheses to both power and defense before heading over to the
+02:40:53.040 toggle character information menu doing the same and as we do have an equipped action we want to add a bit of support
+02:40:59.399 to that as well within the update menu method where now we check to see if the item consumable is not now using an if
+02:41:05.460 statement where apparently it would add the action dot use action listener else if the item's equippable variable is not
+02:41:12.240 null would add a listener of action.ecrypt action it's high time we added some equippables So within the
+02:41:18.240 components folder we're going to create a new folder called equippables opening it and we're going to create
+02:41:24.960 four new scripts called dagger sword now the armor and chain mail
+02:41:30.180 these are relatively simple scripts where they all inherit equippedable and assailed classes they each have a
+02:41:36.359 Constructor referencing their specific equipment type followed by either a power bonus or defense bonus they also
+02:41:43.200 use an invalidate method to set the parent components equipment weapon or armor to it
+02:41:50.280 open the uni edit back up we're going to create a prefab for each of the new scripts and we can start by first duplicating the potion of healing
+02:41:56.580 removing the healing script and duplicating it three more times we're going to rename each of them after
+02:42:02.520 a script and starting with dagger we're going to change its Sprite image to a forward
+02:42:08.819 slash it's color to chill pulled by adding in the dagger component
+02:42:13.920 setting items equippable variable to it do this for the rest setting their colors to whatever you'd like
+02:42:20.640 with the last lever armor and chainmail we're going to select them both and set their Sprites to a left square bracket
+02:42:31.680 before we move on to setting both the base power and bass defense variables as we renamed them earlier so selecting the
+02:42:37.859 play prefab we're going to set the base defense to 1 and base power to two the orc prefab gets a base power of three
+02:42:43.979 with its defense remaining zero while the troll gets a base defense of one and a base power of four finally selecting
+02:42:50.340 The Troll Play an orc we're going to add the equipment component now you've probably noticed that the
+02:42:56.939 player doesn't really have that much defense or power so let's go ahead and change that by opening the proxian
+02:43:02.100 script first we're going to add two new tuples to the item chances list where
+02:43:07.260 the fourth floor will get a sword and the sixth floor we get chainmail moving down to the generate dungeon method and
+02:43:13.020 to where the play is created we're going to make use of the L State when instead of just creating the player it's going
+02:43:18.060 to create the player and then set it to a local player game object variable where using that variable we're going to
+02:43:24.899 get the player's actor components before creating two item variables called starter weapon and starter armor the
+02:43:30.720 entities being both attack and leather armor we then proceed to add both these items to the player inventory using the
+02:43:36.300 inventories add method before using the playeractive.equipment dot equip the slots method first passing in the weapon
+02:43:42.479 before passing in the armor before we use the equipment components equip the slot methods passing in our starter
+02:43:48.720 weapon and our starter armor respectively now pressing play our unequipped and equipped works
+02:43:56.100 and just switching to the chain mail and the armor and equipped successfully and the chainmail is put on with their text
+02:44:03.000 changing accordingly and yeah that's it that's the end of the tutorial uh cheers
+02:44:09.720 for following along I hope you learned a lot as I can tell you I certainly did I may or may not introduce
+02:44:16.500 new pull requests on the repository if you're following the roguelike dev does
+02:44:21.960 the complete roguelike tutorial challenge congratulations you've made it to the end and I hope you're all the best feel free to either tweet me reach
+02:44:29.399 out to me on Discord otherwise if you need a bit more inspiration you want to know what else you can do Roblox wise be
+02:44:35.939 sure to check out the roguelike development subreddit I'll leave a link down below and yeah best of luck be sure
+02:44:41.280 to like the video If you enjoyed it subscribe to the channel if you haven't and comment if you have any questions cheers take care

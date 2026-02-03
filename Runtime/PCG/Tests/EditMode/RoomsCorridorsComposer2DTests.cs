@@ -146,11 +146,6 @@ namespace Islands.PCG.Tests.EditMode
 
                 ulong actual = mask.SnapshotHash64();
 
-                if (ExpectedHash == 0UL)
-                {
-                    Assert.Inconclusive($"Set ExpectedHash to 0x{actual:X}UL to lock the golden gate.");
-                }
-
                 Assert.AreEqual(ExpectedHash, actual, "Golden hash mismatch: generation output changed.");
             }
             finally
