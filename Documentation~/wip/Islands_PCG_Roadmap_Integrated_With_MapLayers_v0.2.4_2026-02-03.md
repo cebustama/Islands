@@ -1,6 +1,15 @@
-# Islands.PCG — Roadmap Integrado (incluye “Map Pipeline by Layers”) v0.2.2
+# Islands.PCG — Roadmap Integrado (incluye “Map Pipeline by Layers”) v0.2.4
 **Fecha:** 2026-02-03  
 **Contexto:** Estamos por cerrar **Phase E** (port de estrategias de dungeons). Todo lo posterior se reestructura para incorporar un **pipeline general de Map por capas**, alineado a los contratos del SSoT (grid-first, determinismo, adapters-last).
+
+---
+
+## Resumen de cambios (v0.2.4)
+- **Phase F / F3** se hace **exacto** y consistente con el plan incremental:
+  - se agregan 4 capas de topología: `HillEdgeL1`, `HillInteriorL1`, `HillEdgeL2`, `HillInteriorL2`
+  - se introduce `MaskTopologyOps2D` + tests para computar edge/interior (8-neighbor, OOB-off, scan order estable)
+  - `Stage_Hills2D` produce L1/L2 + edge/interior y usa **Islands.Noise (Jobs)** vía bridge + cuantización antes de thresholds
+  - se explicita el golden de pipeline F3 y el update de lantern para visualizar hills + topology
 
 ---
 
@@ -65,18 +74,37 @@
   - `MaskFloodFillOps2D`: flood fill estable y OOB-safe
   - Lantern micro-step: tunables editables en `PCGMapVisualization` (islandRadius01, waterThreshold01, smoothFrom/To)
   - Gates: goldens de `Land`/`DeepWater` + golden de pipeline F2 (manteniendo el trivial golden como drift alarm)
-- **F3 — Hills + topology** ▶️ NEXT
-  - `Stage_Hills2D` (nombre tentativo): genera `HillsL1`/`HillsL2` desde `Height` + bias/ruido
-  - Topology mínima determinista: `HillEdges`/`HillInterior` (8-neighbor, OOB-safe)
-  - Invariantes + tests: `HillsL2 ⊆ HillsL1`, exclusión con agua, goldens por layer
-- **F4 — Shore + ShallowWater (versión mínima)**
+- **F3 — Hills + topology (con Islands.Noise Jobs)** ▶️ NEXT
+  - **F3.0 — Append topology layer IDs**
+    - extender `MapLayerId` al final (orden estable) con:
+      - `HillEdgeL1`, `HillInteriorL1`, `HillEdgeL2`, `HillInteriorL2`
+    - actualizar `COUNT`
+  - **F3.1 — MaskTopologyOps2D + tests**
+    - operador OOB-safe y determinista (scan order y→x; neighbor order fijo) que derive edge/interior desde una máscara fuente
+  - **F3.2 — Stage_Hills2D (L1/L2 + topology)**
+    - genera `HillsL1`, `HillsL2` desde `Height` + bias/ruido
+    - reemplaza `ctx.Rng.NextFloat()` por **Islands.Noise (Jobs)** usando bridge operator
+    - semilla: `noiseSeed = f(MapInputs.seed, stageSalt)` (sin consumir `ctx.Rng`)
+    - estabilidad: cuantización antes de thresholds
+    - produce además:
+      - `HillEdgeL1`, `HillInteriorL1`, `HillEdgeL2`, `HillInteriorL2` (via `MaskTopologyOps2D`)
+  - **F3.3 — Pipeline golden (F2+F3)**
+    - new golden test file para stages `[Stage_BaseTerrain2D, Stage_Hills2D]`
+  - **F3.4 — Lantern update**
+    - exponer `HillsConfig`/tunables mínimos y permitir visualizar Hills + topology layers
+  - Invariantes + tests:
+    - `HillsL2 ⊆ HillsL1`
+    - hills/topology nunca en agua (gate por `Land`)
+
+- **F4 —Shore + ShallowWater (versión mínima)**
   - banding simple ahora; luego se “mejora” en Phase G con morphology
 - **F5 — Vegetation + fixups**
   - masks de trees/grass + reglas de exclusión (no en water, no en hill edges, etc.)
+  - (opcional) `Moisture` con Islands.Noise (reutilizando bridge)
 - **F6 — Paths/Stairs/Placement (sin GameObjects)**
   - paths (A* o BFS) sobre `Walkable`
   - stairs como máscara de “cruce de edge”
-  - placement como `SpawnMask` o `NativeList<int2>` + selección determinista de spawn
+  - placement como `SpawnMask` o `NativeList<int2>` + selección determinista por seed
 
 ### Exit criteria (Phase F)
 - Pipeline headless: genera todas las capas MVP sin Unity view systems.
@@ -146,7 +174,6 @@
 
 ## Próximos pasos concretos (cuando cierres Phase E)
 1) ✅ **F0 + F1** completados (Context + Map lantern).
-2) ▶️ Hacer **F2** (Land + DeepWater) y bloquear determinismo con hash.
-3) Agregar **F3** (Hills + topology).
+2) ✅ **F2** completado (Land + DeepWater) y bloqueado con goldens.
+3) ▶️ Implementar **F3.0 (Islands.Noise bridge)** + **F3.1 (Hills)** + **F3.2 (Topology)**.
 4) Recién después, sumar F4–F6.
-
