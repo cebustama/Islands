@@ -368,7 +368,7 @@ MonoBehaviour:
   instanceScale: 1
   resolution: 64
   displacement: 0.1
-  strategy: 1
+  strategy: 4
   maskOffColor: {r: 0, g: 0, b: 0, a: 1}
   maskOnColor: {r: 1, g: 1, b: 1, a: 1}
   walkSeed: 1
@@ -392,20 +392,20 @@ MonoBehaviour:
   rcCorridorBrushRadius: 1
   rcClearBeforeDraw: 1
   rcAllowOverlap: 0
-  cfSeed: 1
-  cfCorridorCount: 64
-  cfCorridorLengthMin: 6
-  cfCorridorLengthMax: 18
+  cfSeed: 4543
+  cfCorridorCount: 10
+  cfCorridorLengthMin: 1
+  cfCorridorLengthMax: 24
   cfCorridorBrushRadius: 0
-  cfBorderPadding: 1
+  cfBorderPadding: 10
   cfClearBeforeDraw: 1
-  cfRoomSpawnCount: 8
-  cfRoomSpawnChance: 0.6
-  cfRoomSizeMin: {x: 6, y: 6}
-  cfRoomSizeMax: {x: 14, y: 14}
+  cfRoomSpawnCount: 16
+  cfRoomSpawnChance: 0.539
+  cfRoomSizeMin: {x: 5, y: 5}
+  cfRoomSizeMax: {x: 8, y: -2}
   cfEnsureRoomsAtDeadEnds: 1
   rbSeed: 1
-  rbSplitIterations: 6
+  rbSplitIterations: 2
   rbMinLeafSize: {x: 16, y: 16}
   rbRoomPadding: 1
   rbCorridorBrushRadius: 0
@@ -413,7 +413,7 @@ MonoBehaviour:
   rbClearBeforeDraw: 1
   rgSeed: 1
   rgRoomCount: 16
-  rgCellSize: 10
+  rgCellSize: 13
   rgBorderPadding: 1
   rgRoomSizeMin: {x: 6, y: 6}
   rgRoomSizeMax: {x: 14, y: 14}
