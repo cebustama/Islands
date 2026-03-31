@@ -1,17 +1,31 @@
 ﻿Islands
 +---Documentation~
 |   +---archive
-|   |   \---README.md
+|   |   +---Islands_PCG_Pipeline_SSoT_v0_1_16.md
+|   |   +---Islands_SSoT_Technical_Bible.md
+|   |   +---PCG_Pipeline_Technical_Snapshot.md
+|   |   +---README.md
+|   |   \---snapshot-curation-register.md
 |   +---governance
 |   |   \---README.md
 |   +---planning
 |   |   +---active
-|   |   |   +---Islands_Governance_Migration_Roadmap.md
 |   |   |   \---PCG_Roadmap.md
 |   |   \---archive
-|   |       \---README.md
+|   |       +---Islands_Governance_Migration_Roadmap.md
+|   |       +---Islands_PCG_MapPipelineByLayers_Roadmap_v0.1.0_2026-01-29.md
+|   |       +---Islands_PCG_Roadmap_Integrated_With_MapLayers_v0.2.4_2026-02-03.md
+|   |       \---PhaseF_Planning_Report_MapPipeline_F3_F6_NoiseJobs_2026-02-03_v2.md
 |   +---reference
-|   |   \---README.md
+|   |   +---GraphLibrary_Pipeline_Technical_Doc.md
+|   |   +---graphs.md
+|   |   +---legacy-map-generation-reference.md
+|   |   +---mesh.md
+|   |   +---noise.md
+|   |   +---overview.md
+|   |   +---pcg-layout-strategies-reference.md
+|   |   +---shaders.md
+|   |   \---surfaces.md
 |   +---research
 |   |   \---README.md
 |   +---systems
@@ -34,7 +48,6 @@
 |   |       +---AbstractNode.cs
 |   |       +---DirectedGraph.cs
 |   |       +---DirectedGraphExample.cs
-|   |       +---GraphLibrary_Pipeline_Technical_Doc.md
 |   |       +---IGraph.cs
 |   |       +---PairValueImplementation.cs
 |   |       \---UndirectedGraph.cs
@@ -326,8 +339,10 @@
 |   |   +---ProceduralSurface.cs
 |   |   \---ProceduralSurface.unity
 |   \---0.1.0-preview.zip
++---copy-files-from-list_with-mode.bat
 +---Documentation-snapshot.zip
-+---Islands_Documentation_Governed_Seed.zip
++---file_copies.zip
++---files.txt
 +---make-tree-unity.bat
 +---package.json
 \---README.md

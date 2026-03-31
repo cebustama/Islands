@@ -1,9 +1,4 @@
-# Local Governance Reminder
+# Governance Support
 
-Use the package-local update loop:
-1. update the concept's primary home first
-2. then update current state if operational reality changed
-3. then update changelog if semantics or authority changed
-4. then update supersession/migration records if documents moved or were absorbed
-
-Do not let WIP, roadmap, or sample docs silently become hidden law.
+Status: Active folder scaffold  
+Role: Hold governance-specific support material when the migration needs documents outside the main spine.

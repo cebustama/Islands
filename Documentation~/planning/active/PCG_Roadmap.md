@@ -1,19 +1,23 @@
 # Islands.PCG — Active Roadmap
 
-Status: Active planning
-Authority: Planning only (not implementation truth)
+Status: Active planning  
+Authority: Planning only (not implementation truth)  
 Scope: Sequencing and future work for the new Islands.PCG pipeline.
 
 ## Rule
 This document is not implementation authority.
-Implemented truth lives in subsystem SSoTs.
+Implemented truth lives in subsystem SSoTs and governed reference/support docs where explicitly assigned.
 
 ## Current status snapshot
 - Phase A: done
 - Phase B: done
 - Phase C: done
 - Phase D: done
-- Phase E: in progress elsewhere
+- Phase E: implemented / test-gated support surface
+  - E1: done
+  - E2: implemented
+  - E3: fully locked
+  - E4: seed-set regression complete
 - Phase F: in progress
   - F0: done
   - F1: done
@@ -22,6 +26,19 @@ Implemented truth lives in subsystem SSoTs.
 - Phase G: later
 - Phase H: later
 - Phase I: later
+
+## Documentary note on Layout Strategies
+Layout strategies are currently treated as a governed deep reference / staged support surface under PCG.
+They do not currently function as a separate subsystem SSoT.
+See `reference/pcg-layout-strategies-reference.md` for deep per-strategy behavior and gates.
+
+## Documentary note on Noise / Meshes / Surfaces / Shaders
+After Batch 6:
+- Noise remains governed reference / staged support rather than a subsystem SSoT.
+- Meshes remain governed reference / staged support rather than a subsystem SSoT.
+- Surfaces remain governed reference / staged support rather than a subsystem SSoT.
+- Shaders remain governed reference / support only.
+This roadmap may mention those surfaces as planning dependencies or support infrastructure, but that does not promote them into subsystem authority.
 
 ## Phase F — Map Pipeline by Layers
 ### Done
