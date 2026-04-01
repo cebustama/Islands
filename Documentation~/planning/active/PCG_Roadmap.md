@@ -22,7 +22,8 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
   - F0: done
   - F1: done
   - F2: done
-  - F3: next
+  - F3: done
+  - F4: next
 - Phase G: later
 - Phase H: later
 - Phase I: later
@@ -45,16 +46,15 @@ This roadmap may mention those surfaces as planning dependencies or support infr
 - F0 Context + contracts
 - F1 Map lantern
 - F2 Base terrain (`Height`, `Land`, `DeepWater`)
+- F3 Hills + topology
+  - appended topology layer IDs
+  - added `MaskTopologyOps2D`
+  - implemented `Stage_Hills2D`
+  - integrated Noise via `MapNoiseBridge2D`
+  - added F3 stage + pipeline goldens
+  - updated lantern for hills/topology inspection
 
 ### Next
-#### F3 — Hills + topology
-- append topology layer IDs
-- add `MaskTopologyOps2D`
-- implement `Stage_Hills2D`
-- integrate Islands.Noise Jobs via bridge
-- add F3 stage + pipeline goldens
-- update lantern for hills/topology
-
 #### F4 — Shore + ShallowWater
 - deterministic shallow-water ring around land
 

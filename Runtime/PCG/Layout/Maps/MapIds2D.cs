@@ -16,7 +16,11 @@ namespace Islands.PCG.Layout.Maps
         Vegetation = 7,
         Walkable = 8,
 
-        COUNT = 9
+        // F3 append-only additions (do not reorder existing IDs)
+        LandEdge = 9,
+        LandInterior = 10,
+
+        COUNT = 11
     }
 
     /// <summary>

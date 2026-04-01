@@ -3,8 +3,11 @@ Documentation~/planning/active/PCG_Roadmap.md
 Documentation~/systems/pcg-core-ssot.md
 Documentation~/systems/map-pipeline-by-layers-ssot.md
 Documentation~/SSoT_CONTRACTS.md
+Documentation~/changelog-ssot.md
+Documentation~/coverage-matrix.md
 Documentation~/reference/noise.md
-Documentation~/reference/legacy-map-generation-reference.md
+Runtime/Noise/Noise/Noise.cs
+Runtime/PCG/Core/GridDomain2D.cs
 Runtime/PCG/Fields/ScalarField2D.cs
 Runtime/PCG/Grids/MaskGrid2D.cs
 Runtime/PCG/Grids/MaskGrid2D.Hash.cs
@@ -13,12 +16,20 @@ Runtime/PCG/Layout/Maps/IMapStage2D.cs
 Runtime/PCG/Layout/Maps/MapContext2D.cs
 Runtime/PCG/Layout/Maps/MapIds2D.cs
 Runtime/PCG/Layout/Maps/MapInputs.cs
+Runtime/PCG/Layout/Maps/MapNoiseBridge2D.cs
 Runtime/PCG/Layout/Maps/MapPipelineRunner2D.cs
 Runtime/PCG/Layout/Maps/MapTunables2D.cs
 Runtime/PCG/Layout/Maps/Stages/Stage_BaseTerrain2D.cs
+Runtime/PCG/Layout/Maps/Stages/Stage_Hills2D.cs
 Runtime/PCG/Operators/MaskFloodFillOps2D.cs
 Runtime/PCG/Operators/MaskRasterOps2D.cs
+Runtime/PCG/Operators/MaskTopologyOps2D.cs
 Runtime/PCG/Operators/ScalarToMaskOps.cs
-Runtime/PCG/Tests/EditMode/Maps/MapPipelineRunner2DGoldenF2Tests.cs
+Runtime/PCG/Samples/PCG Map/PCGMapVisualization.cs
 Runtime/PCG/Tests/EditMode/Maps/MapPipelineRunner2DTests.cs
+Runtime/PCG/Tests/EditMode/Maps/MapPipelineRunner2DGoldenF2Tests.cs
+Runtime/PCG/Tests/EditMode/Maps/MapPipelineRunner2DGoldenF3Tests.cs
+Runtime/PCG/Tests/EditMode/Maps/MaskFloodFillOps2DTests.cs
+Runtime/PCG/Tests/EditMode/Maps/MaskTopologyOps2DTests.cs
 Runtime/PCG/Tests/EditMode/Maps/StageBaseTerrain2DTests.cs
+Runtime/PCG/Tests/EditMode/Maps/StageHills2DTests.cs

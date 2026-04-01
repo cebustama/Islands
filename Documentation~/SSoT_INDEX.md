@@ -14,7 +14,7 @@ Purpose: Explicit index of current documentary authority inside Islands.
 
 ## Current promoted subsystem authorities
 - `systems/pcg-core-ssot.md`
-- `systems/map-pipeline-by-layers-ssot.md`
+- `systems/map-pipeline-by-layers-ssot.md` (implemented slice currently F0–F3)
 
 ## Current staged support surfaces not promoted to subsystem authority
 - GraphLibrary

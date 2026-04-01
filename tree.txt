@@ -89,6 +89,7 @@
 |   |   |   +---Noise.Voronoi.cs
 |   |   |   +---Noise.Voronoi.Distance.cs
 |   |   |   \---Noise.Voronoi.Function.cs
+|   |   +---Noise.zip
 |   |   +---NoiseBurstExplicitCompilation.cs
 |   |   +---Shapes.cs
 |   |   +---SmallXXHash.cs
@@ -109,11 +110,13 @@
 |   |   |   |   \---BspPartition2D.cs
 |   |   |   +---Maps
 |   |   |   |   +---Stages
-|   |   |   |   |   \---Stage_BaseTerrain2D.cs
+|   |   |   |   |   +---Stage_BaseTerrain2D.cs
+|   |   |   |   |   \---Stage_Hills2D.cs
 |   |   |   |   +---IMapStage2D.cs
 |   |   |   |   +---MapContext2D.cs
 |   |   |   |   +---MapIds2D.cs
 |   |   |   |   +---MapInputs.cs
+|   |   |   |   +---MapNoiseBridge2D.cs
 |   |   |   |   +---MapPipelineRunner2D.cs
 |   |   |   |   \---MapTunables2D.cs
 |   |   |   +---CorridorFirstDungeon2D.cs
@@ -128,6 +131,7 @@
 |   |   +---Operators
 |   |   |   +---MaskFloodFillOps2D.cs
 |   |   |   +---MaskRasterOps2D.cs
+|   |   |   +---MaskTopologyOps2D.cs
 |   |   |   +---ScalarToMaskOps.cs
 |   |   |   +---SdfComposeRasterOps.cs
 |   |   |   \---SdfToScalarOps.cs
@@ -155,9 +159,12 @@
 |   |   |   \---EditMode
 |   |   |       +---Maps
 |   |   |       |   +---MapPipelineRunner2DGoldenF2Tests.cs
+|   |   |       |   +---MapPipelineRunner2DGoldenF3Tests.cs
 |   |   |       |   +---MapPipelineRunner2DTests.cs
 |   |   |       |   +---MaskFloodFillOps2DTests.cs
-|   |   |       |   \---StageBaseTerrain2DTests.cs
+|   |   |       |   +---MaskTopologyOps2DTests.cs
+|   |   |       |   +---StageBaseTerrain2DTests.cs
+|   |   |       |   \---StageHills2DTests.cs
 |   |   |       +---CorridorFirstDungeon2DTests.cs
 |   |   |       +---Direction2DTests.cs
 |   |   |       +---DrawLineTests.cs

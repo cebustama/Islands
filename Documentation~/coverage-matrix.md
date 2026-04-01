@@ -6,8 +6,8 @@ Purpose: Map each important concept to its primary documentary owner.
 | Concept | Primary home | Role | Status |
 |---|---|---|---|
 | PCG core contracts | `systems/pcg-core-ssot.md` | subsystem authority | Active |
-| Map Pipeline by Layers implemented slice (F0–F2) | `systems/map-pipeline-by-layers-ssot.md` | subsystem authority | Active |
-| Future PCG sequencing (F3+) | `planning/active/PCG_Roadmap.md` | planning only | Active |
+| Map Pipeline by Layers implemented slice (F0–F3) | `systems/map-pipeline-by-layers-ssot.md` | subsystem authority | Active |
+| Future PCG sequencing (F4+) | `planning/active/PCG_Roadmap.md` | planning only | Active |
 | Governance migration record | `planning/archive/Islands_Governance_Migration_Roadmap.md` | closed migration roadmap / planning history | Historical support |
 | Cross-cutting documentation / technical rules | `SSoT_CONTRACTS.md` | package contracts | Active |
 | Operational migration state | `CURRENT_STATE.md` | operational state | Active |

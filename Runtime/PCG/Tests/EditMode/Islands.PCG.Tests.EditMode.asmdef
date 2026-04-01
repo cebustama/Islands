@@ -4,6 +4,7 @@
   "references": [
     "Islands.PCG.Runtime",
     "Unity.Mathematics",
+    "Unity.Collections",
     "UnityEngine.TestRunner",
     "UnityEditor.TestRunner"
   ],

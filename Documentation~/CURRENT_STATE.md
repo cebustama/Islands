@@ -1,6 +1,6 @@
 # Current State
 
-Status date: 2026-03-31
+Status date: 2026-04-01
 
 ## What is active now
 - The Islands documentation migration was handled as Tier L and is now materially closed for the reviewed snapshot corpus.
@@ -10,14 +10,21 @@ Status date: 2026-03-31
 
 ## What is implemented now (confirmed for documentation authority purposes)
 - New PCG runtime direction: grid-first, deterministic, adapters-last.
-- Map Pipeline by Layers implemented slice: F0–F2.
+- Map Pipeline by Layers implemented slice: F0–F3.
 - Layout strategies are an implemented, test-gated support surface under PCG.
 - GraphLibrary runtime is a real implemented surface, but it is **not** promoted subsystem authority.
 - Noise runtime is real and coherent, but it is currently a governed reference / staged support surface, not a promoted subsystem SSoT.
 - Mesh runtime is real and coherent, but it is currently a governed reference / staged support surface, not a promoted subsystem SSoT.
 - Surfaces runtime contains real jobs, but the surface layer remains mixed with sample orchestration and is currently governed reference / staged support, not a promoted subsystem SSoT.
 - Shader assets and HLSL helpers are active support artifacts, but not a promoted subsystem SSoT.
-- F3–F6 are not implementation truth yet.
+- F4–F6 are not implementation truth yet.
+
+## What current package development just resolved
+- F3 — Hills + topology is now implemented and test-gated as part of the active Map Pipeline by Layers slice.
+- The map slice now includes topology layer outputs for `LandEdge` and `LandInterior`.
+- The active runtime slice now includes `MaskTopologyOps2D`, `MapNoiseBridge2D`, and `Stage_Hills2D`.
+- F3 stage-level and pipeline-level golden gates now exist alongside the earlier F2 gates.
+- The map lantern can now inspect hills/topology layers for runtime smoke testing, while remaining sample-side support rather than subsystem authority.
 
 ## What Batch 3 resolved
 - The old tilemap-based Island Map Generation document does not describe active Islands runtime truth.
@@ -61,7 +68,7 @@ Status date: 2026-03-31
 - Future cleanup, if any, should be treated as ordinary documentation maintenance tied to new development work.
 
 ## Immediate next focus
-Return to package development through the active technical roadmap in `planning/active/PCG_Roadmap.md`, with `F3` as the next planned implementation slice.
+Return to package development through the active technical roadmap in `planning/active/PCG_Roadmap.md`, with `F4` as the next planned implementation slice.
 
 ## Why Batch 7 closed the current hardening pass
 Batch 2 established active PCG authority.  

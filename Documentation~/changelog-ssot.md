@@ -61,3 +61,15 @@
 - Added `archive/snapshot-curation-register.md` as the explicit record of snapshot coverage and disposition.
 - Kept `research/` intentionally sparse because no reviewed snapshot file qualified as active exploratory research.
 - Confirmed the next normal work surface is `planning/active/PCG_Roadmap.md` (with `F3` as the next planned implementation slice).
+
+## 2026-04-01
+- Expanded the implemented Map Pipeline by Layers slice from F0–F2 to F0–F3.
+- Recorded F3 — Hills + topology as implemented and test-gated rather than planning-only.
+- Added topology layer outputs `LandEdge` and `LandInterior` to the active implemented map slice.
+- Added `MaskTopologyOps2D` as the active deterministic topology operator surface for the map pipeline slice.
+- Added `MapNoiseBridge2D` as the active narrow bridge from the map slice into the staged-support Noise runtime.
+- Added `Stage_Hills2D` as the implemented hills stage for the active slice.
+- Recorded F3 test-gated behavior including topology micro-tests, hills stage gates, and F3 pipeline goldens.
+- Advanced the active roadmap so `F4` becomes the next planned implementation slice.
+- Updated `CURRENT_STATE.md` so the operational implemented slice now reads F0–F3.
+- Kept Noise in governed reference / staged-support status; this change did not promote Noise into a subsystem SSoT.
