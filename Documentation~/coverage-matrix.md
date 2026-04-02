@@ -6,8 +6,9 @@ Purpose: Map each important concept to its primary documentary owner.
 | Concept | Primary home | Role | Status |
 |---|---|---|---|
 | PCG core contracts | `systems/pcg-core-ssot.md` | subsystem authority | Active |
-| Map Pipeline by Layers implemented slice (F0–F3) | `systems/map-pipeline-by-layers-ssot.md` | subsystem authority | Active |
-| Future PCG sequencing (F4+) | `planning/active/PCG_Roadmap.md` | planning only | Active |
+| Map Pipeline by Layers implemented slice (F0–Phase G + F2c) | `systems/map-pipeline-by-layers-ssot.md` | subsystem authority | Active |
+| F2c — Arbitrary Shape Input contracts and test gates | `systems/map-pipeline-by-layers-ssot.md` | subsystem authority | Active |
+| Future PCG sequencing (Phase H+) | `planning/active/PCG_Roadmap.md` | planning only | Active |
 | Governance migration record | `planning/archive/Islands_Governance_Migration_Roadmap.md` | closed migration roadmap / planning history | Historical support |
 | Cross-cutting documentation / technical rules | `SSoT_CONTRACTS.md` | package contracts | Active |
 | Operational migration state | `CURRENT_STATE.md` | operational state | Active |

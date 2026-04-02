@@ -20,7 +20,10 @@ namespace Islands.PCG.Layout.Maps
         LandEdge = 9,
         LandInterior = 10,
 
-        COUNT = 11
+        // Phase G append-only additions (do not reorder existing IDs)
+        LandCore = 11,
+
+        COUNT = 12
     }
 
     /// <summary>
@@ -31,6 +34,9 @@ namespace Islands.PCG.Layout.Maps
         Height = 0,
         Moisture = 1,
 
-        COUNT = 2
+        // Phase G append-only additions (do not reorder existing IDs)
+        CoastDist = 2,
+
+        COUNT = 3
     }
 }

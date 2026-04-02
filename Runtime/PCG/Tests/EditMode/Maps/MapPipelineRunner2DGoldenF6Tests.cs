@@ -1,0 +1,61 @@
+using NUnit.Framework;
+using Unity.Collections;
+using Islands.PCG.Core;
+using Islands.PCG.Grids;
+using Islands.PCG.Layout.Maps;
+using Islands.PCG.Layout.Maps.Stages;
+
+namespace Islands.PCG.Tests.EditMode.Maps
+{
+    public sealed class MapPipelineRunner2DGoldenF6Tests
+    {
+        private const int W = 64;
+        private const int H = 64;
+        private const uint Seed = 42u;
+
+        // Set to values reported on first run.
+        private const ulong ExpectedWalkableHash = 0xFE19DAE6F1DBC139UL;
+        private const ulong ExpectedStairsHash = 0x6066EABE516523E3UL;
+
+        [Test]
+        public void Pipeline_F6_GoldenHash_IsLocked()
+        {
+            var domain = new GridDomain2D(W, H);
+            var inputs = new MapInputs(Seed, domain, MapTunables2D.Default);
+
+            var ctx = new MapContext2D(domain, Allocator.Persistent);
+            try
+            {
+                var stages = new IMapStage2D[]
+                {
+                    new Stage_BaseTerrain2D(),
+                    new Stage_Hills2D(),
+                    new Stage_Shore2D(),
+                    new Stage_Vegetation2D(),
+                    new Stage_Traversal2D(),
+                };
+
+                MapPipelineRunner2D.Run(ref ctx, in inputs, stages);
+
+                ulong walkHash = ctx.GetLayer(MapLayerId.Walkable).SnapshotHash64(includeDimensions: true);
+                ulong stairHash = ctx.GetLayer(MapLayerId.Stairs).SnapshotHash64(includeDimensions: true);
+
+                if (ExpectedWalkableHash == 0UL)
+                    Assert.Fail(
+                        "F6 pipeline Walkable golden not initialized.\n" +
+                        $"Set ExpectedWalkableHash = 0x{walkHash:X16}UL;");
+
+                if (ExpectedStairsHash == 0UL)
+                    Assert.Fail(
+                        "F6 pipeline Stairs golden not initialized.\n" +
+                        $"Set ExpectedStairsHash = 0x{stairHash:X16}UL;");
+
+                Assert.AreEqual(ExpectedWalkableHash, walkHash,
+                    $"F6 pipeline Walkable golden changed. Got=0x{walkHash:X16}");
+                Assert.AreEqual(ExpectedStairsHash, stairHash,
+                    $"F6 pipeline Stairs golden changed. Got=0x{stairHash:X16}");
+            }
+            finally { ctx.Dispose(); }
+        }
+    }
+}

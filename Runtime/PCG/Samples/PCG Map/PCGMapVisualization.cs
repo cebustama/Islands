@@ -1,4 +1,4 @@
-using Unity.Collections;
+ï»¿using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
@@ -16,9 +16,16 @@ namespace Islands.PCG.Samples
     /// Lantern/Visualization testbed for the Map Pipeline by Layers.
     ///
     /// Current sample path:
-    /// - configurable BaseTerrain-like sample stage for F2 shape tuning
+    /// - configurable BaseTerrain-like sample stage for F2 shape tuning (ellipse + domain warp)
     /// - optional governed F3 Stage_Hills2D appended after base terrain
+    /// - optional governed F4 Stage_Shore2D appended after hills
+    /// - optional governed F5 Stage_Vegetation2D appended after shore
+    /// - optional governed F6 Stage_Traversal2D appended after vegetation
+    /// - optional governed Phase G Stage_Morphology2D appended after traversal
     /// - displays the selected MaskGrid2D layer via GPU buffer packing
+    ///
+    /// F2b: added islandAspectRatio and warpAmplitude01 Inspector fields.
+    ///      BaseTerrainStage_Configurable updated to mirror Stage_BaseTerrain2D shape pipeline.
     /// </summary>
     public sealed class PCGMapVisualization : Visualization
     {
@@ -31,14 +38,34 @@ namespace Islands.PCG.Samples
         [SerializeField] private uint seed = 1u;
 
         [Header("Pipeline")]
-        [Tooltip("Si está activo, añade la etapa F3 Hills + topology después del terreno base.")]
+        [Tooltip("Si est? activo, a?ade la etapa F3 Hills + topology despu?s del terreno base.")]
         [SerializeField] private bool enableHillsStage = true;
 
+        [Tooltip("Si est? activo, a?ade la etapa F4 Shore (ShallowWater) despu?s de Hills.\n" +
+                 "Requiere Enable Hills Stage activo para resultados correctos.")]
+        [SerializeField] private bool enableShoreStage = true;
+
+        [Tooltip("Si est? activo, a?ade la etapa F5 Vegetation despu?s de Shore.\n" +
+                 "Requiere Enable Shore Stage activo para resultados correctos.")]
+        [SerializeField] private bool enableVegetationStage = true;
+
+        [Tooltip("Si est? activo, a?ade la etapa F6 Traversal (Walkable + Stairs) despu?s de Vegetation.\n" +
+                 "Requiere Enable Vegetation Stage activo para resultados correctos.")]
+        [SerializeField] private bool enableTraversalStage = true;
+
+        [Tooltip("Si est? activo, a?ade la etapa Phase G Morphology (LandCore + CoastDist) despu?s de Traversal.\n" +
+                 "Requiere Enable Traversal Stage activo para resultados correctos.")]
+        [SerializeField] private bool enableMorphologyStage = true;
+
         [Header("Layer View")]
-        [Tooltip("Qué capa (MaskGrid2D) quieres visualizar.\n" +
+        [Tooltip("Qu? capa (MaskGrid2D) quieres visualizar.\n" +
                  "Capas F2: Land, DeepWater.\n" +
                  "Capas F3: LandEdge, LandInterior, HillsL1, HillsL2.\n" +
-                 "Si la capa no existe aún, se muestra todo OFF.")]
+                 "Capas F4: ShallowWater.\n" +
+                 "Capas F5: Vegetation.\n" +
+                 "Capas F6: Walkable, Stairs.\n" +
+                 "Capas Phase G: LandCore.\n" +
+                 "Si la capa no existe a?n, se muestra todo OFF.")]
         [SerializeField] private MapLayerId viewLayer = MapLayerId.Land;
 
         [Header("Palette (0/1)")]
@@ -57,6 +84,16 @@ namespace Islands.PCG.Samples
 
         [Range(0f, 1f)]
         [SerializeField] private float islandSmoothTo01 = 0.70f;
+
+        [Header("F2 Tunables (Island Shape â€” Ellipse + Warp)")]
+        [Tooltip("Ellipse aspect ratio. 1.0 = circle. >1 = wider. <1 = taller. Range [0.25..4.0].")]
+        [Range(0.25f, 4f)]
+        [SerializeField] private float islandAspectRatio = 1.00f;
+
+        [Tooltip("Domain warp amplitude as a fraction of map size. " +
+                 "0 = no warp (pure circle/ellipse). ~0.15 = subtle organic coast. ~0.30 = strong bays.")]
+        [Range(0f, 1f)]
+        [SerializeField] private float warpAmplitude01 = 0.00f;
 
         [Header("F2 Tunables (Noise Inside Island)")]
         [Min(1)]
@@ -81,6 +118,10 @@ namespace Islands.PCG.Samples
 
         private uint lastSeed;
         private bool lastEnableHillsStage;
+        private bool lastEnableShoreStage;
+        private bool lastEnableVegetationStage;
+        private bool lastEnableTraversalStage;
+        private bool lastEnableMorphologyStage;
         private MapLayerId lastViewLayer;
         private Color lastMaskOffColor;
         private Color lastMaskOnColor;
@@ -88,6 +129,8 @@ namespace Islands.PCG.Samples
         private float lastWaterThreshold01;
         private float lastIslandSmoothFrom01;
         private float lastIslandSmoothTo01;
+        private float lastIslandAspectRatio;
+        private float lastWarpAmplitude01;
         private int lastNoiseCellSize;
         private float lastNoiseAmplitude;
         private int lastQuantSteps;
@@ -98,16 +141,41 @@ namespace Islands.PCG.Samples
 
         private BaseTerrainStage_Configurable baseStage;
         private Stage_Hills2D hillsStage;
+        private Stage_Shore2D shoreStage;
+        private Stage_Vegetation2D vegetationStage;
+        private Stage_Traversal2D traversalStage;
+        private Stage_Morphology2D morphologyStage;
         private IMapStage2D[] stagesF2;
         private IMapStage2D[] stagesF3;
+        private IMapStage2D[] stagesF4;
+        private IMapStage2D[] stagesF5;
+        private IMapStage2D[] stagesF6;
+        private IMapStage2D[] stagesG;
 
+        /// <summary>
+        /// Inspector-configurable base terrain stage for live preview tuning.
+        /// Mirrors Stage_BaseTerrain2D exactly: ellipse + domain warp + height perturbation.
+        /// Additional fields (noiseCellSize, noiseAmplitude, quantSteps) override the
+        /// constants baked into the governed stage, enabling real-time tuning in the lantern.
+        ///
+        /// Shape tunables (islandAspectRatio, warpAmplitude01) are read from inputs.Tunables,
+        /// same as the governed stage â€” no special bridging required.
+        ///
+        /// IMPORTANT: Keep this class in sync with Stage_BaseTerrain2D whenever the shape
+        /// pipeline changes. The two implementations must produce identical outputs for the
+        /// same inputs and RNG state.
+        /// </summary>
         private sealed class BaseTerrainStage_Configurable : IMapStage2D
         {
             public string Name => "base_terrain_configurable";
 
+            // Overrides for the constants baked into Stage_BaseTerrain2D.
             public int noiseCellSize;
             public float noiseAmplitude;
             public int quantSteps;
+
+            // WarpCellSize matches Stage_BaseTerrain2D constant (must stay in sync).
+            private const int WarpCellSize = 16;
 
             public void Execute(ref MapContext2D ctx, in MapInputs inputs)
             {
@@ -123,13 +191,15 @@ namespace Islands.PCG.Samples
                 float waterThreshold = t.waterThreshold01;
 
                 float minDim = math.min((float)w, (float)h);
-                float radius = minDim * t.islandRadius01;
-                if (radius < 1f) radius = 1f;
-
+                float radius = math.max(1f, minDim * t.islandRadius01);
                 float invRadiusSq = 1f / (radius * radius);
                 float fromSq = t.islandSmoothFrom01 * t.islandSmoothFrom01;
                 float toSq = t.islandSmoothTo01 * t.islandSmoothTo01;
                 float2 center = new float2(w * 0.5f, h * 0.5f);
+
+                float aspect = t.islandAspectRatio;
+                float invAspectSq = 1f / (aspect * aspect);
+                float warpAmp = t.warpAmplitude01 * minDim;
 
                 int cs = noiseCellSize < 1 ? 1 : noiseCellSize;
                 float amp = math.max(0f, noiseAmplitude);
@@ -137,55 +207,47 @@ namespace Islands.PCG.Samples
 
                 int nw = (w / cs) + 2;
                 int nh = (h / cs) + 2;
+                int wcs = WarpCellSize;
+                int mw = (w / wcs) + 2;
+                int mh = (h / wcs) + 2;
+
+                float invQuant = (qs > 1) ? (1f / qs) : 0f;
 
                 NativeArray<float> noise = default;
+                NativeArray<float> warpX = default;
+                NativeArray<float> warpY = default;
                 try
                 {
                     noise = new NativeArray<float>(nw * nh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                    warpX = new NativeArray<float>(mw * mh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                    warpY = new NativeArray<float>(mw * mh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
-                    for (int ny = 0; ny < nh; ny++)
-                    {
-                        int row = ny * nw;
-                        for (int nx = 0; nx < nw; nx++)
-                            noise[row + nx] = ctx.Rng.NextFloat();
-                    }
-
-                    float invQuant = (qs > 0) ? (1f / qs) : 0f;
+                    // Fill order matches Stage_BaseTerrain2D exactly (island noise, warpX, warpY).
+                    for (int i = 0; i < noise.Length; i++) noise[i] = ctx.Rng.NextFloat();
+                    for (int i = 0; i < warpX.Length; i++) warpX[i] = ctx.Rng.NextFloat();
+                    for (int i = 0; i < warpY.Length; i++) warpY[i] = ctx.Rng.NextFloat();
 
                     for (int y = 0; y < h; y++)
                     {
-                        int gy = y / cs;
-                        float ty = ((y % cs) + 0.5f) / cs;
                         int baseRow = y * w;
 
                         for (int x = 0; x < w; x++)
                         {
-                            int gx = x / cs;
-                            float tx = ((x % cs) + 0.5f) / cs;
-
-                            int i00 = gx + gy * nw;
-                            int i10 = (gx + 1) + gy * nw;
-                            int i01 = gx + (gy + 1) * nw;
-                            int i11 = (gx + 1) + (gy + 1) * nw;
-
-                            float n00 = noise[i00];
-                            float n10 = noise[i10];
-                            float n01 = noise[i01];
-                            float n11 = noise[i11];
-
-                            float nx0 = math.lerp(n00, n10, tx);
-                            float nx1 = math.lerp(n01, n11, tx);
-                            float n = math.lerp(nx0, nx1, ty);
+                            float n = BilinearSample(noise, x, y, cs, nw);
+                            float wx = BilinearSample(warpX, x, y, wcs, mw) * 2f - 1f;
+                            float wy = BilinearSample(warpY, x, y, wcs, mw) * 2f - 1f;
 
                             float2 p = new float2(x + 0.5f, y + 0.5f);
-                            float2 v = p - center;
-                            float distSq = v.x * v.x + v.y * v.y;
+                            float2 pw = p + new float2(wx, wy) * warpAmp;
+
+                            float2 v = pw - center;
+                            float distSq = v.x * v.x * invAspectSq + v.y * v.y;
 
                             float radial01Sq = math.saturate(distSq * invRadiusSq);
                             float s = math.smoothstep(fromSq, toSq, radial01Sq);
                             float mask01 = 1f - s;
 
-                            float h01 = mask01 + ((n - 0.5f) * amp * mask01);
+                            float h01 = mask01 + (n - 0.5f) * amp * mask01;
                             h01 = math.saturate(h01);
 
                             if (qs > 1)
@@ -201,7 +263,27 @@ namespace Islands.PCG.Samples
                 finally
                 {
                     if (noise.IsCreated) noise.Dispose();
+                    if (warpX.IsCreated) warpX.Dispose();
+                    if (warpY.IsCreated) warpY.Dispose();
                 }
+            }
+
+            // Matches Stage_BaseTerrain2D.BilinearSample exactly.
+            private static float BilinearSample(
+                NativeArray<float> grid, int px, int py, int cellSize, int gridWidth)
+            {
+                int gx = px / cellSize;
+                float tx = ((px % cellSize) + 0.5f) / cellSize;
+                int gy = py / cellSize;
+                float ty = ((py % cellSize) + 0.5f) / cellSize;
+
+                float n00 = grid[gx + gy * gridWidth];
+                float n10 = grid[(gx + 1) + gy * gridWidth];
+                float n01 = grid[gx + (gy + 1) * gridWidth];
+                float n11 = grid[(gx + 1) + (gy + 1) * gridWidth];
+
+                return math.lerp(math.lerp(n00, n10, tx),
+                                 math.lerp(n01, n11, tx), ty);
             }
         }
 
@@ -217,8 +299,17 @@ namespace Islands.PCG.Samples
 
             baseStage = new BaseTerrainStage_Configurable();
             hillsStage = new Stage_Hills2D();
+            shoreStage = new Stage_Shore2D();
+            vegetationStage = new Stage_Vegetation2D();
+            traversalStage = new Stage_Traversal2D();
+            morphologyStage = new Stage_Morphology2D();
+
             stagesF2 = new IMapStage2D[1] { baseStage };
             stagesF3 = new IMapStage2D[2] { baseStage, hillsStage };
+            stagesF4 = new IMapStage2D[3] { baseStage, hillsStage, shoreStage };
+            stagesF5 = new IMapStage2D[4] { baseStage, hillsStage, shoreStage, vegetationStage };
+            stagesF6 = new IMapStage2D[5] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage };
+            stagesG = new IMapStage2D[6] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage };
 
             CacheParams();
             dirty = true;
@@ -244,8 +335,16 @@ namespace Islands.PCG.Samples
 
             baseStage = null;
             hillsStage = null;
+            shoreStage = null;
+            vegetationStage = null;
+            traversalStage = null;
+            morphologyStage = null;
             stagesF2 = null;
             stagesF3 = null;
+            stagesF4 = null;
+            stagesF5 = null;
+            stagesF6 = null;
+            stagesG = null;
         }
 
         protected override void UpdateVisualization(
@@ -275,14 +374,22 @@ namespace Islands.PCG.Samples
                     islandRadius01: islandRadius01,
                     waterThreshold01: waterThreshold01,
                     islandSmoothFrom01: islandSmoothFrom01,
-                    islandSmoothTo01: islandSmoothTo01);
+                    islandSmoothTo01: islandSmoothTo01,
+                    islandAspectRatio: islandAspectRatio,
+                    warpAmplitude01: warpAmplitude01);
 
                 var inputs = new MapInputs(
                     seed: seed,
                     domain: new GridDomain2D(resolution, resolution),
                     tunables: tunables);
 
-                var stages = enableHillsStage ? stagesF3 : stagesF2;
+                var stages = enableMorphologyStage ? stagesG
+                           : enableTraversalStage ? stagesF6
+                           : enableVegetationStage ? stagesF5
+                           : enableShoreStage ? stagesF4
+                           : enableHillsStage ? stagesF3
+                           : stagesF2;
+
                 MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: clearBeforeRun);
 
                 dirty = false;
@@ -305,7 +412,12 @@ namespace Islands.PCG.Samples
                     ? ctx.GetLayer(viewLayer).SnapshotHash64()
                     : 0ul;
 
-                Debug.Log($"[PCGMapVisualization] Update #{updateCalls} res={resolution} seed={seed} hills={enableHillsStage} view={viewLayer} hash={h:X16}");
+                Debug.Log(
+                    $"[PCGMapVisualization] Update #{updateCalls} res={resolution} seed={seed} " +
+                    $"aspect={islandAspectRatio:F2} warp={warpAmplitude01:F2} " +
+                    $"hills={enableHillsStage} shore={enableShoreStage} " +
+                    $"veg={enableVegetationStage} traversal={enableTraversalStage} " +
+                    $"morphology={enableMorphologyStage} view={viewLayer} hash={h:X16}");
             }
         }
 
@@ -367,6 +479,10 @@ namespace Islands.PCG.Samples
         {
             lastSeed = seed;
             lastEnableHillsStage = enableHillsStage;
+            lastEnableShoreStage = enableShoreStage;
+            lastEnableVegetationStage = enableVegetationStage;
+            lastEnableTraversalStage = enableTraversalStage;
+            lastEnableMorphologyStage = enableMorphologyStage;
             lastViewLayer = viewLayer;
             lastMaskOffColor = maskOffColor;
             lastMaskOnColor = maskOnColor;
@@ -374,6 +490,8 @@ namespace Islands.PCG.Samples
             lastWaterThreshold01 = waterThreshold01;
             lastIslandSmoothFrom01 = islandSmoothFrom01;
             lastIslandSmoothTo01 = islandSmoothTo01;
+            lastIslandAspectRatio = islandAspectRatio;
+            lastWarpAmplitude01 = warpAmplitude01;
             lastNoiseCellSize = noiseCellSize;
             lastNoiseAmplitude = noiseAmplitude;
             lastQuantSteps = quantSteps;
@@ -383,18 +501,24 @@ namespace Islands.PCG.Samples
         private bool ParamsChanged()
         {
             return seed != lastSeed
-                   || enableHillsStage != lastEnableHillsStage
-                   || viewLayer != lastViewLayer
-                   || maskOffColor != lastMaskOffColor
-                   || maskOnColor != lastMaskOnColor
-                   || !Mathf.Approximately(islandRadius01, lastIslandRadius01)
-                   || !Mathf.Approximately(waterThreshold01, lastWaterThreshold01)
-                   || !Mathf.Approximately(islandSmoothFrom01, lastIslandSmoothFrom01)
-                   || !Mathf.Approximately(islandSmoothTo01, lastIslandSmoothTo01)
-                   || noiseCellSize != lastNoiseCellSize
-                   || !Mathf.Approximately(noiseAmplitude, lastNoiseAmplitude)
-                   || quantSteps != lastQuantSteps
-                   || clearBeforeRun != lastClearBeforeRun;
+                || enableHillsStage != lastEnableHillsStage
+                || enableShoreStage != lastEnableShoreStage
+                || enableVegetationStage != lastEnableVegetationStage
+                || enableTraversalStage != lastEnableTraversalStage
+                || enableMorphologyStage != lastEnableMorphologyStage
+                || viewLayer != lastViewLayer
+                || maskOffColor != lastMaskOffColor
+                || maskOnColor != lastMaskOnColor
+                || !Mathf.Approximately(islandRadius01, lastIslandRadius01)
+                || !Mathf.Approximately(waterThreshold01, lastWaterThreshold01)
+                || !Mathf.Approximately(islandSmoothFrom01, lastIslandSmoothFrom01)
+                || !Mathf.Approximately(islandSmoothTo01, lastIslandSmoothTo01)
+                || !Mathf.Approximately(islandAspectRatio, lastIslandAspectRatio)
+                || !Mathf.Approximately(warpAmplitude01, lastWarpAmplitude01)
+                || noiseCellSize != lastNoiseCellSize
+                || !Mathf.Approximately(noiseAmplitude, lastNoiseAmplitude)
+                || quantSteps != lastQuantSteps
+                || clearBeforeRun != lastClearBeforeRun;
         }
     }
 }
