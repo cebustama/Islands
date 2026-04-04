@@ -1,0 +1,16 @@
+{
+    "name": "Islands.PCG.Samples.Shared",
+    "rootNamespace": "Islands.PCG.Samples",
+    "references": [
+        "Islands.PCG.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

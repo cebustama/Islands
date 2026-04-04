@@ -1,0 +1,18 @@
+{
+    "name": "Islands.PCG.Adapters.Tilemap",
+    "rootNamespace": "Islands.PCG.Adapters.Tilemap",
+    "references": [
+        "Islands.PCG.Runtime",
+        "Islands.PCG.Samples.Shared",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -130,6 +130,20 @@ namespace Islands.PCG.Layout.Maps
         }
 
         /// <summary>
+        /// Gets an existing field by ref; throws if missing to keep stage failures obvious/deterministic.
+        /// </summary>
+        public ref ScalarField2D GetField(MapFieldId id)
+        {
+            ThrowIfDisposed();
+
+            int i = (int)id;
+            if (!fieldCreated[i])
+                throw new InvalidOperationException($"Field {id} was not created. Call EnsureField({id}) first.");
+
+            return ref fields[i];
+        }
+
+        /// <summary>
         /// Ensures a field exists; allocates it lazily using the context allocator.
         ///
         /// IMPORTANT:
@@ -156,17 +170,6 @@ namespace Islands.PCG.Layout.Maps
                 // Deterministically reset when requested.
                 fields[i].Clear(0f);
             }
-
-            return ref fields[i];
-        }
-
-        public ref ScalarField2D GetField(MapFieldId id)
-        {
-            ThrowIfDisposed();
-
-            int i = (int)id;
-            if (!fieldCreated[i])
-                throw new InvalidOperationException($"Field {id} was not created. Call EnsureField({id}) first.");
 
             return ref fields[i];
         }

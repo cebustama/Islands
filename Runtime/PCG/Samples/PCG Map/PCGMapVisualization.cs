@@ -13,6 +13,21 @@ using Islands.PCG.Operators;
 namespace Islands.PCG.Samples
 {
     /// <summary>
+    /// Visualization mode for the PCG map lantern.
+    /// </summary>
+    public enum PCGViewMode
+    {
+        /// <summary>Render a single MaskGrid2D layer as binary ON/OFF.</summary>
+        MaskLayer,
+
+        /// <summary>
+        /// Render a single ScalarField2D as a normalized color ramp.
+        /// maskOffColor = scalarMin end; maskOnColor = scalarMax end.
+        /// </summary>
+        ScalarField
+    }
+
+    /// <summary>
     /// Lantern/Visualization testbed for the Map Pipeline by Layers.
     ///
     /// Current sample path:
@@ -22,16 +37,34 @@ namespace Islands.PCG.Samples
     /// - optional governed F5 Stage_Vegetation2D appended after shore
     /// - optional governed F6 Stage_Traversal2D appended after vegetation
     /// - optional governed Phase G Stage_Morphology2D appended after traversal
-    /// - displays the selected MaskGrid2D layer via GPU buffer packing
+    /// - displays the selected MaskGrid2D layer (PCGViewMode.MaskLayer) or ScalarField2D
+    ///   (PCGViewMode.ScalarField) via GPU buffer packing
     ///
     /// F2b: added islandAspectRatio and warpAmplitude01 Inspector fields.
     ///      BaseTerrainStage_Configurable updated to mirror Stage_BaseTerrain2D shape pipeline.
+    /// Phase H: added PCGViewMode enum; ScalarField view mode for Height/CoastDist color-ramp
+    ///          visualization (scalarMin/scalarMax normalization); per-layer preset ON colors
+    ///          (useLayerPresetColors toggle + layerPresetOnColors array).
+    /// Phase H3: added optional MapGenerationPreset slot (override-at-resolve pattern).
+    ///           When assigned, all pipeline parameters are read from the preset; inline
+    ///           Inspector fields remain active as fallback when preset is null.
+    ///           Resolution is controlled by the base Visualization class and is NOT
+    ///           overridable via the preset in this component.
     /// </summary>
     public sealed class PCGMapVisualization : Visualization
     {
         private static readonly int NoiseId = Shader.PropertyToID("_Noise");
         private static readonly int MaskOffColorId = Shader.PropertyToID("_MaskOffColor");
         private static readonly int MaskOnColorId = Shader.PropertyToID("_MaskOnColor");
+
+        // =====================================================================
+        // Inspector — Preset (optional, H3)
+        // =====================================================================
+        [Header("Preset (optional)")]
+        [Tooltip("Assign a MapGenerationPreset asset to override all pipeline parameters.\n" +
+                 "When null this component's own inline fields below are used (backward compatible).\n" +
+                 "Note: resolution is always read from the base Visualization class, not the preset.")]
+        [SerializeField] private MapGenerationPreset preset;
 
         [Header("Run Inputs")]
         [Tooltip("Semilla determinista (uint). Misma semilla => mismo mapa.")]
@@ -57,7 +90,13 @@ namespace Islands.PCG.Samples
                  "Requiere Enable Traversal Stage activo para resultados correctos.")]
         [SerializeField] private bool enableMorphologyStage = true;
 
-        [Header("Layer View")]
+        [Header("View Mode")]
+        [Tooltip("MaskLayer: renders the selected MapLayerId as binary ON/OFF.\n" +
+                 "ScalarField: renders the selected MapFieldId as a normalized color ramp\n" +
+                 "(maskOffColor = scalarMin end; maskOnColor = scalarMax end).")]
+        [SerializeField] private PCGViewMode viewMode = PCGViewMode.MaskLayer;
+
+        [Header("Layer View  (View Mode = MaskLayer)")]
         [Tooltip("Qu? capa (MaskGrid2D) quieres visualizar.\n" +
                  "Capas F2: Land, DeepWater.\n" +
                  "Capas F3: LandEdge, LandInterior, HillsL1, HillsL2.\n" +
@@ -68,9 +107,49 @@ namespace Islands.PCG.Samples
                  "Si la capa no existe a?n, se muestra todo OFF.")]
         [SerializeField] private MapLayerId viewLayer = MapLayerId.Land;
 
-        [Header("Palette (0/1)")]
+        [Header("Field View  (View Mode = ScalarField)")]
+        [Tooltip("Qu? campo escalar (ScalarField2D) quieres visualizar.\n" +
+                 "Height (F2): values [0..1]. Suggested scalarMin=0, scalarMax=1.\n" +
+                 "CoastDist (Phase G): -1 sentinel for water/unreached, 0 at coast, positive inland.\n" +
+                 "  Suggested scalarMin=-1, scalarMax=20 (or the CoastDistMax tunable if set).\n" +
+                 "Moisture: registered but not yet written (Phase M) — shows all-low ramp.\n" +
+                 "Requires the producing stage to be enabled.")]
+        [SerializeField] private MapFieldId viewField = MapFieldId.Height;
+
+        [Tooltip("Scalar value mapped to maskOffColor (ramp low end).")]
+        [SerializeField] private float scalarMin = -1f;
+
+        [Tooltip("Scalar value mapped to maskOnColor (ramp high end).")]
+        [SerializeField] private float scalarMax = 20f;
+
+        [Header("Palette  (MaskLayer: OFF/ON — ScalarField: Low/High ramp)")]
         [SerializeField] private Color maskOffColor = new Color(0.1f, 0.2f, 0.7f, 1f);
         [SerializeField] private Color maskOnColor = new Color(0.0f, 0.4f, 0.0f, 1f);
+
+        [Header("Layer Preset Colors  (MaskLayer mode only)")]
+        [Tooltip("When enabled, maskOnColor is overridden at display time by the preset for the\n" +
+                 "active viewLayer. maskOffColor is still used as-is.\n" +
+                 "Note: changes to the color array do not trigger dirty detection; toggle this\n" +
+                 "field or change the seed to force a refresh after editing preset colors.")]
+        [SerializeField] private bool useLayerPresetColors = false;
+
+        [Tooltip("One entry per MapLayerId (COUNT=12). Index matches MapLayerId integer value.")]
+        [SerializeField]
+        private Color[] layerPresetOnColors = new Color[(int)MapLayerId.COUNT]
+        {
+            new Color(0.10f, 0.60f, 0.10f, 1f),  // 0  Land          — green
+            new Color(0.00f, 0.10f, 0.60f, 1f),  // 1  DeepWater     — dark blue
+            new Color(0.20f, 0.50f, 0.90f, 1f),  // 2  ShallowWater  — light blue
+            new Color(0.60f, 0.40f, 0.10f, 1f),  // 3  HillsL1       — tan
+            new Color(0.40f, 0.25f, 0.00f, 1f),  // 4  HillsL2       — dark brown
+            new Color(0.80f, 0.80f, 0.00f, 1f),  // 5  Paths         — yellow (unwritten)
+            new Color(0.90f, 0.55f, 0.00f, 1f),  // 6  Stairs        — orange
+            new Color(0.00f, 0.35f, 0.10f, 1f),  // 7  Vegetation    — dark green
+            new Color(0.50f, 0.80f, 0.50f, 1f),  // 8  Walkable      — pale green
+            new Color(0.90f, 0.20f, 0.20f, 1f),  // 9  LandEdge      — red
+            new Color(0.30f, 0.75f, 0.30f, 1f),  // 10 LandInterior  — mid green
+            new Color(0.00f, 0.65f, 0.40f, 1f),  // 11 LandCore      — teal
+        };
 
         [Header("F2 Tunables (Shape + Threshold)")]
         [Range(0f, 1f)]
@@ -116,13 +195,20 @@ namespace Islands.PCG.Samples
         private int ctxResolution = -1;
         private bool dirty = true;
 
+        // ---- Dirty-tracking cache (H3: effective values cached, not raw fields) ----
+        private MapGenerationPreset _lastPreset;
         private uint lastSeed;
         private bool lastEnableHillsStage;
         private bool lastEnableShoreStage;
         private bool lastEnableVegetationStage;
         private bool lastEnableTraversalStage;
         private bool lastEnableMorphologyStage;
+        private PCGViewMode lastViewMode;
         private MapLayerId lastViewLayer;
+        private MapFieldId lastViewField;
+        private float lastScalarMin;
+        private float lastScalarMax;
+        private bool lastUseLayerPresetColors;
         private Color lastMaskOffColor;
         private Color lastMaskOnColor;
         private float lastIslandRadius01;
@@ -355,6 +441,26 @@ namespace Islands.PCG.Samples
             handle.Complete();
 
             updateCalls++;
+
+            // H3: resolve effective values (preset overrides inline fields when assigned).
+            // Resolution intentionally excluded — controlled by base Visualization class.
+            uint eSeed = preset != null ? preset.seed : seed;
+            bool eHills = preset != null ? preset.enableHillsStage : enableHillsStage;
+            bool eShore = preset != null ? preset.enableShoreStage : enableShoreStage;
+            bool eVeg = preset != null ? preset.enableVegetationStage : enableVegetationStage;
+            bool eTrav = preset != null ? preset.enableTraversalStage : enableTraversalStage;
+            bool eMorph = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
+            int eCell = preset != null ? preset.noiseCellSize : noiseCellSize;
+            float eAmp = preset != null ? preset.noiseAmplitude : noiseAmplitude;
+            int eQuant = preset != null ? preset.quantSteps : quantSteps;
+            bool eClear = preset != null ? preset.clearBeforeRun : clearBeforeRun;
+            var eTun = preset != null
+                ? preset.ToTunables()
+                : new MapTunables2D(
+                      islandRadius01, waterThreshold01,
+                      islandSmoothFrom01, islandSmoothTo01,
+                      islandAspectRatio, warpAmplitude01);
+
             ApplyPaletteToMpb();
             EnsureContextAllocated(resolution);
 
@@ -366,58 +472,78 @@ namespace Islands.PCG.Samples
 
             if (dirty)
             {
-                baseStage.noiseCellSize = Mathf.Max(1, noiseCellSize);
-                baseStage.noiseAmplitude = Mathf.Max(0f, noiseAmplitude);
-                baseStage.quantSteps = Mathf.Max(0, quantSteps);
-
-                var tunables = new MapTunables2D(
-                    islandRadius01: islandRadius01,
-                    waterThreshold01: waterThreshold01,
-                    islandSmoothFrom01: islandSmoothFrom01,
-                    islandSmoothTo01: islandSmoothTo01,
-                    islandAspectRatio: islandAspectRatio,
-                    warpAmplitude01: warpAmplitude01);
+                baseStage.noiseCellSize = Mathf.Max(1, eCell);
+                baseStage.noiseAmplitude = Mathf.Max(0f, eAmp);
+                baseStage.quantSteps = Mathf.Max(0, eQuant);
 
                 var inputs = new MapInputs(
-                    seed: seed,
+                    seed: eSeed,
                     domain: new GridDomain2D(resolution, resolution),
-                    tunables: tunables);
+                    tunables: eTun);
 
-                var stages = enableMorphologyStage ? stagesG
-                           : enableTraversalStage ? stagesF6
-                           : enableVegetationStage ? stagesF5
-                           : enableShoreStage ? stagesF4
-                           : enableHillsStage ? stagesF3
+                var stages = eMorph ? stagesG
+                           : eTrav ? stagesF6
+                           : eVeg ? stagesF5
+                           : eShore ? stagesF4
+                           : eHills ? stagesF3
                            : stagesF2;
 
-                MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: clearBeforeRun);
+                MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: eClear);
 
                 dirty = false;
             }
 
-            if (ctx.IsLayerCreated(viewLayer))
+            // --- display ---
+            if (viewMode == PCGViewMode.ScalarField)
             {
-                ref var layer = ref ctx.GetLayer(viewLayer);
-                PackFromMaskAndUpload(ref layer, resolution);
+                // Scalar field: normalize values from [scalarMin..scalarMax] → [0..1] and pack.
+                // -1f sentinel values (CoastDist water/unreached) map to 0 when scalarMin = -1.
+                // Fields not yet written (e.g. Moisture before Phase M) show all-low ramp.
+                if (ctx.IsFieldCreated(viewField))
+                    PackFromFieldAndUpload(ref ctx.GetField(viewField), resolution);
+                else
+                    PackZerosAndUpload();
             }
             else
             {
-                PackZerosAndUpload();
+                // Mask layer: binary ON/OFF. Optionally override maskOnColor with layer preset.
+                if (useLayerPresetColors)
+                {
+                    int idx = (int)viewLayer;
+                    if (idx >= 0 && idx < layerPresetOnColors.Length)
+                        mpb.SetColor(MaskOnColorId, layerPresetOnColors[idx]);
+                }
+
+                if (ctx.IsLayerCreated(viewLayer))
+                    PackFromMaskAndUpload(ref ctx.GetLayer(viewLayer), resolution);
+                else
+                    PackZerosAndUpload();
             }
 
             if (!loggedFirstUpdate)
             {
                 loggedFirstUpdate = true;
-                ulong h = ctx.IsLayerCreated(viewLayer)
-                    ? ctx.GetLayer(viewLayer).SnapshotHash64()
-                    : 0ul;
+
+                ulong hash = 0ul;
+                if (viewMode == PCGViewMode.ScalarField)
+                {
+                    // No SnapshotHash64 on ScalarField2D; log field availability only.
+                    hash = ctx.IsFieldCreated(viewField) ? 0xFFFFFFFFFFFFFFFFul : 0ul;
+                }
+                else
+                {
+                    hash = ctx.IsLayerCreated(viewLayer)
+                        ? ctx.GetLayer(viewLayer).SnapshotHash64()
+                        : 0ul;
+                }
 
                 Debug.Log(
-                    $"[PCGMapVisualization] Update #{updateCalls} res={resolution} seed={seed} " +
-                    $"aspect={islandAspectRatio:F2} warp={warpAmplitude01:F2} " +
-                    $"hills={enableHillsStage} shore={enableShoreStage} " +
-                    $"veg={enableVegetationStage} traversal={enableTraversalStage} " +
-                    $"morphology={enableMorphologyStage} view={viewLayer} hash={h:X16}");
+                    $"[PCGMapVisualization] Update #{updateCalls} res={resolution} seed={eSeed} " +
+                    $"aspect={eTun.islandAspectRatio:F2} warp={eTun.warpAmplitude01:F2} " +
+                    $"hills={eHills} shore={eShore} " +
+                    $"veg={eVeg} traversal={eTrav} " +
+                    $"morphology={eMorph} " +
+                    $"mode={viewMode} view={viewLayer} field={viewField} hash={hash:X16}");
             }
         }
 
@@ -468,6 +594,42 @@ namespace Islands.PCG.Samples
             return mask.Get(x, y) ? 1f : 0f;
         }
 
+        /// <summary>
+        /// Packs normalized scalar field values into the GPU buffer.
+        /// Maps [scalarMin..scalarMax] → [0..1] using math.saturate.
+        /// The existing shader interpolates maskOffColor (0) to maskOnColor (1),
+        /// giving a color ramp with no shader changes required.
+        /// </summary>
+        private void PackFromFieldAndUpload(ref ScalarField2D field, int resolution)
+        {
+            int totalInstances = resolution * resolution;
+            int packs = packedNoise.Length;
+
+            float range = scalarMax - scalarMin;
+            float invRange = (range > 1e-6f) ? (1f / range) : 0f;
+
+            for (int packIndex = 0; packIndex < packs; packIndex++)
+            {
+                int baseInstance = packIndex * 4;
+
+                float v0 = (baseInstance + 0 < totalInstances) ? ScalarInstanceValue(ref field, baseInstance + 0, resolution, invRange) : 0f;
+                float v1 = (baseInstance + 1 < totalInstances) ? ScalarInstanceValue(ref field, baseInstance + 1, resolution, invRange) : 0f;
+                float v2 = (baseInstance + 2 < totalInstances) ? ScalarInstanceValue(ref field, baseInstance + 2, resolution, invRange) : 0f;
+                float v3 = (baseInstance + 3 < totalInstances) ? ScalarInstanceValue(ref field, baseInstance + 3, resolution, invRange) : 0f;
+
+                packedNoise[packIndex] = new float4(v0, v1, v2, v3);
+            }
+
+            noiseBuffer.SetData(packedNoise.Reinterpret<float>(sizeof(float) * 4));
+        }
+
+        private float ScalarInstanceValue(ref ScalarField2D field, int instanceIndex, int resolution, float invRange)
+        {
+            int x = instanceIndex % resolution;
+            int y = instanceIndex / resolution;
+            return math.saturate((field.GetUnchecked(x, y) - scalarMin) * invRange);
+        }
+
         private void ApplyPaletteToMpb()
         {
             if (mpb == null) return;
@@ -475,50 +637,64 @@ namespace Islands.PCG.Samples
             mpb.SetColor(MaskOnColorId, maskOnColor);
         }
 
+        // H3: CacheParams caches effective values (not raw fields) so that
+        // both preset-field edits and inline-field edits are detected correctly.
         private void CacheParams()
         {
-            lastSeed = seed;
-            lastEnableHillsStage = enableHillsStage;
-            lastEnableShoreStage = enableShoreStage;
-            lastEnableVegetationStage = enableVegetationStage;
-            lastEnableTraversalStage = enableTraversalStage;
-            lastEnableMorphologyStage = enableMorphologyStage;
+            _lastPreset = preset;
+            lastSeed = preset != null ? preset.seed : seed;
+            lastEnableHillsStage = preset != null ? preset.enableHillsStage : enableHillsStage;
+            lastEnableShoreStage = preset != null ? preset.enableShoreStage : enableShoreStage;
+            lastEnableVegetationStage = preset != null ? preset.enableVegetationStage : enableVegetationStage;
+            lastEnableTraversalStage = preset != null ? preset.enableTraversalStage : enableTraversalStage;
+            lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
+            lastViewMode = viewMode;
             lastViewLayer = viewLayer;
+            lastViewField = viewField;
+            lastScalarMin = scalarMin;
+            lastScalarMax = scalarMax;
+            lastUseLayerPresetColors = useLayerPresetColors;
             lastMaskOffColor = maskOffColor;
             lastMaskOnColor = maskOnColor;
-            lastIslandRadius01 = islandRadius01;
-            lastWaterThreshold01 = waterThreshold01;
-            lastIslandSmoothFrom01 = islandSmoothFrom01;
-            lastIslandSmoothTo01 = islandSmoothTo01;
-            lastIslandAspectRatio = islandAspectRatio;
-            lastWarpAmplitude01 = warpAmplitude01;
-            lastNoiseCellSize = noiseCellSize;
-            lastNoiseAmplitude = noiseAmplitude;
-            lastQuantSteps = quantSteps;
-            lastClearBeforeRun = clearBeforeRun;
+            lastIslandRadius01 = preset != null ? preset.islandRadius01 : islandRadius01;
+            lastWaterThreshold01 = preset != null ? preset.waterThreshold01 : waterThreshold01;
+            lastIslandSmoothFrom01 = preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01;
+            lastIslandSmoothTo01 = preset != null ? preset.islandSmoothTo01 : islandSmoothTo01;
+            lastIslandAspectRatio = preset != null ? preset.islandAspectRatio : islandAspectRatio;
+            lastWarpAmplitude01 = preset != null ? preset.warpAmplitude01 : warpAmplitude01;
+            lastNoiseCellSize = preset != null ? preset.noiseCellSize : noiseCellSize;
+            lastNoiseAmplitude = preset != null ? preset.noiseAmplitude : noiseAmplitude;
+            lastQuantSteps = preset != null ? preset.quantSteps : quantSteps;
+            lastClearBeforeRun = preset != null ? preset.clearBeforeRun : clearBeforeRun;
         }
 
         private bool ParamsChanged()
         {
-            return seed != lastSeed
-                || enableHillsStage != lastEnableHillsStage
-                || enableShoreStage != lastEnableShoreStage
-                || enableVegetationStage != lastEnableVegetationStage
-                || enableTraversalStage != lastEnableTraversalStage
-                || enableMorphologyStage != lastEnableMorphologyStage
+            return preset != _lastPreset
+                || (preset != null ? preset.seed : seed) != lastSeed
+                || (preset != null ? preset.enableHillsStage : enableHillsStage) != lastEnableHillsStage
+                || (preset != null ? preset.enableShoreStage : enableShoreStage) != lastEnableShoreStage
+                || (preset != null ? preset.enableVegetationStage : enableVegetationStage) != lastEnableVegetationStage
+                || (preset != null ? preset.enableTraversalStage : enableTraversalStage) != lastEnableTraversalStage
+                || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
+                || viewMode != lastViewMode
                 || viewLayer != lastViewLayer
+                || viewField != lastViewField
+                || !Mathf.Approximately(scalarMin, lastScalarMin)
+                || !Mathf.Approximately(scalarMax, lastScalarMax)
+                || useLayerPresetColors != lastUseLayerPresetColors
                 || maskOffColor != lastMaskOffColor
                 || maskOnColor != lastMaskOnColor
-                || !Mathf.Approximately(islandRadius01, lastIslandRadius01)
-                || !Mathf.Approximately(waterThreshold01, lastWaterThreshold01)
-                || !Mathf.Approximately(islandSmoothFrom01, lastIslandSmoothFrom01)
-                || !Mathf.Approximately(islandSmoothTo01, lastIslandSmoothTo01)
-                || !Mathf.Approximately(islandAspectRatio, lastIslandAspectRatio)
-                || !Mathf.Approximately(warpAmplitude01, lastWarpAmplitude01)
-                || noiseCellSize != lastNoiseCellSize
-                || !Mathf.Approximately(noiseAmplitude, lastNoiseAmplitude)
-                || quantSteps != lastQuantSteps
-                || clearBeforeRun != lastClearBeforeRun;
+                || !Mathf.Approximately(preset != null ? preset.islandRadius01 : islandRadius01, lastIslandRadius01)
+                || !Mathf.Approximately(preset != null ? preset.waterThreshold01 : waterThreshold01, lastWaterThreshold01)
+                || !Mathf.Approximately(preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01, lastIslandSmoothFrom01)
+                || !Mathf.Approximately(preset != null ? preset.islandSmoothTo01 : islandSmoothTo01, lastIslandSmoothTo01)
+                || !Mathf.Approximately(preset != null ? preset.islandAspectRatio : islandAspectRatio, lastIslandAspectRatio)
+                || !Mathf.Approximately(preset != null ? preset.warpAmplitude01 : warpAmplitude01, lastWarpAmplitude01)
+                || (preset != null ? preset.noiseCellSize : noiseCellSize) != lastNoiseCellSize
+                || !Mathf.Approximately(preset != null ? preset.noiseAmplitude : noiseAmplitude, lastNoiseAmplitude)
+                || (preset != null ? preset.quantSteps : quantSteps) != lastQuantSteps
+                || (preset != null ? preset.clearBeforeRun : clearBeforeRun) != lastClearBeforeRun;
         }
     }
 }

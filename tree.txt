@@ -25,8 +25,28 @@
 |   |   +---overview.md
 |   |   +---pcg-layout-strategies-reference.md
 |   |   +---shaders.md
-|   |   \---surfaces.md
+|   |   +---surfaces.md
+|   |   \---tileset-import-guide.md
 |   +---research
+|   |   +---Games Worldgen
+|   |   |   +---Cataclysm Worldgen and Z Levels.md
+|   |   |   +---DwarfFortress Worldgen.md
+|   |   |   +---Minecraft Worldgen.md
+|   |   |   +---NMS_World_Generation_Pipeline.md
+|   |   |   +---RimWorld Worldgen.md
+|   |   |   \---Tangledeep and Rogues.md
+|   |   +---PCG Techniques
+|   |   |   +---Prompts (TEMP)
+|   |   |   |   +---pass1_noise_and_randomness.md
+|   |   |   |   +---pass2_terrain_and_erosion.md
+|   |   |   |   +---pass3_dungeons.md
+|   |   |   |   +---pass4_rules_and_constraints.md
+|   |   |   |   +---pass5_biomes_placement_regions.md
+|   |   |   |   +---pass6_multiscale_synthesis.md
+|   |   |   |   \---README_strategy.md
+|   |   |   +---Pass 1 Claude Sonnet.md
+|   |   |   +---pcg_noise_reference.md
+|   |   |   \---pcg_technique_library.md
 |   |   \---README.md
 |   +---systems
 |   |   +---map-pipeline-by-layers-ssot.md
@@ -95,6 +115,16 @@
 |   |   +---SmallXXHash.cs
 |   |   \---Visualization.cs
 |   +---PCG
+|   |   +---Adapters
+|   |   |   \---Tilemap
+|   |   |       +---Islands.PCG.Adapters.Tilemap.asmdef
+|   |   |       +---PCGMapTilemapSample.cs
+|   |   |       +---PCGMapTilemapVisualization.cs
+|   |   |       +---ProceduralTileEntry.cs
+|   |   |       +---ProceduralTileFactory.cs
+|   |   |       +---TilemapAdapter2D.cs
+|   |   |       +---TilemapLayerEntry.cs
+|   |   |       \---TilesetConfig.cs
 |   |   +---Core
 |   |   |   \---GridDomain2D.cs
 |   |   +---Fields
@@ -111,13 +141,20 @@
 |   |   |   +---Maps
 |   |   |   |   +---Stages
 |   |   |   |   |   +---Stage_BaseTerrain2D.cs
-|   |   |   |   |   \---Stage_Hills2D.cs
+|   |   |   |   |   +---Stage_Hills2D.cs
+|   |   |   |   |   +---Stage_Morphology2D.cs
+|   |   |   |   |   +---Stage_Shore2D.cs
+|   |   |   |   |   +---Stage_Traversal2D.cs
+|   |   |   |   |   \---Stage_Vegetation2D.cs
 |   |   |   |   +---IMapStage2D.cs
 |   |   |   |   +---MapContext2D.cs
+|   |   |   |   +---MapDataExport.cs
+|   |   |   |   +---MapExporter2D.cs
 |   |   |   |   +---MapIds2D.cs
 |   |   |   |   +---MapInputs.cs
 |   |   |   |   +---MapNoiseBridge2D.cs
 |   |   |   |   +---MapPipelineRunner2D.cs
+|   |   |   |   +---MapShapeInput.cs
 |   |   |   |   \---MapTunables2D.cs
 |   |   |   +---CorridorFirstDungeon2D.cs
 |   |   |   +---Direction2D.cs
@@ -130,6 +167,7 @@
 |   |   |   \---SimpleRandomWalk2D.cs
 |   |   +---Operators
 |   |   |   +---MaskFloodFillOps2D.cs
+|   |   |   +---MaskMorphologyOps2D.cs
 |   |   |   +---MaskRasterOps2D.cs
 |   |   |   +---MaskTopologyOps2D.cs
 |   |   |   +---ScalarToMaskOps.cs
@@ -146,25 +184,54 @@
 |   |   |   |   +---PCGDungeonGPU.hlsl
 |   |   |   |   \---PCGDungeonVisualization.cs
 |   |   |   +---PCG Map
+|   |   |   |   +---PCGMapCompositeVisualization.cs
 |   |   |   |   \---PCGMapVisualization.cs
-|   |   |   \---PCG Mask
-|   |   |       +---MaskGrid2DBooleanOpsSmokeTest.cs
-|   |   |       +---PCG Mask URP GPU.shadergraph
-|   |   |       +---PCG Mask.mat
-|   |   |       +---PCGMaskDemo.unity
-|   |   |       +---PCGMaskGPU.hlsl
-|   |   |       +---PCGMaskPaletteController.cs
-|   |   |       \---PCGMaskVisualization.cs
+|   |   |   +---PCG Map Tilemap
+|   |   |   |   +---Palettes
+|   |   |   |   +---Tilesets
+|   |   |   |   |   +---DragonWarrior
+|   |   |   |   |   |   \---Tiles
+|   |   |   |   |   \---TilesetConfig-DragonWarrior.asset
+|   |   |   |   \---PCG Map Tilemap.unity
+|   |   |   +---PCG Mask
+|   |   |   |   +---MaskGrid2DBooleanOpsSmokeTest.cs
+|   |   |   |   +---PCG Mask URP GPU.shadergraph
+|   |   |   |   +---PCG Mask.mat
+|   |   |   |   +---PCGMaskDemo.unity
+|   |   |   |   +---PCGMaskGPU.hlsl
+|   |   |   |   +---PCGMaskPaletteController.cs
+|   |   |   |   \---PCGMaskVisualization.cs
+|   |   |   +---Presets
+|   |   |   |   +---Default.asset
+|   |   |   |   +---Islands.PCG.Samples.Shared.asmdef
+|   |   |   |   +---MapGenerationPreset.cs
+|   |   |   |   \---WarpTest.asset
+|   |   |   \---Islands.PCG.Samples.asmdef
 |   |   +---Tests
 |   |   |   \---EditMode
 |   |   |       +---Maps
+|   |   |       |   +---Tilemap
+|   |   |       |   |   +---ProceduralTileFactoryTests.cs
+|   |   |       |   |   \---TilesetConfigTests.cs
+|   |   |       |   +---MapExporter2DTests.cs
+|   |   |       |   +---MapGenerationPresetTests.cs
+|   |   |       |   +---MapPipelineRunner2DGoldenF2cTests.cs
 |   |   |       |   +---MapPipelineRunner2DGoldenF2Tests.cs
 |   |   |       |   +---MapPipelineRunner2DGoldenF3Tests.cs
+|   |   |       |   +---MapPipelineRunner2DGoldenF4Tests.cs
+|   |   |       |   +---MapPipelineRunner2DGoldenF5Tests.cs
+|   |   |       |   +---MapPipelineRunner2DGoldenF6Tests.cs
+|   |   |       |   +---MapPipelineRunner2DGoldenGTests.cs
 |   |   |       |   +---MapPipelineRunner2DTests.cs
 |   |   |       |   +---MaskFloodFillOps2DTests.cs
 |   |   |       |   +---MaskTopologyOps2DTests.cs
 |   |   |       |   +---StageBaseTerrain2DTests.cs
-|   |   |       |   \---StageHills2DTests.cs
+|   |   |       |   +---StageHills2DTests.cs
+|   |   |       |   +---StageMorphology2DTests.cs
+|   |   |       |   +---StageShore2DTests.cs
+|   |   |       |   +---StageTraversal2DTests.cs
+|   |   |       |   +---StageVegetation2DTests.cs
+|   |   |       |   \---TilemapAdapter2DTests.cs
 |   |   |       +---CorridorFirstDungeon2DTests.cs
 |   |   |       +---Direction2DTests.cs
 |   |   |       +---DrawLineTests.cs

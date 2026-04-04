@@ -2,8 +2,8 @@
 
 Status: Active (implemented slice only)
 Authority: Primary subsystem authority for implemented Map Pipeline by Layers behavior.
-Scope: Implemented F0–Phase G + F2c runtime truth and active contracts for Map Pipeline by Layers.
-Out of scope: Phase H+ roadmap work, legacy tilemap map generation, sample-only inspector convenience.
+Scope: Implemented F0–Phase H2b runtime truth and active contracts for Map Pipeline by Layers.
+Out of scope: Phase H2c+ roadmap work, legacy tilemap map generation, sample-only inspector convenience.
 
 ## Purpose
 This document governs the implemented and test-gated truth of the Map Pipeline by Layers subsystem.
@@ -18,8 +18,13 @@ This SSoT covers only the currently implemented vertical slice:
 - F5 Vegetation
 - F6 Traversal (Walkable + Stairs)
 - Phase G Morphology (LandCore + CoastDist)
+- Phase H Visualization (PCGViewMode enum; scalar field color-ramp view; per-layer preset colors)
+- Phase H1 Composite Visualization (PCGMapCompositeVisualization; CPU Texture2D composite; CompositeLayerSlot)
+- Phase H2 Data Export (MapDataExport; MapExporter2D)
+- Phase H2b Tilemap Adapter (TilemapAdapter2D; TilemapLayerEntry; PCGMapTilemapSample;
+  Islands.PCG.Adapters.Tilemap separate asmdef)
 
-Anything from Phase H onward is planning only and belongs in `planning/active/PCG_Roadmap.md`.
+Anything from Phase H2c onward is planning only and belongs in `planning/active/PCG_Roadmap.md`.
 `MapLayerId.Paths` is registered but not yet written; its authoritative write belongs in Phase O.
 
 ## Subsystem intent
@@ -78,7 +83,7 @@ Current `MapFieldId`:
 - stable index-based registries
 - single run RNG
 - deterministic allocation/clear rules
-- throws on missing layer/field access
+- throws on missing layer/field access (`GetLayer`, `GetField`)
 
 ### Runner
 `MapPipelineRunner2D`
@@ -195,6 +200,44 @@ Current `MapFieldId`:
 - does not mutate `Land`, `LandEdge`, `LandInterior`, `HillsL1`, `HillsL2`,
   `ShallowWater`, `Vegetation`, `Walkable`, `Stairs`, or `Height`
 
+### Phase H2 adapter contracts
+`MapDataExport`
+- Managed snapshot of a completed `MapContext2D`. Lifetime independent of the source context.
+- Indexing: row-major, `index = x + y * Width` — consistent with `GridDomain2D.Index`.
+- `HasLayer(id)` / `HasField(id)`: true iff the layer/field was created in the source context.
+- `GetLayer(id)` → `bool[]`: throws `InvalidOperationException` if absent.
+- `GetCell(id, x, y)` → `bool`: throws `ArgumentOutOfRangeException` on OOB.
+- `GetField(id)` → `float[]`: throws `InvalidOperationException` if absent.
+- `GetValue(id, x, y)` → `float`: throws `ArgumentOutOfRangeException` on OOB.
+- Instantiated only via `MapExporter2D.Export`; constructor is `internal`.
+
+`MapExporter2D`
+- Static adapter; read-only. Does not write to or modify the context.
+- Exports all layers/fields present in the context; absent ones produce null slots.
+- Layer copy: row-major scan via `MaskGrid2D.GetUnchecked(x, y)` (bounds-guaranteed by domain).
+- Field copy: flat index scan via `ScalarField2D.Values[j]`.
+- Deterministic: same context state ⇒ identical export output.
+- Extensible: new `MapLayerId`/`MapFieldId` entries are automatically exported without contract changes.
+- Throws `ArgumentNullException` if context is null.
+- Adapters-last invariant: this is the boundary between the headless pipeline and downstream consumers.
+  Game systems, Unity adapters, and tools read `MapDataExport`; they do not touch `MapContext2D`.
+
+### Phase H2b tilemap adapter contracts
+`TilemapLayerEntry`
+- `[Serializable]` struct. Maps one `MapLayerId` to one `TileBase` asset.
+- Entries with a null `Tile` field are silently skipped during Apply.
+
+`TilemapAdapter2D`
+- Static adapter; read-only consumer of `MapDataExport`. Never writes to pipeline state.
+- `Apply(MapDataExport, Tilemap, TilemapLayerEntry[], TileBase fallback, bool clearFirst, bool flipY)`
+- Priority: entries evaluated low→high (array order); last matching layer per cell wins.
+  This is rendering priority only; pipeline generation order is unaffected.
+- Absent layers (not in export): silently skipped; no exception.
+- `clearFirst = true` (default): calls `ClearAllTiles()` before stamping.
+- `flipY = true`: tile placed at `(x, Height-1-y, 0)` instead of `(x, y, 0)`.
+- Deterministic: same export + same priority table ⇒ identical tilemap output.
+- Lives in `Islands.PCG.Adapters.Tilemap` assembly (separate from `Islands.PCG.Runtime`).
+
 ## Implemented surface
 ### F0
 - `MapIds2D`
@@ -256,6 +299,39 @@ Current `MapFieldId`:
   - `CoastDist` field (MapFieldId 2)
 - lantern support for morphology layer inspection (`enableMorphologyStage` toggle, `stagesG` array)
 
+### Phase H
+- `PCGMapVisualization` extended with `PCGViewMode` enum (`MaskLayer` / `ScalarField`)
+- `MapContext2D` extended with `GetField(MapFieldId)` public method
+- scalar field view mode: `viewField`, `scalarMin`, `scalarMax`; normalization via `PackFromFieldAndUpload`
+- per-layer preset ON colors: `useLayerPresetColors` toggle, `layerPresetOnColors Color[12]`
+- sample-side only; no new MapLayerId, MapFieldId, or runtime stage contracts
+
+### Phase H1
+- `PCGMapCompositeVisualization` — new sample component alongside the diagnostic lantern
+- composites all active layers into a CPU `Texture2D` via `SetPixels32`; `FilterMode.Point`
+- priority order (low → high): DeepWater → ShallowWater → Land → LandCore → Vegetation
+  → HillsL1 → HillsL2 → Stairs → LandEdge
+- `CompositeLayerSlot` `[Serializable]` struct: label + color + enabled, one per MapLayerId
+- optional multiplicative scalar-field tint overlay (Height or CoastDist)
+- composite pixel hash (FNV-1a over Color32) logged per rebuild as informal visual golden
+- sample-side only; no new MapLayerId, MapFieldId, or runtime stage contracts
+
+### Phase H2
+- `MapDataExport` — managed snapshot class (`Runtime/PCG/Layout/Maps/MapDataExport.cs`)
+- `MapExporter2D` — static read-only adapter (`Runtime/PCG/Layout/Maps/MapExporter2D.cs`)
+- adapters-last boundary: `MapDataExport` is the governed interface between the headless pipeline
+  and all downstream consumers (game systems, Unity adapters, tools)
+- no new MapLayerId, MapFieldId, or runtime stage contracts
+
+### Phase H2b
+- `TilemapLayerEntry` — serializable struct (`Runtime/PCG/Adapters/Tilemap/TilemapLayerEntry.cs`)
+- `TilemapAdapter2D` — static read-only adapter (`Runtime/PCG/Adapters/Tilemap/TilemapAdapter2D.cs`)
+- `PCGMapTilemapSample` — sample MonoBehaviour (`Runtime/PCG/Adapters/Tilemap/PCGMapTilemapSample.cs`)
+- `Islands.PCG.Adapters.Tilemap.asmdef` — separate assembly; references `Islands.PCG.Runtime`;
+  keeps Unity.Tilemaps dependency isolated from the headless runtime
+- scene: `Runtime/PCG/Samples/PCG Map Tilemap/PCG Map Tilemap.unity`
+- adapters-last invariant preserved; no new MapLayerId, MapFieldId, or runtime stage contracts
+
 ## Determinism rules
 - stable seed sanitation
 - stable registry ordering
@@ -268,6 +344,8 @@ Current `MapFieldId`:
 - snapshot-hash gates for masks (MaskGrid2D.SnapshotHash64)
 - FNV-1a float-bit hash gates for scalar fields (HashScalarField in test helpers)
 - warp noise arrays always consumed from ctx.Rng regardless of warpAmplitude01 value (stable RNG consumption count)
+- export determinism: same context state ⇒ identical MapDataExport output (managed array values)
+- tilemap adapter determinism: same export + same priority table ⇒ identical Tilemap output
 
 ## Test-gated behavior
 - trivial pipeline determinism + golden
@@ -300,17 +378,22 @@ Current `MapFieldId`:
 - morphology stage invariants (LandCore ⊆ Land, LandCore ⊆ LandInterior, LandCore smaller than Land; CoastDist == 0 at LandEdge, CoastDist > 0 at reachable LandInterior, CoastDist == -1 at non-Land; no-mutate)
 - Phase G stage goldens (LandCore mask hash, CoastDist field hash)
 - Phase G pipeline golden
+- Phase H2 export: empty-context export; layer round-trip fidelity (diagonal, all-ones, all-zeros);
+  field round-trip fidelity (gradient); determinism; snapshot independence; null/absent/OOB guards
+- Phase H2b tilemap adapter: null guards (export, tilemap, table); empty table + null fallback;
+  empty table + fallback fills all cells; priority resolution (LandCore over Land);
+  missing layer silently skipped; clearFirst=false preserves existing tiles;
+  flipY mirrors Y coordinate; determinism gate
 
 ## Known limitations
-- Lantern remains mask-first and single-layer-first
-- Height visualization is not yet governed
-- CoastDist (ScalarField2D) is not directly visualizable via the current lantern (shows all-OFF if selected as view layer); verified via golden tests only
+- Scalar field normalization range (scalarMin/scalarMax) is inspector-settable but not auto-ranged; CoastDist max distance varies by map size and CoastDistMax tunable
 - Composite per-layer color styling is sample-side convenience, not subsystem truth
 - F2/F3 keep some internal constants fixed for golden stability (NoiseCellSize, WarpCellSize, NoiseAmplitude, QuantSteps)
 - `MapFieldId.Moisture` is registered but not yet written; ownership deferred to Phase M
 - `MapLayerId.Paths` is registered but not yet written; ownership deferred to Phase O
+- `PCGMapTilemapSample` regenerates only on Start or ContextMenu; live editor regeneration deferred to Phase H2c
 
 ## Not governed here
-- Phase H+ roadmap work
+- Phase H2c+ roadmap work (Live Tilemap Visualization and beyond)
 - `Paths` layer write (deferred to Phase O — requires Phase N POI placement as prerequisite)
 - Legacy tilemap generation documents

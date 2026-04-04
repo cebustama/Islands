@@ -1,6 +1,6 @@
 # Current State
 
-Status date: 2026-04-02
+Status date: 2026-04-04
 
 ## What is active now
 - The Islands documentation migration was handled as Tier L and is now materially closed for the reviewed snapshot corpus.
@@ -10,7 +10,7 @@ Status date: 2026-04-02
 
 ## What is implemented now (confirmed for documentation authority purposes)
 - New PCG runtime direction: grid-first, deterministic, adapters-last.
-- Map Pipeline by Layers implemented slice: **F0–F6 + Phase G**.
+- Map Pipeline by Layers implemented slice: **F0–F6 + Phase G + Phase H + Phase H1 + Phase H2 + Phase H2b + Phase H2c + Phase H2d + Phase H3 + Phase H4**.
 - Layout strategies are an implemented, test-gated support surface under PCG.
 - GraphLibrary runtime is a real implemented surface, but it is **not** promoted subsystem authority.
 - Noise runtime is real and coherent, but it is currently a governed reference / staged support surface, not a promoted subsystem SSoT.
@@ -19,40 +19,83 @@ Status date: 2026-04-02
 - Shader assets and HLSL helpers are active support artifacts, but not a promoted subsystem SSoT.
 
 ## What current package development just resolved
-- Phase F2c — Arbitrary Shape Input is now implemented and test-gated.
-  New `MapShapeInput` struct; `MapInputs` extended with optional 4th param (backward compatible).
-  `Stage_BaseTerrain2D` branches on `HasShape`: when true, `GetUnchecked(x,y)` replaces ellipse+warp;
-  all three RNG arrays still filled in the same order, preserving downstream determinism.
-  No new MapLayerId/MapFieldId. F2b goldens unchanged. F2c goldens locked (center-circle, seed=12345).
-- Prior resolution (Phase F2b): `Stage_BaseTerrain2D` reformed: circular radial falloff replaced with ellipse + domain-warp silhouette.
-- Shape pipeline: ellipse aspect ratio → domain warp → smoothstep radial falloff → height perturbation.
-- Two new `MapTunables2D` fields: `islandAspectRatio` (clamped [0.25, 4.0], default 1.0),
-  `warpAmplitude01` (clamped [0, 1], default 0.0). Default values preserve pre-F2b circle geometry;
-  goldens differ because warp arrays are always filled from ctx.Rng regardless of amplitude.
-- No new `MapLayerId` or `MapFieldId` entries.
-- All F2–Phase G golden hashes re-locked in one migration pass. Phase G goldens locked for first time.
-- `PCGMapVisualization` patched with new Inspector tunables; `BaseTerrainStage_Configurable` updated
-  to mirror Stage_BaseTerrain2D (WarpCellSize=16, BilinearSample helper).
-- Prior resolution (Phase G): `MaskMorphologyOps2D` added; `Stage_Morphology2D` produces `LandCore` and
-  `CoastDist`. `LandCore ⊆ LandInterior ⊆ Land`. `CoastDist` = BFS distance from `LandEdge` inward.
-  `MapLayerId.LandCore = 11` (COUNT → 12), `MapFieldId.CoastDist = 2` (COUNT → 3). No RNG consumption.
+- Phase H4 — Animated Tiles implemented and smoke-test verified.
+  - `TilesetConfig.LayerEntry` (`Runtime/PCG/Adapters/Tilemap/TilesetConfig.cs`) extended with
+    optional `animatedTile` (`TileBase`) field. `ToLayerEntries()` priority updated:
+    `enabled + animatedTile → animatedTile`; `enabled + tile → tile`; both-null or disabled → null.
+    Fully backward compatible; existing `.asset` files unaffected (new field defaults to null).
+  - `PCGMapTilemapVisualization.ComputeTilesetConfigHash()` extended to include `animatedTile`
+    InstanceID per entry in the FNV-1a loop. Inspector edits to animated tile slots now trigger
+    real-time rebuild on the same frame, matching static tile and enabled-toggle behavior.
+  - No asmdef changes: `animatedTile` is typed as `TileBase` (engine base type); `AnimatedTile`
+    from 2D Tilemap Extras is assigned to the slot in the Inspector at edit time.
+  - 3 new EditMode tests green (`TilesetConfigTests` total: 17):
+    `DefaultLayers_AllAnimatedTilesNull`,
+    `ToLayerEntries_AnimatedTileWinsOverStaticTile`,
+    `ToLayerEntries_AnimatedTileNull_FallsBackToStaticTile`.
+    All pre-existing tests unchanged.
+  - Pure adapter/sample-side. No new MapLayerId, MapFieldId, or runtime stage contracts.
+    Adapters-last invariant preserved.
+- Prior resolution (Phase H3): `MapGenerationPreset` SO + `TilesetConfig` SO.
+  Four components patched with override-at-resolve preset slot. Two new asmdefs:
+  Islands.PCG.Samples.Shared + Islands.PCG.Samples. 12 EditMode tests green.
+  H3 post-merge fixes: null-means-skip in ToLayerEntries(); ComputeTilesetConfigHash() added;
+  explicit LayerEntry.layerId field; visual priority order in BuildDefaultLayers().
+- Prior resolution (Phase H2d): `ProceduralTileEntry` + `ProceduralTileFactory` (white-sprite cache,
+  `BuildPriorityTable`, `ClearCache`). `PCGMapTilemapVisualization` patched: `useProceduralTiles`
+  toggle, `ProceduralTileEntry[] proceduralColorTable`, `proceduralFallbackColor`, FNV-1a dirty hash,
+  three `[ContextMenu]` palette presets (Classic/Prototyping/Twilight). 13 EditMode tests green.
+  Smoke tests passed. Adapters-last preserved.
+- Prior resolution (Phase H2c): `PCGMapTilemapVisualization` `[ExecuteAlways]` MonoBehaviour.
+  Dirty tracking on all tunables; `MapContext2D` kept `Persistent`; FNV-1a priority table hash;
+  console hash log (seed + tilesStamped). `Islands.PCG.Adapters.Tilemap.asmdef` gains
+  `Unity.Mathematics`. No new runtime contracts.
+- Prior resolution (Phase H2b): Tilemap Adapter implemented and test-gated (10 tests green).
+  `TilemapAdapter2D` static class, `TilemapLayerEntry` serializable struct, `PCGMapTilemapSample`
+  MonoBehaviour. Separate `Islands.PCG.Adapters.Tilemap.asmdef`.
+- Prior resolution (Phase H2): `MapDataExport` and `MapExporter2D` implemented and test-gated
+  (14 tests). Managed snapshot of `MapContext2D`; adapters-last; deterministic.
+- Prior resolution (Phase H1): `PCGMapCompositeVisualization` (sample-side). CPU Texture2D
+  composite of all active layers via fixed priority table. `CompositeLayerSlot` struct.
+  Optional scalar overlay (Height / CoastDist). No new MapLayerId/MapFieldId.
+- Prior resolution (Phase H): `PCGMapVisualization` patched with `PCGViewMode` enum; scalar
+  field view mode (Height/CoastDist); per-layer preset ON colors. No new MapLayerId/MapFieldId.
+- Prior resolution (Phase F2c): Arbitrary Shape Input implemented and test-gated.
+  `MapShapeInput` struct; `MapInputs` extended (backward compatible). `Stage_BaseTerrain2D`
+  branches on `HasShape`. F2b goldens unchanged. F2c goldens locked.
+- Prior resolution (Phase F2b): `Stage_BaseTerrain2D` reformed: ellipse + domain-warp silhouette.
+  Two new `MapTunables2D` fields: `islandAspectRatio`, `warpAmplitude01`.
+  All F2–G golden hashes re-locked. Phase G goldens locked for first time.
+- Prior resolution (Phase G): `MaskMorphologyOps2D`; `Stage_Morphology2D` produces `LandCore`
+  and `CoastDist`. `MapLayerId.LandCore = 11` (COUNT → 12), `MapFieldId.CoastDist = 2` (COUNT → 3).
 
 ## What the roadmap redesign pass resolved (2026-04-02)
 - Phase F2b added to roadmap and immediately implemented: organic island shape reform (ellipse + domain warp).
 - Phase F2c — Arbitrary Shape Input: implemented and test-gated. `MapShapeInput` companion struct;
   optional shape-input branch in `Stage_BaseTerrain2D`; F2b path and goldens unchanged.
 - Archipelago support intent explicitly noted under Phase J (Voronoi regions) and Phase K (Plate Tectonics) as Level 3 of the island shape vision.
+- Phase H2 — Data Export / Map Adapters added to roadmap after Phase H.
+  Phase H2 is the natural completion of the "Adapters" half of Phase H's original intent;
+  inserted before Phase I so game integration can begin without waiting for the full pipeline.
 
 ## What is not settled yet
 - No unresolved migration batch remains for the reviewed snapshot corpus.
 - Open design questions recorded in the roadmap: river representation (mask vs. flow-accumulation field), lake modeling (distinct layer vs. enclosed ShallowWater), biome output format.
 - `MapFieldId.Moisture` write ownership confirmed: Phase M.
 - `MapLayerId.Paths` write ownership confirmed: Phase O.
-- `CoastDist` ScalarField2D visualization is not yet supported in the lantern (shows all-OFF); verified via golden tests only. Governed visualization of scalar fields is a Phase H concern.
+- Scalar field normalization range (scalarMin/scalarMax) is inspector-settable but not auto-ranged; CoastDist range varies by map size and CoastDistMax tunable.
 
 ## Immediate next focus
-Phase H — Extract + Adapters.
-See `planning/active/PCG_Roadmap.md` for the full sequence.
+Phase H5 — Multi-layer Tilemap & Collider Integration.
+Adapter-side extension separating pipeline layers across multiple stacked Unity Tilemaps on the
+same Grid, enabling transparency overlays and dedicated physics layers:
+- Base layer (opaque): DeepWater / ShallowWater / Land / LandCore / LandEdge
+- Overlay layer (transparency): Vegetation / HillsL1 / HillsL2 / Stairs
+- Collider layer (invisible, physics only): non-walkable cells (HillsL2 + water)
+- `TilemapAdapter2D` new `ApplyLayered()` overload accepting a layer-group-to-Tilemap descriptor.
+- Auto-setup `TilemapCollider2D` + `CompositeCollider2D` on the collider Tilemap.
+- Pure adapter/sample-side. No new runtime contracts or MapLayerId/MapFieldId entries.
+See `planning/active/PCG_Roadmap.md`.
 
 ## Why Batch 7 closed the current hardening pass
 Batch 2 established active PCG authority.

@@ -1,17 +1,15 @@
 {
-    "name": "Islands.PCG.Tests.EditMode",
-    "rootNamespace": "",
+    "name": "Islands.PCG.Samples",
+    "rootNamespace": "Islands.PCG.Samples",
     "references": [
+        "Islands.Runtime",
         "Islands.PCG.Runtime",
-        "Islands.PCG.Adapters.Tilemap",
         "Islands.PCG.Samples.Shared",
-        "Islands.PCG.Samples",
         "Unity.Mathematics",
         "Unity.Collections",
-        "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner"
+        "Unity.Burst"
     ],
-    "includePlatforms": [ "Editor" ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
@@ -19,6 +17,5 @@
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": false,
-    "testAssemblies": true
+    "noEngineReferences": false
 }

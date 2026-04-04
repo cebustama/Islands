@@ -1,5 +1,289 @@
 # Changelog — SSoT
 
+## 2026-04-04 (Phase H4 — Animated Tiles)
+- Phase H4 — Animated Tiles implemented and smoke-test verified.
+- `TilesetConfig.LayerEntry` struct (`Runtime/PCG/Adapters/Tilemap/TilesetConfig.cs`) extended:
+  - New field `animatedTile` (`TileBase`, default null). Typed as `TileBase` so `AnimatedTile`
+    from 2D Tilemap Extras is accepted at the Inspector slot without a compile-time asmdef
+    reference to the Extras package.
+  - `ToLayerEntries()` tile resolution updated to three-way priority:
+      enabled + animatedTile assigned → emit animatedTile
+      enabled + tile assigned        → emit tile
+      enabled + both null            → emit null (skipped)
+      disabled                       → emit null (skipped)
+  - Backward compatible: existing `.asset` files and all call sites unchanged; `animatedTile`
+    defaults to null on deserialization.
+  - `BuildDefaultLayers()` explicitly initializes `animatedTile = null` alongside existing fields.
+  - Class summary updated with Phase H4 note.
+- `PCGMapTilemapVisualization.ComputeTilesetConfigHash()` extended:
+  - `animatedTile.GetInstanceID()` (defaulting to 0 when null) added as an extra FNV-1a round
+    per layer entry, immediately after the static tile round.
+  - Inspector edits to animated tile slots now trigger real-time rebuild on the next frame,
+    matching the existing behavior for tile, enabled, layerId, and fallback fields.
+  - Per-frame cost remains O(MapLayerId.COUNT) = 12 iterations — negligible.
+  - Method comment updated; class summary updated with Phase H4 note.
+- No asmdef changes required. No new MapLayerId, MapFieldId, or runtime stage contracts.
+  Adapters-last invariant preserved.
+- 3 new EditMode tests green (`TilesetConfigTests.cs`, total: 17):
+  - `DefaultLayers_AllAnimatedTilesNull` — default state guard.
+  - `ToLayerEntries_AnimatedTileWinsOverStaticTile` — animated tile precedence contract.
+  - `ToLayerEntries_AnimatedTileNull_FallsBackToStaticTile` — backward-compatible fallback.
+  Tests use `ScriptableObject.CreateInstance<Tile>()` (engine base type, no Extras dependency).
+  All pre-existing 14 tests unchanged.
+- `PCG_Roadmap.md` updated: Phase H4 marked Done; Phase H5 marked Next.
+- `CURRENT_STATE.md` updated: H4 recorded as resolved; immediate next focus set to Phase H5.
+
+## 2026-04-04 (Phase H3 — Post-merge fixes)
+- TilesetConfig.ToLayerEntries() bug fix:
+  Unassigned/disabled entries now emit null tile instead of fallbackTile, matching
+  the TilemapAdapter2D null-means-skip contract. fallbackTile is the per-cell adapter
+  fallback only, not a per-entry tile. Root cause: high-priority subset layers
+  (LandCore, LandEdge, etc.) were overwriting their parent layer tile (Land) with the
+  fallback, making all land appear as water when fallbackTile was assigned.
+- TilesetConfig real-time dirty detection:
+  Added ComputeTilesetConfigHash() to PCGMapTilemapVisualization — FNV-1a over
+  (layerId int + tile InstanceID + enabled bool) × COUNT + fallback InstanceID.
+  Detects tile swaps, enabled-toggles, layerId changes, and fallback edits made
+  directly to the SO asset while assigned. Now matches MapGenerationPreset's
+  real-time field-edit behavior.
+- TilesetConfig.LayerEntry explicit layerId field:
+  Added public MapLayerId layerId to LayerEntry. LayerId is now stored explicitly
+  per entry, decoupled from array position. Reordering entries in the Inspector
+  changes stamp priority without scrambling the LayerId-to-tile mapping.
+  BuildDefaultLayers() now uses visual priority order (low→high):
+    DeepWater → ShallowWater → Land → LandInterior → LandCore → Vegetation
+    → HillsL1 → HillsL2 → Stairs → LandEdge → Walkable → Paths
+  Hills appear after Vegetation so mountain tiles correctly overwrite forest tiles.
+  (Previously HillsL1=3 < Vegetation=7 by MapLayerId integer, causing Vegetation
+  to overwrite Hills — visually wrong for overlapping cells.)
+- TilesetConfigTests updated: new tests for visual priority order, explicit layerId
+  contract, and fallbackTile-not-propagated-to-entries regression gate.
+- ComputeTilesetConfigHash() updated to include layerId in the FNV-1a hash.
+- Migration note: existing TilesetConfig .asset files need their layerId field
+  re-assigned per entry after the script update (Unity serializes new fields as
+  default=0=Land). Recommend deleting and recreating the asset to get correct defaults.
+
+## 2026-04-04 (Phase H3)
+- Phase H3 — Sample Infrastructure (Presets & Configuration) implemented and smoke-test verified.
+- New `MapGenerationPreset` ScriptableObject (`Runtime/PCG/Samples/Presets/MapGenerationPreset.cs`):
+  - Fields: seed (uint), resolution (int), stage toggles (Hills/Shore/Veg/Traversal/Morphology),
+    F2 tunables (islandRadius01, waterThreshold01, islandSmoothFrom01, islandSmoothTo01,
+    islandAspectRatio, warpAmplitude01), noise (noiseCellSize, noiseAmplitude, quantSteps),
+    clearBeforeRun. `[CreateAssetMenu]` under Islands/PCG/Map Generation Preset.
+  - `ToTunables()` produces a `MapTunables2D` from shape fields; MapTunables2D clamps/orders values.
+  - Default field values match the component defaults (noiseAmplitude=0.18f, quantSteps=1024,
+    noiseCellSize=8, seed=1u, resolution=64, all stage toggles=true, islandAspectRatio=1.0,
+    warpAmplitude01=0.0).
+- New `TilesetConfig` ScriptableObject (`Runtime/PCG/Adapters/Tilemap/TilesetConfig.cs`):
+  - `LayerEntry` serializable struct: label (string) + TileBase tile + bool enabled.
+  - `layers LayerEntry[]` array initialized to MapLayerId.COUNT entries with default labels.
+  - `fallbackTile TileBase`: used for disabled entries or entries with no tile assigned.
+  - `ToLayerEntries()`: converts to `TilemapLayerEntry[]` for TilemapAdapter2D.Apply.
+    Returns null if layers.Length != MapLayerId.COUNT and logs a warning; caller falls back
+    to its inline array. Tile resolution per entry: enabled+tile→tile; enabled+no tile→fallback;
+    disabled→fallback.
+  - `[CreateAssetMenu]` under Islands/PCG/Tileset Config.
+- Architecture improvement (required for thin shared asmdef approach):
+  - New `Islands.PCG.Samples.Shared.asmdef` at `Runtime/PCG/Samples/Presets/`:
+    references Islands.PCG.Runtime only; contains MapGenerationPreset.cs.
+  - New `Islands.PCG.Samples.asmdef` at `Runtime/PCG/Samples/`:
+    references Islands.Runtime + Islands.PCG.Runtime + Islands.PCG.Samples.Shared + math/collections/burst.
+    Covers PCGMapVisualization, PCGMapCompositeVisualization, PCGDungeonVisualization,
+    PCGMaskVisualization, PCGMaskPaletteController, MaskGrid2DBooleanOpsSmokeTest.
+    Islands.PCG.Runtime is now clean of sample-side code; no scene references broken.
+  - `Islands.PCG.Adapters.Tilemap.asmdef` updated: adds Islands.PCG.Samples.Shared reference.
+  - `Islands.PCG.Tests.EditMode.asmdef` updated: adds Islands.PCG.Samples.Shared +
+    Islands.PCG.Samples references.
+- Four visualization/sample components patched (override-at-resolve pattern):
+  - `PCGMapVisualization.cs`: preset slot added; effective values resolved at top of
+    UpdateVisualization(); CacheParams() caches effective values; ParamsChanged() compares
+    effective values + preset reference. Resolution excluded (controlled by base Visualization class).
+  - `PCGMapCompositeVisualization.cs`: same pattern; resolution IS overridable from preset.
+  - `PCGMapTilemapVisualization.cs`: preset slot + tilesetConfig slot; tile resolution priority:
+    Procedural > TilesetConfig.ToLayerEntries() > inline priorityTable.
+    _lastTilesetConfig tracked by reference; SO field edits do not auto-refresh (documented in tooltip).
+    Three `[ContextMenu]` palette presets (Classic/Prototyping/Twilight) preserved from H2d.
+  - `PCGMapTilemapSample.cs`: preset slot + tilesetConfig slot; effective values resolved at
+    top of Generate(); TilesetConfig.ToLayerEntries() ?? priorityTable fallback pattern.
+- Recommended asset storage conventions established:
+  - MapGenerationPreset .asset files → Runtime/PCG/Samples/Presets/
+  - TilesetConfig .asset files       → Runtime/PCG/Samples/PCG Map Tilemap/Tilesets/
+- 12 new EditMode tests green: 8 in MapGenerationPresetTests (defaults, ToTunables, clamping,
+  auto-ordering), 4 in TilesetConfigTests (default length/labels/enabled, ToLayerEntries shape,
+  LayerId mapping, disabled entry, mismatch guard).
+  All pre-existing tests unchanged.
+- No new MapLayerId, MapFieldId, or runtime stage contracts. Adapters-last invariant preserved.
+- Smoke tests passed: preset swap triggers map regeneration with correct console hash;
+  TilesetConfig swap updates tilemap tiles; null slots correctly fall back to inline fields.
+- `PCG_Roadmap.md` updated: Phase H3 marked Done; Phase H4 marked Next. Phase H2d section body
+  corrected from planning text to implementation facts.
+- `CURRENT_STATE.md` updated: H3 recorded as resolved; immediate next focus set to Phase H4.
+
+## 2026-04-04 (Phase H2d)
+- Phase H2d — Procedural Tile Generation implemented and smoke-test verified.
+- New `ProceduralTileEntry` `[Serializable]` struct (`Runtime/PCG/Adapters/Tilemap/ProceduralTileEntry.cs`):
+  - Maps one `MapLayerId` to a solid `UnityEngine.Color`. Priority is positional (low→high),
+    matching `TilemapLayerEntry` semantics.
+- New `ProceduralTileFactory` static class (`Runtime/PCG/Adapters/Tilemap/ProceduralTileFactory.cs`):
+  - `GetOrCreate(Color)`: returns a cached runtime `Tile` (ScriptableObject). Backing sprite is a
+    shared white 1×1 `Texture2D` (`FilterMode.Point`); `Tile.color` carries the tint. Cache key
+    is `Color32` (avoids float-equality edge cases).
+  - `BuildPriorityTable(ProceduralTileEntry[])`: converts a color table into a
+    `TilemapLayerEntry[]` for `TilemapAdapter2D.Apply`. Null/empty input → empty array (never null).
+  - `ClearCache()`: releases all cached tiles and the shared sprite via `DestroyImmediate`.
+    Safe to call on an empty cache. Domain reload wipes the static cache automatically.
+- `PCGMapTilemapVisualization` patched (`Runtime/PCG/Adapters/Tilemap/PCGMapTilemapVisualization.cs`):
+  - New `[Header("Procedural Tiles")]` Inspector section: `useProceduralTiles` bool toggle,
+    `ProceduralTileEntry[] proceduralColorTable`, `Color proceduralFallbackColor` (default dark grey).
+  - When `useProceduralTiles` is true, the pre-authored Priority Table and Fallback Tile are
+    bypassed; `ProceduralTileFactory.BuildPriorityTable` + `GetOrCreate` resolve the active table.
+  - Dirty tracking extended: FNV-1a hash (`ComputeProceduralHash`) over LayerId int + RGBA bytes;
+    fallback Color compared directly. Three new `last*` cache fields.
+  - Console log gains `proceduralTiles=` field.
+  - Three `[ContextMenu]` palette presets (one-click color table population from the Inspector):
+    - **Procedural Palette / Classic (Natural)**: earthy navy, steel blue, grass green, tan, brown,
+      forest green, sandy yellow, olive, deep olive.
+    - **Procedural Palette / Prototyping (Debug)**: high-contrast saturated hues (blue, cyan,
+      green, yellow, orange, magenta, white, red, dark red) — maximally distinct per layer.
+    - **Procedural Palette / Twilight (Moody)**: deep purples, teals, and warm gold accents.
+  - Private helpers `Entry(id, hex)` and `Hex(hex)` (via `ColorUtility.TryParseHtmlString`).
+  - `TilemapAdapter2D` unchanged. Adapters-last invariant preserved.
+- 13 EditMode tests in `ProceduralTileFactoryTests`
+  (`Tests/EditMode/PCG/Adapters/Tilemap/ProceduralTileFactoryTests.cs`):
+  - Cache identity (same color → same instance; different colors → different instances;
+    Color32-equal values share slot).
+  - Tile properties (non-null sprite, correct Color32 channel fidelity, Tile type).
+  - BuildPriorityTable (null/empty guards, LayerId order, all tiles non-null,
+    same-color entries share instance).
+  - ClearCache (fresh instance after clear, multiple calls safe, empty cache safe).
+- No new `MapLayerId`, `MapFieldId`, or runtime stage contracts. No asmdef changes.
+- Smoke tests passed: baseline sanity, mode toggle (art ↔ procedural, no errors), LandCore
+  priority cross-check (dark olive interior only, not overwriting land), seed variation,
+  all three palette presets verified in the Game Window.
+- `PCG_Roadmap.md` updated: Phase H2d marked Done; Phase H3 marked Next.
+- `CURRENT_STATE.md` updated: H2d recorded as resolved; immediate next focus set to Phase H3.
+
+## 2026-04-03 (Phase H2c)
+- Phase H2c — Live Tilemap Visualization implemented and smoke-test verified.
+- New `PCGMapTilemapVisualization` component (`Runtime/PCG/Adapters/Tilemap/PCGMapTilemapVisualization.cs`):
+  - `[ExecuteAlways]` MonoBehaviour; regenerates in Editor without entering Play mode.
+  - Full Inspector: Tilemap target, seed, resolution, stage toggles (Hills/Shore/Veg/Traversal/Morphology),
+    all `MapTunables2D` fields (islandRadius01, waterThreshold01, islandSmoothFrom01, islandSmoothTo01,
+    islandAspectRatio, warpAmplitude01, noiseCellSize, noiseAmplitude, quantSteps),
+    flipY, clearBeforeRun, `TilemapLayerEntry[]` priorityTable, fallbackTile.
+  - Dirty tracking on all fields: per-float `Mathf.Approximately`, per-int/bool `!=`,
+    TileBase object identity (`!=`), FNV-1a hash over priority table entries (LayerId int + tile InstanceID).
+  - `MapContext2D` allocated `Persistent`, kept alive between runs, reallocated only on resolution change.
+    Disposed in `OnDisable`.
+  - Per-rebuild: `MapPipelineRunner2D.Run` → `MapExporter2D.Export` → `TilemapAdapter2D.Apply`.
+  - Console log on each rebuild: `seed`, `tilesStamped/total`, stage flags, flipY.
+  - `BaseTerrainStage_Configurable` private nested class (sync note: must stay bit-identical to
+    `PCGMapVisualization` and `PCGMapCompositeVisualization` copies).
+  - Coexists with `PCGMapTilemapSample`; same asmdef (`Islands.PCG.Adapters.Tilemap`).
+- `Islands.PCG.Adapters.Tilemap.asmdef` updated: `"Unity.Mathematics"` added to references array.
+  Required by `BaseTerrainStage_Configurable` (`math`, `float2`, `NativeArray` math ops).
+- No new `MapLayerId`, `MapFieldId`, or runtime stage contracts. Adapters-last invariant preserved.
+- Smoke tests passed: baseline sanity, stage isolation (HillsL1), morphology cross-check (LandCore
+  priority ordering confirmed), seed variation, flipY mirror.
+- LandCore priority note confirmed: must be placed above Land and below Vegetation in the priority
+  table. Placing it last causes it to overwrite all other land features.
+- `PCG_Roadmap.md` updated: Phase H2c marked Done; Phase H2d marked Next.
+- `CURRENT_STATE.md` updated: H2c recorded as resolved; immediate next focus set to Phase H2d.
+
+## 2026-04-03 (Phase H2)
+- Phase H2 — Data Export / Map Adapters implemented and test-gated.
+- New `MapDataExport` sealed class (`Runtime/PCG/Layout/Maps/MapDataExport.cs`):
+  - Managed snapshot of a completed `MapContext2D`. Produced by `MapExporter2D.Export`.
+  - Holds `bool[]` per created layer and `float[]` per created field (row-major, index = x + y * Width).
+  - Absent slots (layer/field not created in the run) stored as null; `HasLayer`/`HasField` guards.
+  - Access: `HasLayer`, `GetLayer`, `GetCell`; `HasField`, `GetField`, `GetValue`.
+  - `GetCell` and `GetValue` throw `ArgumentOutOfRangeException` on OOB coordinates.
+  - `GetLayer`/`GetField` throw `InvalidOperationException` on absent slot.
+  - Lifetime: independent of source context; snapshot survives `ctx.Dispose()`.
+  - `internal` constructor; instantiation only via `MapExporter2D`.
+- New `MapExporter2D` static class (`Runtime/PCG/Layout/Maps/MapExporter2D.cs`):
+  - Adapters-last: read-only adapter; never writes to the context.
+  - Enumerates all `MapLayerId` and `MapFieldId` values; exports all present ones.
+  - Layer copy: row-major scan via `MaskGrid2D.GetUnchecked(x, y)`.
+  - Field copy: flat `NativeArray<float>` index scan via `ScalarField2D.Values[j]`.
+  - Returns a `MapDataExport` with width, height, seed, and all populated slots.
+  - Deterministic: same context state ⇒ identical export output.
+  - Extensible: later phases that add new layers/fields are automatically exported with no adapter changes.
+- Key decisions recorded:
+  - Output type: managed class (`bool[][]` / `float[][]`), not struct, not ScriptableObject.
+    Rationale: headless, Unity-free, directly testable; class avoids copy-by-value of large arrays.
+  - Scope: all-present export (not a declared subset). Extensible by construction.
+  - Tilemap adapter: deferred to Phase H2b (separate slice; requires Unity.Tilemaps dependency).
+  - Static adapter: context is all state needed; no streaming or instance required at this stage.
+- New `MapExporter2DTests` (14 tests, `Runtime/PCG/Tests/EditMode/Maps/MapExporter2DTests.cs`):
+  - Empty-context export: all layers/fields absent, correct width/height/seed/length.
+  - Layer round-trip fidelity: diagonal pattern, all-ones, all-zeros.
+  - Unrelated layer absent after single-layer export.
+  - Field round-trip fidelity: gradient pattern, absent field.
+  - Determinism: two exports from same context state produce identical arrays.
+  - Snapshot independence: post-export context mutation does not affect snapshot values.
+  - Guard paths: null context, absent layer GetLayer, absent field GetField, OOB GetCell, OOB GetValue.
+- No new `MapLayerId`, `MapFieldId`, or runtime stage contracts. No PCGMapVisualization patch.
+  Adapters-last invariant preserved: `MapExporter2D` is a pure read adapter.
+- Smoke test: no visual smoke test required (no new MaskGrid2D layer written).
+  Optional console check: `Debug.Log` of exported layer/field counts and a single cell spot-check.
+  Expected full-pipeline output: `layers=10, fields=2` (Paths and Moisture not yet written).
+- `PCG_Roadmap.md` updated: Phase H2 marked Done; Phase H2b added as Next.
+- `CURRENT_STATE.md` updated: Phase H2 recorded as resolved; immediate next focus set to Phase H2b.
+- `map-pipeline-by-layers-ssot.md` updated: boundary advanced to Phase H2; adapter contracts and surface entry added.
+
+## 2026-04-02 (Phase H1)
+- Phase H1 — Composite Map Visualization implemented (sample-side, smoke-test verified).
+- New `PCGMapCompositeVisualization.cs` (`Runtime/PCG/Samples/PCG Map/`).
+- Composites all active pipeline layers into a single `Texture2D` via CPU `SetPixels32`.
+  One cell at a time; per-cell color determined by a fixed priority table (low → high,
+  later entries overwrite earlier):
+    DeepWater → ShallowWater → Land → LandCore → Vegetation → HillsL1 → HillsL2
+    → Stairs → LandEdge
+  LandCore is positioned above Land but below all terrain features, so it tints the
+  deep interior (teal) while Vegetation, Hills, Stairs, and LandEdge render on top.
+- Layer configuration uses a `[Serializable] CompositeLayerSlot` struct (label + color +
+  enabled) replacing two parallel arrays, so the Inspector shows each layer by name.
+- Optional multiplicative scalar-field tint overlay (Height or CoastDist); off by default.
+- Composite pixel hash (FNV-1a over Color32 array) logged to Console on each dirty rebuild;
+  use this as an informal visual golden baseline — no formal test gate required for
+  sample-side code.
+- Does NOT replace `PCGMapVisualization` (single-layer diagnostic lantern); both coexist.
+- No new `MapLayerId`, `MapFieldId`, or runtime stage contracts.
+- `BaseTerrainStage_Configurable` duplicated from `PCGMapVisualization` (sample-side;
+  sync note in both files; factoring out as `internal` deferred until a third consumer exists).
+- `PCG_Roadmap.md` updated: Phase H1 marked Done; Phase H2 marked Next.
+- `CURRENT_STATE.md` updated: Phase H1 recorded as resolved; immediate next focus confirmed H2.
+- `map-pipeline-by-layers-ssot.md` updated: boundary note, implemented surface, known limitations.
+
+## 2026-04-02 (Phase H)
+- Phase H — Extract + Adapters (visualization half) implemented.
+- `PCGMapVisualization.cs` patched with `PCGViewMode` enum and scalar field visualization:
+  - New `PCGViewMode` enum: `MaskLayer` (existing binary ON/OFF behavior), `ScalarField` (new).
+  - `viewMode` Inspector field selects the active mode.
+  - `viewField` (MapFieldId) + `scalarMin` / `scalarMax` Inspector fields govern scalar view.
+  - `PackFromFieldAndUpload` packs normalized field values into the existing GPU float buffer.
+    No shader changes required: existing lerp between maskOffColor/maskOnColor provides the ramp.
+  - Normalization: `saturate((v - scalarMin) / (scalarMax - scalarMin))`.
+    CoastDist recommended defaults: scalarMin=−1, scalarMax=20.
+    Height recommended defaults: scalarMin=0, scalarMax=1.
+  - `Moisture` (Phase M) and any unwritten field: shows all-low ramp (PackZerosAndUpload).
+  - Palette header renamed: "MaskLayer: OFF/ON — ScalarField: Low/High ramp".
+  - Layer preset colors: `useLayerPresetColors` toggle + `layerPresetOnColors Color[12]` array.
+    When enabled, maskOnColor is overridden per active viewLayer at display time (MPB only;
+    Inspector field unchanged). Color array edits do not trigger dirty detection; toggle the
+    field or change seed to refresh.
+  - Console log line updated to include `mode=` and `field=`.
+- `MapContext2D.cs` extended with additive `GetField(MapFieldId)` public method (mirrors the
+  existing `GetLayer` pattern). No contracts changed. No new MapLayerId/MapFieldId entries.
+- Phase H2 — Data Export / Map Adapters added to roadmap as the next planned slice (before Phase I).
+  Phase H2 completes the "Adapters" half of the original Phase H intent.
+- `PCG_Roadmap.md` updated: Phase H marked done; Phase H2 added as next; sequence updated.
+- `CURRENT_STATE.md` updated: Phase H recorded as resolved; CoastDist/Height visualization
+  limitations removed; immediate next focus set to Phase H2.
+- `map-pipeline-by-layers-ssot.md` updated: boundary advanced to Phase H2+; Phase H implemented
+  surface entry added; known limitations updated.
+
 ## 2026-04-02 (Phase F2c)
 - Phase F2c — Arbitrary Shape Input implemented and test-gated.
 - New `MapShapeInput` companion struct (`Runtime/PCG/Layout/Maps/MapShapeInput.cs`):
@@ -69,7 +353,6 @@
 - Added Phase G pipeline golden gate (`MapPipelineRunner2DGoldenGTests`).
 - Field hash uses FNV-1a over float bits (math.asuint), matching the spirit of MaskGrid2D.SnapshotHash64.
 - Patched `PCGMapVisualization` with `enableMorphologyStage` toggle and `stagesG` array.
-  CoastDist (ScalarField2D) is not yet visualizable via the lantern; shows all-OFF if selected.
 - Updated `PCG_Roadmap.md`:
   - Phase G marked done; entry expanded with implementation details.
   - Phase F2b added (planning only): island shape reform — domain warping, parameterized silhouettes, golden migration.

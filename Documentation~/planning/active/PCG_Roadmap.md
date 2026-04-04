@@ -29,8 +29,18 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase G: done
 - Phase F2b: done
 - Phase F2c: done
-- Phase H: next
+- Phase H: done
+- Phase H1: done
+- Phase H2: done
+- Phase H2b: done
+- Phase H2c: done
+- Phase H2d: done
+- Phase H3: done
+- Phase H4: done
+- Phase H5: next
+- Phase H6: later (planning only)
 - Phase I: later
+- Phase I2: later (planning only)
 - Phase J: later (planning only)
 - Phase K: later (planning / exploratory only)
 - Phase L: later (planning only)
@@ -127,18 +137,201 @@ This roadmap may mention those surfaces as planning dependencies or support infr
 - This is Level 2 of the island shape vision: arbitrary silhouettes as pipeline inputs.
 - Feeds into: Phase K (Plate Tectonics landmasses may use this to inject Voronoi-derived shapes).
 
-### Phase H — Extract + Adapters
-**Next.**
+### Phase H — Extract + Adapters (Visualization)
+**Done.**
 
-- Governed home for colored multi-layer visualization (per-layer color mapping).
-- Colored layer visualization is a sample/adapter enhancement and is not authoritative runtime.
-- It may be implemented earlier as a sample-side improvement during F5–F6 development without
-  waiting for Phase H, provided it does not introduce core runtime dependencies.
-- Phase H is also the natural place to govern scalar field visualization (e.g. CoastDist, Height
-  as a color ramp), which is currently not supported by the mask-first lantern.
+- `PCGMapVisualization` patched with `PCGViewMode` enum and scalar field visualization:
+  - `PCGViewMode` enum: `MaskLayer` (existing binary ON/OFF) / `ScalarField` (normalized color ramp).
+  - `viewMode` Inspector field selects active mode; `viewField` + `scalarMin`/`scalarMax` govern scalar view.
+  - `PackFromFieldAndUpload`: packs normalized scalar values into the existing GPU float buffer.
+    No shader changes — existing maskOffColor/maskOnColor lerp provides the ramp.
+  - Per-layer preset ON colors: `useLayerPresetColors` toggle + `layerPresetOnColors Color[12]` array.
+- `MapContext2D` extended with additive `GetField(MapFieldId)` method (mirrors `GetLayer`).
+- No new `MapLayerId` or `MapFieldId`. All changes are sample-side only.
+- Height and CoastDist are now directly visualizable in the lantern.
+
+### Phase H1 — Composite Map Visualization (Editor)
+**Done.**
+
+- New `PCGMapCompositeVisualization` sample component alongside the existing single-layer lantern.
+- Renders a full overworld-style map in the editor by compositing all active layers into a single
+  `Texture2D`, one cell at a time, using a priority-ordered color table.
+- Compositing priority (low → high, later entries overwrite earlier):
+  DeepWater → ShallowWater → Land → Vegetation → HillsL1 → HillsL2 → Stairs → LandEdge → LandCore
+  (exact order and colors to be finalized at implementation time; tuneable via Inspector).
+- Scalar fields (Height, CoastDist) optionally blended as tint overlays on top of the layer composite.
+- Pure sample-side; no runtime contract or stage changes. Adapters-last invariant preserved.
+- Does not replace the single-layer diagnostic lantern (`PCGMapVisualization`); both coexist.
+- Provides the "design iteration" view: tweak seed/tunables and immediately see a readable map.
+- Prerequisite for intuitive design work on all future phases (Biome coloring, POI markers, etc.).
+
+### Phase H2 — Data Export / Map Adapters
+**Done.**
+
+- Completes the "Adapters" half of the original Phase H intent (Phase H covered visualization only).
+- `MapDataExport` sealed class: managed snapshot of a completed `MapContext2D`.
+  Holds `bool[]` per created layer and `float[]` per created field (row-major, index = x + y * Width).
+  Lifetime independent of source context. Access via `HasLayer`/`GetLayer`/`GetCell` and
+  `HasField`/`GetField`/`GetValue`. Absent slots return null / throw with a clear message.
+- `MapExporter2D` static adapter: reads context, copies native → managed, returns `MapDataExport`.
+  Adapters-last: read-only, never writes to context. Exports all present layers/fields automatically.
+  Deterministic. Extensible: later phases (Biome, POI, Paths) are automatically exported.
+- 14 tests: empty export, layer/field round-trip fidelity, determinism, snapshot independence, guards.
+- Key decisions: managed class output (not struct/ScriptableObject); all-present scope; static adapter.
+- No new `MapLayerId`, `MapFieldId`, or runtime stage contracts. Adapters-last invariant preserved.
+
+### Phase H2b — Tilemap Adapter
+**Done.**
+
+- Natural extension of Phase H2. Provides the first fully playable game map from the pipeline output.
+- `TilemapLayerEntry` `[Serializable]` struct: maps one `MapLayerId` to one `TileBase` asset.
+- `TilemapAdapter2D` static adapter: reads `MapDataExport`, stamps a Unity `Tilemap` via a
+  caller-supplied `TilemapLayerEntry[]` priority table (rendering priority only; low→high;
+  last match per cell wins). Parameters: fallbackTile, clearFirst, flipY.
+  Absent layers and null tile entries silently skipped. Deterministic.
+- `PCGMapTilemapSample` sample MonoBehaviour: runs full pipeline on Start or Inspector context menu.
+  Exposes seed, resolution, tunables, priority table in Inspector. Calls Export → Apply.
+- Lives in `Runtime/PCG/Adapters/Tilemap/` under `Islands.PCG.Adapters.Tilemap.asmdef`
+  (separate from `Islands.PCG.Runtime` to keep headless core Unity.Tilemaps-free).
+- Scene: `Runtime/PCG/Samples/PCG Map Tilemap/PCG Map Tilemap.unity`.
+- 10 EditMode tests: null guards, empty table, priority resolution, missing layer, clearFirst,
+  flipY coordinate mirroring, determinism gate.
+- Adapters-last invariant preserved. No new MapLayerId/MapFieldId.
+- Key decisions resolved: caller-configurable priority table; separate asmdef; pre-authored tile
+  assets; static Apply + thin sample MonoBehaviour.
+
+### Phase H2c — Live Tilemap Visualization
+**Done.**
+
+- Natural evolution of `PCGMapTilemapSample` from "generate once on Start" to a live interactive
+  editor tool, matching the experience of `PCGMapCompositeVisualization`.
+- New `PCGMapTilemapVisualization` sample component alongside the existing `PCGMapTilemapSample`.
+- `[ExecuteAlways]`: regenerates in the Editor without entering Play mode, same pattern as
+  `PCGMapVisualization` and `PCGMapCompositeVisualization`.
+- Dirty tracking on all tunables: seed, resolution, all `MapTunables2D` fields,
+  stage toggles (Hills, Shore, Vegetation, Traversal, Morphology), flipY, priority table
+  (FNV-1a hash over LayerId + tile InstanceID), fallbackTile reference.
+- Full Inspector exposure: all customization options applied to a live Tilemap output.
+  Change any parameter → island regenerates immediately.
+- Context kept alive between runs (`Allocator.Persistent`; reallocated only on resolution change).
+- Console log on each rebuild: seed + tilesStamped count as informal regression baseline.
+- Lives in `Runtime/PCG/Adapters/Tilemap/` — same assembly as H2b. No new asmdef.
+- `Islands.PCG.Adapters.Tilemap.asmdef` gains `"Unity.Mathematics"` reference.
+- Smoke tests passed. LandCore priority ordering confirmed (must sit above Land, below Vegetation).
+- Pure sample-side. No new runtime contracts, no new MapLayerId/MapFieldId.
+- Coexists with `PCGMapTilemapSample`.
+
+### Phase H2d — Procedural Tile Generation
+**Done.**
+
+- `ProceduralTileEntry` `[Serializable]` struct: maps one `MapLayerId` to a solid `Color`.
+- `ProceduralTileFactory` static class: generates and caches runtime `Tile` assets from solid colors;
+  shared white 1×1 backing sprite (`FilterMode.Point`); `Color32` cache key.
+  `BuildPriorityTable` converts a `ProceduralTileEntry[]` into a `TilemapLayerEntry[]`.
+  `ClearCache()` releases all cached instances.
+- `PCGMapTilemapVisualization` patched: `useProceduralTiles` toggle, `ProceduralTileEntry[]
+  proceduralColorTable`, `proceduralFallbackColor`. FNV-1a dirty hash over color table.
+  Three `[ContextMenu]` palette presets: Classic (Natural), Prototyping (Debug), Twilight (Moody).
+- 13 EditMode tests green. Adapters-last preserved. No new MapLayerId/MapFieldId.
+
+### Phase H3 — Sample Infrastructure (Presets & Configuration)
+**Done.**
+
+- `MapGenerationPreset` ScriptableObject (`Runtime/PCG/Samples/Presets/MapGenerationPreset.cs`):
+  seed, resolution, stage toggles (Hills/Shore/Veg/Traversal/Morphology), all F2 tunables
+  (islandRadius01, waterThreshold01, islandSmoothFrom01, islandSmoothTo01, islandAspectRatio,
+  warpAmplitude01), noise settings (noiseCellSize, noiseAmplitude, quantSteps), clearBeforeRun.
+  `ToTunables()` produces a `MapTunables2D` from the preset's shape fields.
+- `TilesetConfig` ScriptableObject (`Runtime/PCG/Adapters/Tilemap/TilesetConfig.cs`):
+  one LayerEntry (label + TileBase + enabled toggle) per MapLayerId + fallback TileBase.
+  `ToLayerEntries()` converts to `TilemapLayerEntry[]` for TilemapAdapter2D.
+  Guards on length mismatch; logs warning and returns null (caller falls back to inline array).
+- Both SOs use override-at-resolve pattern on all four visualization/sample components.
+  Inline fields remain active and backward compatible when slots are null.
+  Tile resolution priority: Procedural > TilesetConfig > inline priority table.
+- Architecture improvement: `Islands.PCG.Samples.Shared` asmdef (thin, MapGenerationPreset only)
+  + `Islands.PCG.Samples` asmdef (all PCG sample components). Islands.PCG.Runtime is now clean.
+- Recommended asset storage:
+  MapGenerationPreset .asset files → Runtime/PCG/Samples/Presets/
+  TilesetConfig .asset files       → Runtime/PCG/Samples/PCG Map Tilemap/Tilesets/
+- 12 EditMode tests green. No new MapLayerId/MapFieldId/runtime contracts. Adapters-last preserved.
+
+### Phase H4 — Animated Tiles
+**Done. Sequenced after Phase H3.**
+
+- `TilesetConfig.LayerEntry` extended with an optional `animatedTile` (`TileBase`) field.
+  Tile resolution priority in `ToLayerEntries()`: `enabled + animatedTile → animatedTile`;
+  `enabled + tile → tile`; `enabled + both null → null`; `disabled → null`.
+  Backward compatible: existing `.asset` files and all pre-H4 code paths are unaffected.
+- `PCGMapTilemapVisualization.ComputeTilesetConfigHash()` extended to include `animatedTile`
+  InstanceID per entry in the FNV-1a loop. Inspector edits to the animated tile slot now
+  trigger real-time rebuild, matching the existing static tile and enabled-toggle behavior.
+- Natural candidates: DeepWater (ocean waves), ShallowWater (coastal ripples), Stairs (shimmer).
+  No limit on which layers receive animated tiles — any `LayerEntry` accepts an `AnimatedTile`.
+- Requires 2D Tilemap Extras package (`com.unity.2d.tilemap.extras`), installed via Package
+  Manager. Asmdef changes not required: `animatedTile` is typed as `TileBase` (engine base type).
+- Tile import workflow: per `Documentation~/reference/tileset-import-guide.md`; sprite sheet
+  sliced into frames, frames assigned to `AnimatedTile` sprite array in Inspector.
+- 3 new EditMode tests green (total `TilesetConfigTests`: 17). Pure adapter/sample-side.
+  No new runtime contracts, no new MapLayerId/MapFieldId entries.
+
+### Phase H5 — Multi-layer Tilemap & Collider Integration
+**Next. Sequenced after Phase H4.**
+
+Separates pipeline layers across multiple stacked Unity Tilemaps on the same Grid, enabling
+transparency overlays and dedicated physics layers. Prerequisite for a physically navigable map.
+
+- **Multi-layer rendering**: separate Tilemaps per logical group on the same Grid:
+  - *Base layer* (opaque): DeepWater / ShallowWater / Land / LandCore / LandEdge
+  - *Overlay layer* (with transparency support): Vegetation / HillsL1 / HillsL2 / Stairs
+  - *Collider layer* (invisible, physics only): non-walkable cells (HillsL2 + water)
+  - Vegetation trees and hills render *over* the base terrain tile rather than replacing it,
+    matching the DW / classic JRPG aesthetic more faithfully and enabling visual layering.
+- **`TilemapAdapter2D` extension**: new `ApplyLayered()` overload accepting a descriptor that
+  maps each logical layer group to its target `Tilemap`. Adapters-last invariant preserved;
+  still reads `MapDataExport` only, never touches `MapContext2D`.
+- **Tilemap Collider integration**: auto-setup `TilemapCollider2D` + `CompositeCollider2D` on
+  the collider Tilemap, driven by the non-walkable mask (HillsL2 + water) from the export.
+  First step toward a physically navigable game map.
+- Design decisions to resolve at implementation time: exact layer grouping; transparency shader
+  requirements (URP Lit vs. Unlit); whether the collider tilemap is authored or generated.
+- Pure adapter/sample-side. No new runtime contracts or MapLayerId/MapFieldId entries.
+
+### Phase H6 — Rule Tiles / Context-aware Tile Selection
+**Later (planning only). Sequenced after Phase H5.**
+
+Replaces flat single-sprite tiles with context-aware variants that select the correct sprite based
+on neighbor tile types, the single largest visual quality jump available without changing the pipeline.
+
+- Unity's `RuleTile` (from 2D Tilemap Extras): define neighbor-matching rules per tile type;
+  Unity applies the correct sprite variant at stamp time.
+- Highest impact on: ShallowWater/Land boundary (beach corner and edge transitions), Vegetation
+  clusters (interior vs. edge vs. isolated tree), HillsL1/HillsL2 (slope directionality).
+- Requires additional sprite variants per tile type (e.g. DW-style corner and edge art for each
+  terrain type). Significant art-production dependency — deferred until art direction is settled.
+- `TilesetConfig` SO (Phase H3) extended with a `RuleTile` asset slot per layer entry.
+- Pipeline and adapter code changes are small; the art requirement dominates the schedule.
+- Pure adapter/sample-side. No new runtime contracts.
 
 ### Phase I
 Burst / SIMD upgrades
+
+### Phase I2 — GPU Shader Composite Visualization
+**Later (planning only). Depends on Phase I.**
+
+- GPU-based equivalent of the Phase H1 `Texture2D` composite, implemented as a custom shader
+  or ShaderGraph that receives all layer data as GPU buffers and blends per-cell colors on the GPU.
+- Motivation: the Phase H1 CPU `Texture2D` approach has a per-frame cost proportional to
+  map resolution; the GPU path eliminates the CPU readback and upload entirely.
+- Natural home under the existing PCG Map ShaderGraph / HLSL infrastructure (governed reference).
+- Sequenced after Phase I because: (a) Burst-optimized stage execution reduces the time the CPU
+  spends running the pipeline, and (b) the GPU buffer packing pattern from the existing lantern
+  is already proven — Phase I2 extends it to multi-layer composite rather than redesigning it.
+- Does not change runtime contracts or stage outputs; purely a rendering path upgrade.
+- The Phase H1 CPU composite remains available as a fallback for platforms without compute support.
+- Design questions to resolve at implementation time: per-layer buffer layout (one bool buffer
+  per layer vs. a packed bitmask buffer); shader blending strategy (priority switch vs. additive
+  tint); whether scalar field overlays (Height, CoastDist tint) are included in this phase.
 
 ### Phase J — Region Generation (static Voronoi)
 Planning only.
@@ -189,6 +382,9 @@ Planning only.
 - Produces biome classification outputs (new layer IDs or scalar field, design TBD).
 - Enables biome-aware downstream work: vegetation density, river likelihood, POI suitability.
 - Depends on: F4 (shore), F5 (vegetation layer as upstream context), optionally Phase J.
+- Downstream adapter extension: after Phase M, `TilesetConfig` (Phase H3) can be extended with
+  biome-conditional tile entries — same layer, different tile per biome region. Unlocks visually
+  distinct island regions (tropical, temperate, arid) from a single pipeline run.
 
 ### Phase N — World-Site / POI Placement
 Planning only.
