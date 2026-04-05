@@ -47,6 +47,7 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase M: later (planning only)
 - Phase N: later (planning only)
 - Phase O: later (planning only)
+- Phase W: later (planning / exploratory only)
 
 ## Documentary note on Layout Strategies
 Layout strategies are currently treated as a governed deep reference / staged support surface under PCG.
@@ -385,6 +386,97 @@ Planning only.
 - Downstream adapter extension: after Phase M, `TilesetConfig` (Phase H3) can be extended with
   biome-conditional tile entries — same layer, different tile per biome region. Unlocks visually
   distinct island regions (tropical, temperate, arid) from a single pipeline run.
+
+### Phase W — Hierarchical World-to-Local Generation (Zoom-In)
+Planning / exploratory only. Not implementation authority.
+
+Enables selecting a tile on an overworld map and generating a full-resolution local map
+parametrised by that tile's world-scale properties — the zoom-in pattern used by RimWorld
+and Dwarf Fortress. This is the architectural prerequisite for any game that distinguishes
+a world view from a playable local map.
+
+**What this enables:**
+A world tile carries a compact property set. When selected, those properties drive a local
+`MapContext2D` pipeline run, producing a meaningfully different map for each tile (coastal
+vs. inland, forested vs. arid, flat vs. hilly) while remaining fully deterministic.
+
+**`WorldTileContext` — the handoff struct:**
+Minimal property set a world tile must carry to parametrise local generation. Natural
+candidates based on the current pipeline:
+
+| Property | Source | Consumed by |
+|---|---|---|
+| `LocalSeed` | Derived from world coordinates + world seed | `MapInputs.seed` |
+| `ElevationEnvelope` | World-scale height field | `MapTunables2D` (waterThreshold, islandRadius) |
+| `ShorelineMask` | World-scale coast geometry | `MapShapeInput` (Phase F2c hook) |
+| `BiomeType` | Phase M biome classification | Stage enable/disable flags |
+| `HillinessIntensity` | World-scale elevation variance | Hills stage tunables |
+| `MoistureLevel` | Phase M / Phase L hydrology | `MapFieldId.Moisture` (Phase M) |
+
+Every property must be derivable deterministically from world tile coordinates and the
+world seed so that local maps regenerate identically at any time.
+
+**Architectural hook already in place:**
+`MapShapeInput` (Phase F2c) accepts an external mask that overrides the internal island
+silhouette. A coastal world tile can inject a shore mask derived from world-scale coast
+geometry directly into `Stage_BaseTerrain2D` without restructuring the pipeline.
+This is the primary integration point between world scale and local generation.
+
+**World map generation — two options (decision deferred):**
+
+*Option A — Pipeline at world scale:* The world map is itself a low-resolution
+`MapContext2D` (e.g. 64×64 or 128×128 tiles). The same stages run at world scale;
+each cell becomes a world tile. Architecturally clean; reuses all existing contracts.
+Requires the pipeline to be parametrizable across resolutions. Preferred long-term.
+
+*Option B — Noise-direct:* World tile properties (elevation, moisture, temperature,
+continentalness) are independent noise fields sampled at tile coordinates. No pipeline
+run at world scale. Simpler to prototype; less reusable. Suitable for early exploration.
+
+**Boundary matching:**
+Boundary matching between adjacent local maps (edges align correctly) is explicitly
+deferred. RimWorld does not solve this; DF solves it via shared regional constraint data.
+Option A's shared pipeline context makes boundary matching tractable in a later sub-phase.
+Implement zoom-in generation first without edge consistency; treat matching as Phase W2.
+
+**Open design decisions:**
+- Option A vs. Option B for world map generation.
+- World map resolution and coordinate system (grid of tiles, hex grid, Voronoi cells).
+- Whether world tile coordinates are the same grid as the Voronoi region graph (Phase J)
+  or a separate overlay — this decision must be made before Phase J is implemented.
+- Whether `WorldTileContext` is a struct passed to `MapInputs` or a new `IMapWorldContext`
+  interface layer.
+- Phase W2 (boundary matching) scope and timing — not in scope for Phase W.
+
+**Design compatibility requirements for earlier phases:**
+The following phases must be designed with Phase W in mind even though Phase W is
+implemented later:
+- **Phase J (Voronoi regions):** Region cells are the natural candidates for world tiles.
+  Phase J should produce region identity data in a format that a world tile lookup can consume.
+  Decide before implementing Phase J whether Voronoi cells are world tiles or only a driver
+  for local shape inputs.
+- **Phase K (Plate Tectonics):** Plate-derived elevation can become the `ElevationEnvelope`
+  property in `WorldTileContext`. The Phase F2c shape-input mechanism already supports this.
+- **Phase M (Biome Classification):** World-scale biome assignment is the natural source of
+  `BiomeType` and `MoistureLevel` in `WorldTileContext`. Phase M's output format should be
+  legible at world tile granularity.
+
+**Dependencies:**
+- Phase F2c (MapShapeInput) — already done; primary integration hook
+- Phase J (Voronoi regions) — world map structure
+- Phase M (Biome classification) — world tile properties (BiomeType, MoistureLevel)
+- Phase L (Hydrology) — optional; MoistureLevel source
+
+**Downstream:**
+- Phase N (POI Placement) — world tiles carry POI suitability hints; local generation
+  produces the map into which POIs are placed
+- Phase O (Paths) — world-scale path network connects world tiles; local maps expose
+  path entry points at tile edges
+
+**Recommended immediate action (pre-implementation):**
+Before Phase J is implemented, add a planning note to its design doc recording whether
+Voronoi cells and world tiles are the same concept or separate overlays. This decision
+is cheap to make now and expensive to change after Phase J is built.
 
 ### Phase N — World-Site / POI Placement
 Planning only.

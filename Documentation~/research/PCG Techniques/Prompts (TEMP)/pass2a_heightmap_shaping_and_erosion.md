@@ -1,15 +1,16 @@
-# Research Prompt — Pass 2: Terrain Generation and Landform Techniques
+# Research Prompt — Pass 2a: Heightmap Construction, Shaping, and Erosion
 
 You are a technical research assistant specialising in procedural content generation for games.
+This document will serve as a standalone implementation reference — the standard of completeness
+is: a developer reading each section should be able to implement the technique without consulting
+additional sources.
+
 The reader already understands noise functions (Perlin, fBm, ridged multifractal, domain warping)
 and scalar field composition — do not re-explain those. Do explain how terrain systems use them.
 
-The output standard: a developer reading each technique section should be able to implement it
-without consulting additional sources.
-
 ---
 
-## Techniques to cover, in this order
+## Scope — cover only these techniques, in this order
 
 1. Heightmap generation from noise
 2. Island and continent masks
@@ -17,10 +18,10 @@ without consulting additional sources.
 4. Cliffs and terraces
 5. Hydraulic erosion (particle/droplet)
 6. Thermal erosion
-7. River and drainage systems
-8. Cave generation (cellular automata, noise thresholding, agent tunnelling)
-9. Voxel terrain
-10. Marching cubes / dual contouring / surface nets
+
+Do NOT cover rivers and drainage systems, cave generation, voxel terrain, marching cubes,
+or any mesh extraction technique. Those are covered in Pass 2b.
+Do NOT cover biome systems, dungeon generation, WFC, or object placement.
 
 ---
 
@@ -44,14 +45,16 @@ changes between them and what the practical consequence is — not just that the
 the fix. If a failure mode has a recognized name, use it.
 
 **Combinations.** What does this technique receive from upstream stages and what does it
-produce for downstream stages? How does it connect to other techniques in this pass?
+produce for downstream stages? How does it connect to other techniques in this pass and to
+the river, cave, and voxel techniques in Pass 2b?
 
 ---
 
 ## Depth floor
 
-Techniques with more documented variants or failure modes will naturally be longer.
-Do not compress a technique to match the length of simpler ones.
+Hydraulic erosion has significantly more documented variant space than the shaping techniques —
+it will naturally be longer. Do not compress it to match simpler entries. Cliffs and terraces
+may be shorter if the available implementation-level documentation is thin — flag this honestly.
 
 ---
 
@@ -66,11 +69,8 @@ explicitly as "unconfirmed" before stating it. Flag gaps rather than filling the
 ## Priority sources
 
 Sebastian Lague (Hydraulic Erosion repo and video, Procedural Landmass series) ·
-Red Blob Games (terrain from noise, mapgen4) ·
 Hans Theobald Beyer (erosion paper) ·
-RogueBasin (CA caves) ·
-Paul Bourke (marching cubes) ·
-Eric Lengyel (Transvoxel) ·
+Red Blob Games (terrain from noise, mapgen4) ·
 Catlike Coding
 
 Where a primary source and a tutorial conflict, prefer the primary source and note
@@ -78,19 +78,20 @@ the discrepancy.
 
 ---
 
-## Closing sections (write these after all technique writeups)
-
-**Comparison — heightmap terrain vs voxel terrain (1–2 paragraphs).**
-What each produces, what it cannot produce, and the conditions under which each is appropriate.
-Be concrete — avoid "it depends" without a following criterion.
+## Closing sections (write these after all 6 technique writeups)
 
 **Comparison — particle erosion vs grid-based shallow water vs simple approximation (1–2 paragraphs).**
-Quality difference with a concrete visual example, implementation cost, and when each level
-of fidelity is appropriate.
+Quality difference with a concrete visual example, implementation cost, and the conditions
+under which each level of fidelity is appropriate. Note that full river simulation is covered
+in Pass 2b — this comparison focuses on erosion fidelity tradeoffs, not drainage networks.
 
-**Comparison — cellular automata caves vs noise caves vs agent tunnels (1–2 paragraphs).**
-How outputs differ visually and structurally, and what control each approach gives the designer.
+**Heightmap pipeline so far (numbered stage list + 1 short paragraph).**
+The typical stage order for the techniques in this pass — from raw noise to an eroded
+heightmap — what data flows between stages, and 3–5 common developer mistakes that occur
+in this portion of the pipeline. The full end-to-end pipeline including rivers, caves, and
+mesh extraction is covered at the close of Pass 2b.
 
-**End-to-end terrain pipeline (numbered stage list + 1 paragraph).**
-A typical generation order, what data flows between stages, and 3–5 common developer mistakes
-that cause incorrect or visually poor results.
+**Source landscape.**
+Group the best references for the techniques in this pass by type: primary paper, tutorial
+series, repository, interactive tool. For each entry, one sentence on what it is uniquely
+valuable for that others in the same category do not cover.

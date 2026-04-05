@@ -16,49 +16,61 @@ MonoBehaviour:
   - label: DeepWater
     layerId: 1
     tile: {fileID: 11400000, guid: 6f82491bb5fddb44ea4ed4b330233fd8, type: 2}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: ShallowWater
     layerId: 2
     tile: {fileID: 11400000, guid: bc30c7b7df7d3764b829f4a63c180881, type: 2}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: Land
     layerId: 0
     tile: {fileID: 11400000, guid: 12211b8df2efc954eb1754099a4ddaff, type: 2}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: LandInterior
     layerId: 10
     tile: {fileID: 0}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: LandCore
     layerId: 11
     tile: {fileID: 0}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: Vegetation
     layerId: 7
     tile: {fileID: 11400000, guid: 1643e2501fbee1a43ba1c5915a478d25, type: 2}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: HillsL1
     layerId: 3
     tile: {fileID: 11400000, guid: 8a1a2e2c9c1d5e84db3405901a14dd6b, type: 2}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: HillsL2
     layerId: 4
     tile: {fileID: 11400000, guid: 6fc387ef492aff74891bb87ae82f79e0, type: 2}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: Stairs
     layerId: 6
     tile: {fileID: 0}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: LandEdge
     layerId: 9
     tile: {fileID: 11400000, guid: b952eae3356f12241a46a5c6b6215b3b, type: 2}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: Walkable
     layerId: 8
     tile: {fileID: 0}
+    animatedTile: {fileID: 0}
     enabled: 1
   - label: Paths
     layerId: 5
     tile: {fileID: 0}
+    animatedTile: {fileID: 0}
     enabled: 1
   fallbackTile: {fileID: 0}
