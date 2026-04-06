@@ -1,4 +1,5 @@
-﻿using Unity.Mathematics;
+﻿using Islands.PCG.Fields;
+using Unity.Mathematics;
 
 namespace Islands.PCG.Layout.Maps
 {
@@ -14,6 +15,10 @@ namespace Islands.PCG.Layout.Maps
     /// J2 addition: heightRedistributionExponent.
     /// Consumed by Stage_BaseTerrain2D after height quantization, before land threshold.
     /// Default 1.0 = identity (pow(x, 1) == x); existing goldens unaffected.
+    ///
+    /// N2 addition: heightRemapSpline.
+    /// Piecewise-linear spline applied after J2 redistribution, before land threshold.
+    /// Default (null arrays) = identity; existing goldens unaffected.
     /// </summary>
     public readonly struct MapTunables2D
     {
@@ -24,7 +29,7 @@ namespace Islands.PCG.Layout.Maps
         /// <summary>Island size in [0..1] relative to min(width, height).</summary>
         public readonly float islandRadius01;
 
-        /// <summary>Water threshold in [0..1] � cells with Height >= this are Land.</summary>
+        /// <summary>Water threshold in [0..1] — cells with Height >= this are Land.</summary>
         public readonly float waterThreshold01;
 
         /// <summary>
@@ -71,12 +76,24 @@ namespace Islands.PCG.Layout.Maps
         public readonly float heightRedistributionExponent;
 
         // ------------------------------------------------------------------
+        // N2 addition
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Piecewise-linear spline applied to the Height field after pow() redistribution.
+        /// Provides arbitrary designer-tunable curve reshaping of elevation distribution.
+        /// Identity spline (or default) = no remapping; preserves existing goldens.
+        /// Consumed by Stage_BaseTerrain2D after J2 redistribution, before Land threshold.
+        /// </summary>
+        public readonly ScalarSpline heightRemapSpline;
+
+        // ------------------------------------------------------------------
         // Default
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Default tunables: circular island (aspect 1.0, no warp, no redistribution),
-        /// matching pre-J2 geometry. Suitable for all golden tests.
+        /// Default tunables: circular island (aspect 1.0, no warp, no redistribution,
+        /// no spline remap), matching pre-N2 geometry. Suitable for all golden tests.
         /// </summary>
         public static MapTunables2D Default => new MapTunables2D(
             islandRadius01: 0.45f,
@@ -85,7 +102,8 @@ namespace Islands.PCG.Layout.Maps
             islandSmoothTo01: 0.70f,
             islandAspectRatio: 1.00f,
             warpAmplitude01: 0.00f,
-            heightRedistributionExponent: 1.00f
+            heightRedistributionExponent: 1.00f,
+            heightRemapSpline: default
         );
 
         // ------------------------------------------------------------------
@@ -99,6 +117,7 @@ namespace Islands.PCG.Layout.Maps
         /// <param name="islandAspectRatio">Ellipse x/y ratio. 1.0 = circle. [0.25..4.0].</param>
         /// <param name="warpAmplitude01">Domain warp strength as fraction of min(w,h). [0..1].</param>
         /// <param name="heightRedistributionExponent">Height power-curve exponent. 1.0 = identity. [0.5..4.0].</param>
+        /// <param name="heightRemapSpline">Piecewise-linear height remap curve. default = identity (no remap).</param>
         public MapTunables2D(
             float islandRadius01,
             float waterThreshold01,
@@ -106,7 +125,8 @@ namespace Islands.PCG.Layout.Maps
             float islandSmoothTo01,
             float islandAspectRatio = 1.0f,
             float warpAmplitude01 = 0.0f,
-            float heightRedistributionExponent = 1.0f)
+            float heightRedistributionExponent = 1.0f,
+            ScalarSpline heightRemapSpline = default)
         {
             // Clamp and order all values deterministically (pure math, no RNG).
             float r = math.clamp(islandRadius01, 0f, 1f);
@@ -127,6 +147,10 @@ namespace Islands.PCG.Layout.Maps
             this.islandAspectRatio = aspect;
             this.warpAmplitude01 = warp;
             this.heightRedistributionExponent = redistExp;
+
+            // ScalarSpline is validated at its own construction time.
+            // default (null arrays) is a valid identity spline — no allocation needed.
+            this.heightRemapSpline = heightRemapSpline;
         }
     }
 }

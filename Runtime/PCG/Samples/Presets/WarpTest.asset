@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 60aa04ac40e5c564a883b9554fe066ea, type: 3}
   m_Name: WarpTest
   m_EditorClassIdentifier: Islands.PCG.Samples.Shared::Islands.PCG.Samples.MapGenerationPreset
-  seed: 137
+  seed: 597
   resolution: 64
   enableHillsStage: 1
   enableShoreStage: 1
@@ -30,4 +30,29 @@ MonoBehaviour:
   noiseCellSize: 8
   noiseAmplitude: 0.18
   quantSteps: 1024
+  heightRedistributionExponent: 1.183
+  heightRemapCurve:
+    serializedVersion: 2
+    m_Curve:
+    - serializedVersion: 3
+      time: 0
+      value: 0
+      inSlope: 1
+      outSlope: 1
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    - serializedVersion: 3
+      time: 1
+      value: 1
+      inSlope: 1
+      outSlope: 1
+      tangentMode: 34
+      weightedMode: 0
+      inWeight: 0
+      outWeight: 0
+    m_PreInfinity: 2
+    m_PostInfinity: 2
+    m_RotationOrder: 4
   clearBeforeRun: 1

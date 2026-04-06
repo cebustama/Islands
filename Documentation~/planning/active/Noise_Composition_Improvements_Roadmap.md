@@ -28,7 +28,7 @@ identifies which downstream phases consume each addition.
 | # | Technique | Current Status | Impact | Complexity |
 |---|-----------|---------------|--------|------------|
 | N1 | Power Redistribution | **Done (Phase J2)** | Medium | Trivial |
-| N2 | Spline Remapping | Not implemented | Very High | Low–Medium |
+| N2 | Spline Remapping | **Done (Phase N2)** | Very High | Low–Medium |
 | N3 | Ridged Multifractal (full Musgrave) | Partial (Turbulence wrapper only) | High | Medium |
 
 ### Sequencing rationale
@@ -77,6 +77,25 @@ resolved at implementation time — the math is identical regardless of which fi
 
 ## 4. N2 — Spline Remapping
 
+### Status: Done (Phase N2)
+
+Implemented as Phase N2. Design decisions resolved:
+
+- `ScalarSpline` readonly struct at `Runtime/PCG/Fields/ScalarSpline.cs` (piecewise-linear,
+  ~170 lines). Immutable, defensive-copy constructor, binary-search evaluation, `IsIdentity`
+  fast-path guard, `Identity`/`PowerCurve`/`FromAnimationCurve` factories.
+- `AnimationCurve` on `MapGenerationPreset` (`heightRemapCurve`), bridged to `ScalarSpline`
+  on `MapTunables2D` (`heightRemapSpline`) via `FromAnimationCurve(curve, 16)` in `ToTunables()`.
+- Coexists with J2 pow() redistribution (Option A: pow first, spline second).
+  Application order: quantize → pow() → spline → Land threshold.
+- Identity default preserves all existing golden hashes. `default(ScalarSpline)` has null
+  arrays, `IsIdentity` returns true, `Evaluate()` returns input unchanged — zero-cost path.
+- 22 new EditMode tests in `ScalarSplineTests.cs`.
+- `PCGMapTilemapVisualization` refactored: priority table removed, scalar field overlay
+  added (per-cell `Tilemap.SetColor` tint with auto-default ranges), custom Editor hides
+  preset-controlled fields when a MapGenerationPreset is assigned.
+- New `Islands.PCG.Editor` asmdef at `Editor/Inspectors/`.
+
 ### Why this matters
 
 Spline remapping is the technique with the highest impact-to-complexity ratio that Islands
@@ -117,71 +136,11 @@ Concretely, a spline remap is consumed by map stages that want to reshape a fiel
 using it. It is the same category of operation as `pow(height, exponent)` (Phase J2) but
 more general.
 
-### Proposed data structure
-
-```csharp
-/// <summary>
-/// Piecewise-linear or Catmull-Rom spline for scalar field remapping.
-/// Immutable after construction. Deterministic evaluation.
-/// </summary>
-public readonly struct ScalarSpline
-{
-    // Control points sorted by input value. Minimum 2 points.
-    // First point's input should be 0 (or the field's minimum).
-    // Last point's input should be 1 (or the field's maximum).
-    private readonly float[] inputs;   // sorted ascending
-    private readonly float[] outputs;  // corresponding output values
-
-    /// <summary>
-    /// Evaluate the spline at a given input value.
-    /// Values below the first control point clamp to the first output.
-    /// Values above the last control point clamp to the last output.
-    /// </summary>
-    public float Evaluate(float t) { /* piecewise lerp or Catmull-Rom */ }
-}
-```
-
-**Design decision — linear vs. cubic interpolation:**
-
-| Option | Pros | Cons |
-|--------|------|------|
-| Piecewise linear | Simple, fast, no overshoot, predictable | Visible kinks at control points; needs more points for smooth curves |
-| Catmull-Rom cubic | Smooth C1 curves from few points; fewer control points needed | Potential overshoot; slightly more complex; tangent computation |
-
-**Recommendation:** Start with piecewise linear. It is trivially correct, deterministic,
-and sufficient for the initial use cases (height redistribution, climate field shaping).
-Catmull-Rom can be added as a second interpolation mode later if smooth curves are needed.
-RimWorld uses piecewise linear (`SimpleCurve`) for all its remapping; Minecraft uses cubic
-splines. Either works.
-
-### Integration points
-
-**As a field post-processor (primary use):**
-```csharp
-// In a map stage, after writing a field:
-ScalarSpline heightSpline = tunables.heightSpline; // from MapTunables2D or preset
-for (int i = 0; i < field.Length; i++)
-    field[i] = heightSpline.Evaluate(field[i]);
-```
-
-**As a MapTunables2D / MapGenerationPreset field:**
-```csharp
-// MapTunables2D extended with optional spline overrides:
-public ScalarSpline heightSpline;       // default = identity (no remapping)
-public ScalarSpline temperatureSpline;  // Phase M
-public ScalarSpline moistureSpline;     // Phase M
-```
-
-**As a standalone utility (no new stage needed):**
-The spline does not need its own pipeline stage. It is an operator that stages invoke
-when they want to reshape their output. This is analogous to how `MaskMorphologyOps2D`
-provides erosion/dilation operators that stages call — not a stage itself.
-
 ### Downstream consumers
 
 | Phase | How spline remapping is consumed |
 |-------|--------------------------------|
-| J2 (Height Redistribution) | `ScalarSpline` subsumes `pow(h, exp)` — J2 could use a spline instead of a power curve, or both could coexist as separate tunables |
+| J2 (Height Redistribution) | Coexists: pow() is the "quick knob," spline is "full control." Pow first, spline second. |
 | M (Climate & Biome) | Temperature and Moisture splines produce naturalistic climate gradients; reshape noise perturbation curves |
 | W (World-to-Local) | Local elevation reinflation: world tile's hilliness selects a spline that reshapes local noise into appropriate terrain character |
 | General | Any future scalar field benefits from having an optional spline remap |
@@ -194,37 +153,6 @@ provides erosion/dilation operators that stages call — not a stage itself.
 - Evaluation must be deterministic — no floating-point order-of-operations variance.
 - No RNG consumption. Pure function of input value and control points.
 - No new `MapLayerId` or `MapFieldId`.
-
-### Relationship to Phase J2
-
-Phase J2 proposes `pow(height, exponent)` as a single-parameter height redistribution.
-`ScalarSpline` is strictly more general. Two options:
-
-**Option A — Coexist:** Keep J2's power-curve tunable AND add a spline tunable. The power
-curve is the "quick knob" (one number); the spline is the "full control" (multiple points).
-If both are specified, apply power curve first, then spline (or vice versa — resolve at
-implementation time).
-
-**Option B — Subsume:** Replace J2's power-curve with a spline. Provide preset spline
-constructors: `ScalarSpline.PowerCurve(exponent)` generates the equivalent control points.
-J2 becomes "use the spline with a power-curve preset."
-
-**Recommendation:** Option A for initial implementation (simpler, preserves J2 as designed),
-with the understanding that the spline is the more general tool.
-
-### Test plan
-
-- Identity spline preserves input values exactly (float equality).
-- Known control points produce expected outputs at control point inputs.
-- Interpolated values between control points are correct (piecewise linear: exact midpoint).
-- Clamping at boundaries: input below first point → first output; above last → last output.
-- Golden hash preservation: default identity spline produces identical pipeline output.
-
-### Estimated scope
-
-Small. The data structure is ~50 lines. Integration into one stage (Height) is ~10 lines.
-The bulk of work is deciding which tunables to expose and updating golden hashes for
-non-default spline configurations.
 
 ---
 
@@ -377,10 +305,10 @@ DONE
                                     Inline pow() in Stage_BaseTerrain2D + shared
                                     BaseTerrainStage_Configurable for visualizations.
 
-NEXT (new, low complexity)
-  └─ N2: Spline Remapping ──────── New ScalarSpline utility + MapTunables integration
-                                    Can be implemented any time; no phase dependencies.
-                                    Highest impact-per-effort of the remaining two.
+DONE
+  └─ N2: Spline Remapping ──────── Phase N2 (implemented)
+                                    ScalarSpline utility + MapTunables2D + AnimationCurve
+                                    bridge. Coexists with pow() (Option A).
 
 LATER (new, medium complexity)
   └─ N3: Ridged Multifractal ───── Noise runtime extension or standalone operator.
@@ -393,19 +321,17 @@ LATER (new, medium complexity)
 ```
 N1 (Phase J2)  ──→  DONE. Consumed by: Height field.
                      Optionally extendable to Temperature/Moisture (Phase M).
-                     no dependency on N2 or N3
 
-N2 (Spline)    ──→  consumed by: Height, Temperature, Moisture, any future field
-                     no dependency on N1 or N3
-                     subsumes N1 if desired (Option B in §4)
+N2 (Phase N2)  ──→  DONE. Consumed by: Height field (initial).
+                     Future: Temperature, Moisture, any scalar field.
+                     Coexists with N1 (pow first, spline second).
 
 N3 (Ridged)    ──→  consumed by: Phase K (mountains), Phase W (local elevation)
                      no dependency on N1 or N2
                      benefits from N2 (spline remap of ridged output)
 ```
 
-All three are independently implementable. N1 is done. N2 is recommended next because
-it has the broadest applicability and lowest risk.
+N1 and N2 are done. N3 is the only remaining item — deferred to Phase K or Phase W.
 
 ---
 

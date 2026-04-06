@@ -53,13 +53,15 @@ Detailed design in [`Noise_Composition_Improvements_Roadmap.md`](design/Noise_Co
 
 | Technique | Islands Status | Consuming Phase | Notes |
 |-----------|---------------|-----------------|-------|
-| Heightmap-based terrain | DONE | F2 | `Height` scalar field. Foundational. |
-| Island / continent mask | DONE | F2, F2b, F2c | Ellipse + domain warp + arbitrary shape input. |
+| Heightmap-based terrain | DONE | F2 | `Height` scalar field. Foundational. MC and NMS use volumetric density (implicit heightmap); DF and RW use explicit 2D fields. Islands aligns with DF/RW approach. |
+| Island / continent mask | DONE | F2, F2b, F2c | Ellipse + domain warp + arbitrary shape input. Relevant only to finite-world generators (DF, RW, Islands). |
+| Mountain shaping | NONE | Pre-Phase M | **Tier 1.** Regional mask + ridged noise or power redistribution. Used by 4/4 terrain generators in cross-check. Must run before Phase M — monotonous fBm produces unconvincing altitude-based biome distribution. |
 | Height redistribution | PLAN | J2 | `pow(height01, exp)` post-processing. See Noise Composition Roadmap N1. |
+| Cliffs / terraces | NONE | Post-M2 polish | Tier 2. Step functions or quantization on heightmap. Not explicitly used by any game in corpus; emergent in MC/NMS. Low cost, moderate payoff. |
 | Elevation smoothing | NONE | — | Not planned. May be useful post-erosion; evaluate if needed. |
-| Erosion simulation | NONE | Pre-Phase L (recommended) | **Only non-roadmapped technique from the top-12 priorities.** DF-style agent erosion. Would need a new `Stage_Erosion2D` between G and L. Significant pipeline reordering implications. |
+| Erosion simulation | NONE | Pre-Phase L (recommended) | **Only non-roadmapped technique from the top-12 priorities.** Gap research confirmed DF uses greedy agent-based channel carving (not physically-based): spawn at mountain edges, steepest descent, lower terrain when stuck, 50–250 cycles. Purely subtractive, no sediment. Would need `Stage_Erosion2D` between G and L. |
 
-**Open decisions:** Whether to roadmap erosion as a dedicated phase. Recommended before Phase L.
+**Open decisions:** Whether to roadmap erosion as a dedicated phase (recommended before Phase L). Mountain shaping should be roadmapped before Phase M (terrain enrichment prerequisite for meaningful biome distribution).
 
 ---
 
@@ -67,15 +69,16 @@ Detailed design in [`Noise_Composition_Improvements_Roadmap.md`](design/Noise_Co
 
 | Technique | Islands Status | Consuming Phase | Design Doc | Notes |
 |-----------|---------------|-----------------|------------|-------|
-| Temperature field | PLAN | M.1 | Phase_M_Design.md | Latitude proxy + elevation lapse rate + CoastDist moderation + noise. |
-| Moisture field | PLAN | M.2 | Phase_M_Design.md | CoastDist + FlowAccumulation (optional, from Phase L) + noise. |
-| Whittaker biome classification | PLAN | M.3 | Phase_M_Design.md | Temperature × Moisture lookup → integer biome ID. `BiomeDef[]` table. |
-| Biome-aware vegetation | PLAN | M2.a | Phase_M2_Design.md | Refactor `Stage_Vegetation2D` with per-biome density from `BiomeDef`. |
-| Contiguous region detection | PLAN | M2.b | Phase_M2_Design.md | CCA on biome field → `MapFieldId.NamedRegionId`. |
+| Temperature field | PLAN | M.1 | Phase_M_Design.md | Latitude proxy + elevation lapse rate + CoastDist moderation + noise. Cross-check confirms: altitude feeds temperature via lapse rate in DF and RW, not biome directly. Mountain biome override at extreme elevation. |
+| Moisture field | PLAN | M.2 | Phase_M_Design.md | CoastDist + FlowAccumulation (optional, from Phase L) + noise + rainshadow modulation (see below). |
+| Rainfall / rainshadow approximation | PLAN | M.2 | Phase_M_Design.md | **Tier 1** (promoted from Tier 2). Wind-sorted moisture sweep, ~30 lines, <1ms on 256×256. Modulates base noise moisture with terrain-driven wet/dry asymmetry. Payoff conditional on biome granularity (8+ biomes) and mountain size (≥20-tile spine). See `5a_gap_rainshadow_2d_grid.md`. |
+| Whittaker biome classification | PLAN | M.3 | Phase_M_Design.md | Temperature × Moisture lookup → integer biome ID. `BiomeDef[]` table. Confirmed in DF and RW; MC uses analogous but more complex 5D lookup. Cross-check strongly validates this approach. |
+| Biome transition blending | NONE | M2 | Phase_M2_Design.md | **Tier 1.** Recommended: noise-perturbed boundaries (0 cost, ~20 lines) + edge-factor scalar per cell (1 float, ~100 lines). Upgrade path: scattered-point convolution (KdotJPG). Data contract: hard biome enum + edge-factor float = 6 bytes/cell. See `5a_gap_biome_blending_implementations.md`. |
+| Biome-aware vegetation | PLAN | M2.a | Phase_M2_Design.md | Refactor `Stage_Vegetation2D` with per-biome density from `BiomeDef`. Consumes edge-factor for boundary transitions. |
+| Contiguous region detection | PLAN | M2.b | Phase_M2_Design.md | CCA on biome field → `MapFieldId.NamedRegionId`. Simpler and better-supported than Voronoi for named regions (no game in corpus uses spatial Voronoi for biome regions). |
 | Biome scoring / competition | NONE | — | — | RimWorld-style BiomeWorker. Not needed if Whittaker lookup is sufficient. |
-| Orographic precipitation | NONE | — | — | DF only. Would enrich moisture but adds significant complexity. Deferred. |
 
-**Open decisions:** None — all design decisions for M and M2 are resolved.
+**Open decisions:** None — all design decisions for M and M2 are resolved. Rainshadow and biome blending approaches selected from gap research.
 
 ---
 
@@ -97,9 +100,9 @@ Detailed design in [`Noise_Composition_Improvements_Roadmap.md`](design/Noise_Co
 
 | Technique | Islands Status | Consuming Phase | Notes |
 |-----------|---------------|-----------------|-------|
-| Voronoi region partitioning (local) | PLAN | J | Within-map biome regions. Uses existing Noise.Voronoi support surface. New `MapFieldId.RegionId`. |
+| Voronoi region partitioning (local) | PLAN | J | Within-map biome regions. Uses existing Noise.Voronoi support surface. New `MapFieldId.RegionId`. Cross-check note: no game in corpus uses spatial Voronoi for biome regions; CCA on biome map is simpler for named regions. Voronoi may still suit non-biome partitioning (geological, political). |
 | Voronoi partition (geological / world) | PLAN | K | Coarser 5–8 cell partition for tectonic plates. Separate pass from Phase J. |
-| Connected component analysis | DONE | G, M2.b | `MaskTopologyOps2D` infrastructure. Extended for scalar fields in M2.b (`ScalarFieldCcaOps2D`). |
+| Connected component analysis | DONE | G, M2.b | `MaskTopologyOps2D` infrastructure. Extended for scalar fields in M2.b (`ScalarFieldCcaOps2D`). **Tier 1 for Phase M2**: flood-fill per biome type → each connected component becomes a nameable region. |
 | Plate tectonics simulation | PLAN (exploratory) | K | Voronoi cells + simple plate movement → collision zones → elevation. |
 
 **Open decisions:** Phase K scope and subdivision — deferred until Phase J matures.
@@ -143,6 +146,9 @@ Detailed design in [`Noise_Composition_Improvements_Roadmap.md`](design/Noise_Co
 | Value noise for terrain | Grid-aligned artifacts make it unsuitable. Implemented for completeness only. | Cross-check: no game uses value noise as primary terrain generator. |
 | Chunk-based streaming | Not currently applicable — Islands generates complete maps, not streamed chunks. | May revisit if Phase W requires incremental world generation. |
 | LOD / multi-resolution generation | Not applicable to 2D grid pipeline at current scope. | NMS-specific (octree LOD for 3D planet surfaces). |
+| Thermal erosion | Confirmed absent in all 6 games including DF. DF's erosion is a single unified greedy-carving process with no thermal component, no material properties, no slope-dependent weathering. | Cross-check gap research: `DwarfFortress_Worldgen_gap_erosion.md`. |
+| MC-style multi-dimensional parameter space biome lookup | 5D+ Voronoi partition in parameter space is overengineered for Islands' needs. 2D Whittaker model (temperature × moisture) is sufficient and validated by DF/RW. | Cross-check: MC-specific; no other game uses this approach. |
+| Planet-wide single biome (NMS model) | Irrelevant to Islands' within-map biome requirements. NMS assigns one biome per planet with no spatial variation. | Cross-check: NMS-specific architectural choice. |
 
 ---
 
@@ -152,17 +158,19 @@ Detailed design in [`Noise_Composition_Improvements_Roadmap.md`](design/Noise_Co
 |----------|-----------------|------|------|---------|------|
 | Noise Primitives | 5 | 5 | — | — | — |
 | Noise Composition | 8 | 3 | 2 | 1 | 2 |
-| Terrain & Elevation | 5 | 2 | 1 | — | 2 |
-| Climate & Biomes | 7 | — | 5 | — | 2 |
+| Terrain & Elevation | 7 | 2 | 1 | — | 4 |
+| Climate & Biomes | 8 | — | 6 | — | 2 |
 | Hydrology | 5 | — | 5 | — | — |
 | Region Partitioning | 4 | 1 | 2 | — | 1 |
 | Placement & Traversal | 3 | 1 | 2 | — | — |
 | Pipeline Infrastructure | 7 | 2 | 4 | 1 | — |
-| **Total** | **44** | **14** | **21** | **2** | **7** |
+| **Total** | **47** | **14** | **22** | **2** | **9** |
 
-Of the 7 NONE items: 2 are deferred-but-possible (full domain warping, noise competition),
-2 are excluded by design (elevation smoothing, orographic precipitation), 1 is exploratory
-(biome scoring), and **1 is the only top-12 priority not yet roadmapped (erosion simulation)**.
+Of the 9 NONE items: 2 are Tier 1 and should be roadmapped before Phase M/M2
+(**mountain shaping**, **biome transition blending**), 1 is the only top-12 priority
+not yet roadmapped (**erosion simulation**), 2 are Tier 2 deferred items (cliffs/terraces,
+elevation smoothing), 1 is not needed if Whittaker suffices (biome scoring), and 2 are
+deferred-but-possible noise techniques (full domain warping, noise competition).
 
 ---
 
@@ -178,3 +186,14 @@ Of the 7 NONE items: 2 are deferred-but-possible (full domain warping, noise com
 | `planning/active/design/Noise_Composition_Improvements_Roadmap.md` | N1/N2/N3 noise technique designs. |
 | `research/pcg_crosscheck_analysis.md` | Source analysis: 6 games × 30 techniques, priority list. |
 | `research/pcg_technique_library.md` | Technique reference: algorithmic detail for all PCG families. |
+| `research/terrain_biome_cross_reference.md` | **Terrain shaping + biome/region cross-check** (6 games × 14 techniques, gap-resolved). Source for this batch update. |
+| `research/5a_gap_biome_blending_implementations.md` | Five concrete blending approaches from open-source implementations. |
+| `research/5a_gap_rainshadow_2d_grid.md` | Six rainshadow approaches for 2D grids; feasibility assessment. |
+| `research/DwarfFortress_Worldgen_gap_erosion.md` | DF erosion algorithm detail from Tarn Adams interviews. |
+| `research/RimWorld_Worldgen_gap_biome_boundaries.md` | RimWorld local-map biome boundary treatment. |
+
+---
+
+## Changelog
+
+- **2026-04-06:** Batch update from `terrain_biome_cross_reference.md` (post-gap-research). Added 5 rows (mountain shaping, cliffs/terraces, rainshadow, biome blending, thermal erosion exclusion + 2 more exclusions). Updated 7 existing rows with cross-check evidence and gap research findings. Promoted rainshadow from excluded to PLAN/Tier 1. Coverage: 44 → 47 techniques.

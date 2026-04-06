@@ -8,25 +8,27 @@ namespace Islands.PCG.Layout.Maps.Stages
     /// F6 — Traversal (Walkable + Stairs).
     ///
     /// Reads:
-    /// - Land     (read-only)
-    /// - HillsL1  (read-only)
-    /// - HillsL2  (read-only)
+    /// - Land         (read-only)
+    /// - ShallowWater (read-only)   [post-N2 Issue 3]
+    /// - HillsL1      (read-only)
+    /// - HillsL2      (read-only)
     ///
     /// Writes:
     /// - Walkable
     /// - Stairs
     ///
     /// Contracts:
-    /// - Walkable = Land AND NOT HillsL2
-    /// - Walkable ⊆ Land
+    /// - Walkable = (Land OR ShallowWater) AND NOT HillsL2
+    /// - Walkable ⊇ (Land AND NOT HillsL2)   — all previously-walkable cells remain walkable
     /// - Walkable ∩ HillsL2 == ∅
     /// - HillsL1 slopes are passable (included in Walkable); only HillsL2 peaks are excluded.
+    /// - ShallowWater cells are walkable (player can wade).
     /// - Stairs = HillsL1 AND NOT HillsL2 AND (4-adjacent to ≥1 HillsL2 cell)
     /// - Stairs ⊆ HillsL1
     /// - Stairs ∩ HillsL2 == ∅
     /// - Stairs ⊆ Walkable (by construction: all Stairs satisfy Land AND NOT HillsL2)
     /// - Stairs may be empty if HillsL2 is empty; this is not a defect.
-    /// - Does not mutate Land, HillsL1, HillsL2, ShallowWater, Vegetation, or Height.
+    /// - Does not mutate Land, ShallowWater, HillsL1, HillsL2, Vegetation, or Height.
     /// - Does not consume ctx.Rng (no noise, no randomness).
     /// - Does not write MapLayerId.Paths (deferred to Phase O).
     /// </summary>
@@ -41,6 +43,7 @@ namespace Islands.PCG.Layout.Maps.Stages
             int h = d.Height;
 
             ref MaskGrid2D land = ref ctx.GetLayer(MapLayerId.Land);
+            ref MaskGrid2D shallowWater = ref ctx.GetLayer(MapLayerId.ShallowWater);
             ref MaskGrid2D hillsL1 = ref ctx.GetLayer(MapLayerId.HillsL1);
             ref MaskGrid2D hillsL2 = ref ctx.GetLayer(MapLayerId.HillsL2);
 
@@ -52,10 +55,11 @@ namespace Islands.PCG.Layout.Maps.Stages
                 for (int x = 0; x < w; x++)
                 {
                     bool isLand = land.GetUnchecked(x, y);
+                    bool isShallowWater = shallowWater.GetUnchecked(x, y);
                     bool isHillsL2 = hillsL2.GetUnchecked(x, y);
 
-                    // Walkable = Land AND NOT HillsL2
-                    if (isLand && !isHillsL2)
+                    // Walkable = (Land OR ShallowWater) AND NOT HillsL2
+                    if ((isLand || isShallowWater) && !isHillsL2)
                         walkable.SetUnchecked(x, y, true);
 
                     // Stairs candidate: HillsL1 AND NOT HillsL2

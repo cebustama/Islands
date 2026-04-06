@@ -12,14 +12,14 @@ namespace Islands.PCG.Samples
     /// <summary>
     /// Inspector-configurable base terrain stage for live preview tuning.
     /// Mirrors <see cref="Islands.PCG.Layout.Maps.Stages.Stage_BaseTerrain2D"/> exactly:
-    /// ellipse + domain warp + height perturbation + J2 height redistribution.
+    /// ellipse + domain warp + height perturbation + J2 height redistribution + N2 spline remap.
     ///
     /// Three fields (<see cref="noiseCellSize"/>, <see cref="noiseAmplitude"/>,
     /// <see cref="quantSteps"/>) override the constants baked into the governed stage,
     /// enabling real-time tuning in the lantern / live visualization.
     ///
-    /// Shape tunables (islandAspectRatio, warpAmplitude01, heightRedistributionExponent)
-    /// are read from <c>inputs.Tunables</c>, same as the governed stage.
+    /// Shape tunables (islandAspectRatio, warpAmplitude01, heightRedistributionExponent,
+    /// heightRemapSpline) are read from <c>inputs.Tunables</c>, same as the governed stage.
     ///
     /// IMPORTANT: Keep this class in sync with Stage_BaseTerrain2D whenever the shape
     /// pipeline changes. The two implementations must produce identical outputs for the
@@ -58,6 +58,10 @@ namespace Islands.PCG.Samples
 
             // J2: height redistribution exponent.
             float redistExp = t.heightRedistributionExponent;
+
+            // N2: spline remapping.
+            var heightSpline = t.heightRemapSpline;
+            bool applySpline = !heightSpline.IsIdentity;
 
             float minDim = math.min((float)w, (float)h);
             float radius = math.max(1f, minDim * t.islandRadius01);
@@ -126,6 +130,11 @@ namespace Islands.PCG.Samples
                         // pow(x, 1.0) == x, so default exponent preserves all existing goldens.
                         if (redistExp != 1.0f)
                             h01 = math.pow(h01, redistExp);
+
+                        // N2: spline remapping — arbitrary piecewise-linear curve reshaping.
+                        // Identity spline (or default with null arrays) preserves all goldens.
+                        if (applySpline)
+                            h01 = heightSpline.Evaluate(h01);
 
                         height.Values[baseRow + x] = h01;
                         land.SetUnchecked(x, y, h01 >= waterThreshold);

@@ -34,6 +34,10 @@
 |   |   +---surfaces.md
 |   |   \---tileset-import-guide.md
 |   +---research
+|   |   +---archive
+|   |   |   +---noise_cross_reference.md
+|   |   |   +---Pass 1 Claude Sonnet.md
+|   |   |   \---pcg_crosscheck_analysis.md
 |   |   +---Games Worldgen
 |   |   |   +---Cataclysm Worldgen and Z Levels.md
 |   |   |   +---DwarfFortress Worldgen.md
@@ -70,12 +74,11 @@
 |   |   |   |   +---6a Multi-scale generation and graph-based world structure.md
 |   |   |   |   +---pass_6b_composition_patterns_and_synthesis.md
 |   |   |   |   \---pcg_synthesis.md
-|   |   |   +---noise_cross_reference.md
-|   |   |   +---Pass 1 Claude Sonnet.md
 |   |   |   +---pcg_noise_reference.md
-|   |   |   \---pcg_technique_library.md
-|   |   +---pcg_crosscheck_analysis.md
-|   |   \---README.md
+|   |   |   +---pcg_technique_library.md
+|   |   |   \---terrain_biome_cross_reference.md
+|   |   +---README.md
+|   |   \---technique_integration_matrix.md
 |   +---systems
 |   |   +---map-pipeline-by-layers-ssot.md
 |   |   \---pcg-core-ssot.md
@@ -157,7 +160,8 @@
 |   |   +---Core
 |   |   |   \---GridDomain2D.cs
 |   |   +---Fields
-|   |   |   \---ScalarField2D.cs
+|   |   |   +---ScalarField2D.cs
+|   |   |   \---ScalarSpline.cs
 |   |   +---Generators
 |   |   |   +---CheckerFillGenerator.cs
 |   |   |   \---RectFillGenerator.cs
@@ -233,6 +237,7 @@
 |   |   |   |   +---PCGMaskPaletteController.cs
 |   |   |   |   \---PCGMaskVisualization.cs
 |   |   |   +---Presets
+|   |   |   |   +---BaseTerrainStage_Configurable.cs
 |   |   |   |   +---Default.asset
 |   |   |   |   +---Islands.PCG.Samples.Shared.asmdef
 |   |   |   |   +---MapGenerationPreset.cs
@@ -274,6 +279,7 @@
 |   |   |       +---RoomFirstBspDungeon2DTests.cs
 |   |   |       +---RoomGridDungeon2DTests.cs
 |   |   |       +---RoomsCorridorsComposer2DTests.cs
+|   |   |       +---ScalarSplineTests.cs
 |   |   |       \---SimpleRandomWalk2DTests.cs
 |   |   +---Islands.PCG.Runtime.asmdef
 |   |   \---make-tree.bat

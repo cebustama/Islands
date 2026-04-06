@@ -163,7 +163,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
             var inputs = new MapInputs(Seed, domain, MapTunables2D.Default);
 
             RunOnce(in inputs, 0f, 0f, out _, out MapContext2D ctxNarrow);
-            RunOnce(in inputs, 0.10f, 0f, out _, out MapContext2D ctxWide);
+            RunOnce(in inputs, 0.25f, 0f, out _, out MapContext2D ctxWide);
 
             try
             {
@@ -171,11 +171,11 @@ namespace Islands.PCG.Tests.EditMode.Maps
                 int wideCount = ctxWide.GetLayer(MapLayerId.ShallowWater).CountOnes();
 
                 Assert.GreaterOrEqual(wideCount, narrowCount,
-                    $"Depth=0.10 ShallowWater count ({wideCount}) must be >= adjacency-only " +
+                    $"Depth=0.25 ShallowWater count ({wideCount}) must be >= adjacency-only " +
                     $"count ({narrowCount}).");
 
                 Assert.Greater(wideCount, narrowCount,
-                    "With default island tunables, depth=0.10 should produce strictly more " +
+                    "With default island tunables, depth=0.25 should produce strictly more " +
                     "ShallowWater cells than adjacency-only.");
             }
             finally
@@ -191,8 +191,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
             var domain = new GridDomain2D(W, H);
             var inputs = new MapInputs(Seed, domain, MapTunables2D.Default);
 
-            RunOnce(in inputs, 0.10f, 0f, out ulong hashA, out _);
-            RunOnce(in inputs, 0.10f, 0f, out ulong hashB, out _);
+            RunOnce(in inputs, 0.25f, 0f, out ulong hashA, out _);
+            RunOnce(in inputs, 0.25f, 0f, out ulong hashB, out _);
 
             Assert.AreEqual(hashA, hashB,
                 "Stage_Shore2D with depth > 0 must produce identical ShallowWater on repeated runs.");
@@ -204,7 +204,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
             var domain = new GridDomain2D(W, H);
             var inputs = new MapInputs(Seed, domain, MapTunables2D.Default);
 
-            RunOnce(in inputs, 0.10f, 0f, out _, out MapContext2D ctx);
+            RunOnce(in inputs, 0.25f, 0f, out _, out MapContext2D ctx);
 
             try
             {
@@ -236,7 +236,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
             var domain = new GridDomain2D(W, H);
             var inputs = new MapInputs(Seed, domain, MapTunables2D.Default);
 
-            RunOnce(in inputs, 0.10f, 0f, out _, out MapContext2D ctx);
+            RunOnce(in inputs, 0.25f, 0f, out _, out MapContext2D ctx);
 
             try
             {

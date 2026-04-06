@@ -138,7 +138,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!64 &242572812
 MeshCollider:
   m_ObjectHideFlags: 0
@@ -245,6 +245,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f5fd6c9cb6326694a991b624bba8461d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Islands.PCG.Runtime::Islands.PCG.Samples.PCGMapCompositeVisualization
+  preset: {fileID: 11400000, guid: 814da1d70e7ff2a42ac9c30a35081962, type: 2}
   targetRenderer: {fileID: 0}
   seed: 14
   resolution: 256
@@ -292,10 +293,10 @@ MonoBehaviour:
     color: {r: 0.1, g: 0.65, b: 0.45, a: 1}
     enabled: 0
   enableScalarOverlay: 0
-  overlayField: 2
-  overlayMin: -1
-  overlayMax: 3.19
-  overlayColorLow: {r: 0.3, g: 0.3, b: 0.6, a: 1}
+  overlayField: 0
+  overlayMin: 0
+  overlayMax: 1
+  overlayColorLow: {r: 0, g: 0, b: 0, a: 1}
   overlayColorHigh: {r: 1, g: 1, b: 1, a: 1}
   islandRadius01: 0.741
   waterThreshold01: 0.851
@@ -303,6 +304,7 @@ MonoBehaviour:
   islandSmoothTo01: 0.665
   islandAspectRatio: 1.162
   warpAmplitude01: 0.104
+  heightRedistributionExponent: 0.817
   noiseCellSize: 16
   noiseAmplitude: 0.298
   quantSteps: 1024
@@ -494,6 +496,7 @@ MonoBehaviour:
   instanceScale: 1
   resolution: 128
   displacement: 0
+  preset: {fileID: 0}
   seed: 1
   enableHillsStage: 1
   enableShoreStage: 1
@@ -527,6 +530,7 @@ MonoBehaviour:
   islandSmoothTo01: 0.859
   islandAspectRatio: 1
   warpAmplitude01: 0
+  heightRedistributionExponent: 1
   noiseCellSize: 8
   noiseAmplitude: 1
   quantSteps: 1024

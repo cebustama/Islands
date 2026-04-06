@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using Islands.PCG.Fields;
 using Islands.PCG.Layout.Maps;
 
 namespace Islands.PCG.Samples
@@ -12,12 +13,13 @@ namespace Islands.PCG.Samples
     /// fields are used unchanged (fully backward-compatible).
     ///
     /// Display-only settings (palette colors, view mode, view layer, scalar range)
-    /// are intentionally excluded � they remain per-component.
+    /// are intentionally excluded — they remain per-component.
     ///
     /// Phase H3: initial implementation.
     /// Phase F4b: shallowWaterDepth01 field.
     /// Phase F4c: midWaterDepth01 field.
     /// Phase J2: heightRedistributionExponent field.
+    /// Phase N2: heightRemapCurve field (AnimationCurve → ScalarSpline bridge).
     /// </summary>
     [CreateAssetMenu(
         fileName = "MapGenerationPreset",
@@ -38,7 +40,7 @@ namespace Islands.PCG.Samples
                  "detailed maps but take longer to generate. Minimum 4.\n\n" +
                  "Honored by PCGMapCompositeVisualization, PCGMapTilemapVisualization,\n" +
                  "and PCGMapTilemapSample. PCGMapVisualization reads resolution from\n" +
-                 "its base Visualization class � this field is ignored there.")]
+                 "its base Visualization class — this field is ignored there.")]
         [Min(4)]
         public int resolution = 64;
 
@@ -188,6 +190,18 @@ namespace Islands.PCG.Samples
         public float heightRedistributionExponent = 1.0f;
 
         // ==================================================================
+        // Height Remap (N2)
+        // ==================================================================
+
+        [Header("Height Remap (N2)")]
+        [Tooltip("Height remap curve applied after power redistribution.\n" +
+                 "The X axis is the input height [0..1]; the Y axis is the output height [0..1].\n" +
+                 "A straight diagonal line (0,0)→(1,1) is the identity (no remapping).\n" +
+                 "Pull the middle down to flatten lowlands; push the top up to exaggerate peaks.\n" +
+                 "Uses Unity's AnimationCurve editor; sampled into a piecewise-linear spline at runtime.")]
+        public AnimationCurve heightRemapCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+
+        // ==================================================================
         // Run Behavior
         // ==================================================================
 
@@ -205,6 +219,7 @@ namespace Islands.PCG.Samples
         /// <summary>
         /// Produces a <see cref="MapTunables2D"/> from this preset's shape fields.
         /// MapTunables2D clamps and orders all values deterministically.
+        /// The AnimationCurve is sampled into a piecewise-linear ScalarSpline (N2).
         /// </summary>
         public MapTunables2D ToTunables() => new MapTunables2D(
             islandRadius01: islandRadius01,
@@ -213,6 +228,7 @@ namespace Islands.PCG.Samples
             islandSmoothTo01: islandSmoothTo01,
             islandAspectRatio: islandAspectRatio,
             warpAmplitude01: warpAmplitude01,
-            heightRedistributionExponent: heightRedistributionExponent);
+            heightRedistributionExponent: heightRedistributionExponent,
+            heightRemapSpline: ScalarSpline.FromAnimationCurve(heightRemapCurve));
     }
 }

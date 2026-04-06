@@ -1,0 +1,20 @@
+{
+    "name": "Islands.PCG.Editor",
+    "rootNamespace": "Islands.PCG.Editor",
+    "references": [
+        "Islands.PCG.Adapters.Tilemap",
+        "Islands.PCG.Samples.Shared",
+        "Islands.PCG.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
