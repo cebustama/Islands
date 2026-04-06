@@ -42,11 +42,14 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase I: later
 - Phase I2: later (planning only)
 - Phase J: later (planning only)
+- Phase J2: later (planning only — new)
 - Phase K: later (planning / exploratory only)
 - Phase L: later (planning only)
 - Phase M: later (planning only)
+- Phase M2: later (planning only — new)
 - Phase N: later (planning only)
 - Phase O: later (planning only)
+- Phase P: later (planning only — new)
 - Phase W: later (planning / exploratory only)
 
 ## Documentary note on Layout Strategies
@@ -61,6 +64,61 @@ After Batch 6:
 - Surfaces remains governed reference / staged support rather than a subsystem SSoT.
 - Shaders remains governed reference / support only.
 This roadmap may mention those surfaces as planning dependencies or support infrastructure, but that does not promote them into subsystem authority.
+
+## Resolved design decisions (2026-04-06)
+
+The following design questions, previously recorded as open, were resolved via cross-check
+analysis against six game worldgen pipelines (Minecraft, Dwarf Fortress, No Man's Sky,
+RimWorld, Cataclysm:DDA, Tangledeep) and the PCG technique reports (1a–6b).
+
+**Decision 1 — Biome output format:** `MapFieldId.Biome` integer scalar field.
+Each cell stores a biome ID (integer encoded as float). A `BiomeDef[]` lookup table
+defines biome properties (name, vegetation density, tile palette, etc.). This matches
+the standard "region map" pattern from Pass 5a and the approach used by Minecraft (6D
+parameter → biome enum), Dwarf Fortress (multi-variable threshold → biome type), and
+RimWorld (BiomeWorker score competition). Blend weights for biome transitions are
+deferred — hard boundaries first, blending as a later refinement if needed.
+
+**Decision 2 — River representation:** Both `MapFieldId.FlowAccumulation` (scalar field)
+and `MapLayerId.Rivers` (mask, derived by thresholding the field). The flow-accumulation
+field is the simulation output, encoding upstream drainage area per cell. The river mask
+is derived from it by thresholding and serves as the rendering/gameplay output. This
+matches the standard pipeline from Pass 2b (Priority-Flood → D8 → flow accumulation →
+threshold) and the Dwarf Fortress approach (flow volumes + visible rivers as separate
+outputs). `MapFieldId.FlowDirection` is computed during Phase L but not persisted as a
+registered field unless a downstream consumer requires it.
+
+**Decision 3 — Lake modeling:** Distinct `MapLayerId.Lakes` mask layer. Lakes are inland
+water bodies not connected to the map border — detected by connected-component analysis
+on NOT-Land cells after DeepWater (border-connected) and ShallowWater (land-adjacent ring)
+are already classified. This matches Pass 5a's explicit recommendation ("flood fill from
+border through water identifies ocean; remaining water components are lakes") and avoids
+breaking the existing F4 ShallowWater contract. Lakes have distinct gameplay semantics
+(fishing, settlement proximity, freshwater source) from coastal ShallowWater.
+
+**Decision 4 — Voronoi cells and world tiles are separate concepts.** Phase J's Voronoi
+partitioning operates *within* a local map to create biome regions — the player walks
+through these regions and sees biome transitions, but the Voronoi structure itself is
+invisible. Phase W's world map uses a *rectangular grid* (a low-resolution `MapContext2D`),
+where each cell is a world tile that can be zoomed into for local generation. Phase K's
+Voronoi operates at a coarser geological scale to define tectonic plates that drive world-
+tile elevation properties, not world-tile boundaries.
+This means:
+- Phase J does not need to be designed for Phase W compatibility.
+- Phase W's world grid is rectangular, preserving the grid-first invariant at all scales.
+- Voronoi is a *technique applied within maps* (Phase J: biome regions) and *across the
+  world* (Phase K: geological plates), not the world-tile structure itself.
+- The `MapShapeInput` hook (Phase F2c) remains the integration point between world and
+  local scales — a world tile's coastal geometry is injected as a shape mask regardless
+  of whether the world grid is rectangular or otherwise.
+
+**Decision 5 — Temperature field ownership:** Part of Phase M. Phase M becomes a
+"Climate + Biome" phase that writes three new fields: `MapFieldId.Temperature`,
+`MapFieldId.Moisture`, and `MapFieldId.Biome`. Temperature is derived from elevation
+(Height field), position-based latitude proxy (Y-axis), and coastal proximity (CoastDist),
+following the standard formula: `base_temp - latitude_factor - (elevation × lapse_rate)
++ noise_perturbation`. This matches the canonical biome pipeline from Pass 5a:
+"compute temperature → compute moisture → assign biomes (Whittaker lookup)."
 
 ## Phase F — Map Pipeline by Layers
 ### Done
@@ -337,22 +395,53 @@ Burst / SIMD upgrades
 ### Phase J — Region Generation (static Voronoi)
 Planning only.
 
-- Static Voronoi-cell region partitioning using the existing Noise Voronoi support surface
+- Static Voronoi-cell region partitioning *within a local map*, producing irregular biome-scale
+  regions that downstream Phase M uses for biome classification. The Voronoi structure is
+  invisible to the player — it is the mechanism that determines "this area is forest, that
+  area is grassland," not a visible grid or boundary.
+- Uses the existing Noise Voronoi support surface
   (`Noise.Voronoi.cs`, `Noise.Voronoi.Distance.cs`, `Noise.Voronoi.Function.cs`).
 - Expected implementation path: a new `MapVoronoiBridge2D` (or extended bridge) following
-  the `MapNoiseBridge2D` pattern; a new `Stage_Regions2D`; new append-only `MapLayerId` entries.
+  the `MapNoiseBridge2D` pattern; a new `Stage_Regions2D`; a new append-only
+  `MapFieldId.RegionId` storing per-cell integer region identity.
 - Does not require promoting Noise to a subsystem SSoT.
-- Noise remains governed reference / staged support.
+  Noise remains governed reference / staged support.
 - Prerequisite for Phase K.
+- **Relationship to Phase W (resolved):** Voronoi cells are *not* world tiles. Phase J
+  operates within a local map to create biome regions. Phase W's world map uses a rectangular
+  grid. These are separate concepts at separate scales. Phase J does not need to be designed
+  for Phase W compatibility.
 - Archipelago support (Level 3 of the island shape vision): multiple disconnected land masses
   can be produced by compositing multiple Phase F2c shape inputs before the Land threshold pass,
   or by running independent per-island pipelines and merging outputs. Voronoi cell boundaries
   from Phase J are a natural driver for multi-island layout.
 
+### Phase J2 — Height Redistribution
+**Later (planning only). Can be implemented any time after current H-series.**
+
+Applies a non-linear power curve to the Height field to reshape elevation distribution,
+concentrating detail at low elevations (broader plains) while allowing dramatic peaks.
+
+- New optional tunable on `MapTunables2D`: `heightRedistributionExponent` (default 1.0 = no
+  change, clamped [0.5, 4.0]). Applied as `pow(height01, exponent)` after the Height field
+  is written by `Stage_BaseTerrain2D`.
+- Exponents > 1.0 flatten lowlands and steepen peaks; < 1.0 does the reverse.
+- Dwarf Fortress uses a "non-linear parabola" for the same purpose (confirmed by Tarn Adams).
+  Pass 2a documents this as power redistribution: `pow(e·1.2, exponent)` with exponent 2.5–3.0.
+- Implementation: a new `Stage_HeightRedistribution2D` or an inline post-processing step in
+  `Stage_BaseTerrain2D`. Deterministic, no RNG, no new MapLayerId/MapFieldId.
+- Low cost, high visual impact. Single-line math transformation.
+- Golden hashes for all downstream stages will change when exponent ≠ 1.0.
+  Default 1.0 preserves existing goldens.
+
 ### Phase K — Simulation / Dynamics (Plate Tectonics)
 Planning / exploratory only. Not implementation authority.
 
 - Depends on Phase J (Voronoi region partitioning) as the static foundation.
+- Uses a *coarser* Voronoi partition than Phase J (5–8 cells) to define tectonic plates
+  at geological scale. This is a separate Voronoi pass from Phase J's biome regions —
+  it operates at world scale to shape continent/island geometry and mountain placement,
+  not within a local map for biome boundaries.
 - Initial intent: simple plate-movement simulation derived from Voronoi cells,
   with collision zones used to drive elevation or hills-layer outputs via the existing
   layered pipeline contracts.
@@ -364,28 +453,161 @@ Planning / exploratory only. Not implementation authority.
 ### Phase L — Hydrology
 Planning only.
 
-- Rivers: flow-path generation from high elevation toward coast,
-  producing a Rivers mask layer (new append-only `MapLayerId`).
-- Lakes: detection and labeling of enclosed water bodies not covered by `DeepWater`
-  (border-connected) or `ShallowWater` (F4).
-- Open design question: distinct `Lakes` layer vs. enclosed `ShallowWater` cells.
-- Open design question: rivers as a mask layer vs. a flow-accumulation scalar field.
-- Depends on: `Height` field (F2), `Land` + `ShallowWater` (F4).
+- **Rivers:** flow-path generation from high elevation toward coast.
+  Implementation pipeline (from Pass 2b): Priority-Flood depression filling (Barnes 2014,
+  +ε for gradient preservation) on the Height field → D8 flow directions (steepest downslope
+  neighbor) → flow accumulation (traverse highest-to-lowest, sum upstream counts) → threshold
+  to extract river segments.
+  - **Outputs (resolved):**
+    - `MapFieldId.FlowAccumulation` — scalar field encoding upstream drainage area per cell.
+      Primary simulation output. Consumed by Phase M for moisture derivation.
+    - `MapLayerId.Rivers` — binary mask derived by thresholding FlowAccumulation.
+      Primary rendering/gameplay output. Multiple threshold levels may produce river width
+      variants (stream vs. river) at adapter time.
+  - `MapFieldId.FlowDirection` (D8 direction enum per cell) is computed during this phase
+    but not persisted as a registered field. It is an intermediate data structure consumed
+    only within Stage_Rivers2D. If a downstream consumer later requires it, it can be
+    promoted to a registered field at that time.
+- **Lakes (resolved):** Distinct `MapLayerId.Lakes` mask layer.
+  Detection: connected-component analysis on NOT-Land cells that are not DeepWater
+  (border-connected) and not ShallowWater (land-adjacent ring). Any remaining water
+  component is a lake. Uses existing `MaskFloodFillOps2D` infrastructure.
+  Lakes have distinct gameplay semantics from coastal ShallowWater: freshwater source,
+  settlement proximity bonus, fishing, visual variety.
+- Depends on: `Height` field (F2), `Land` + `DeepWater` + `ShallowWater` (F2/F4),
+  `MaskFloodFillOps2D` (F2).
+- New append-only IDs: `MapLayerId.Rivers`, `MapLayerId.Lakes`,
+  `MapFieldId.FlowAccumulation`.
 
-### Phase M — Biome / Region Classification
+### Phase M — Climate & Biome Classification
 Planning only.
 
-- Classifies cells into ecological / biome categories using `Height`, `Moisture`
-  (already registered as `MapFieldId.Moisture`), shore proximity (F4), and optionally
-  Voronoi region identity (Phase J).
-- Natural owner of the first authoritative write to `MapFieldId.Moisture`
-  (F5 does not produce it; ownership confirmed deferred to Phase M).
-- Produces biome classification outputs (new layer IDs or scalar field, design TBD).
-- Enables biome-aware downstream work: vegetation density, river likelihood, POI suitability.
-- Depends on: F4 (shore), F5 (vegetation layer as upstream context), optionally Phase J.
-- Downstream adapter extension: after Phase M, `TilesetConfig` (Phase H3) can be extended with
-  biome-conditional tile entries — same layer, different tile per biome region. Unlocks visually
-  distinct island regions (tropical, temperate, arid) from a single pipeline run.
+Phase M is the "Climate + Biome" phase. It produces three new scalar fields (Temperature,
+Moisture, Biome) and enables all downstream biome-aware work. This is the single most
+impactful phase for world variety — it transforms a monochrome island into a multi-region
+landscape with distinct ecological character.
+
+- **Sub-stage M.1 — Temperature field:**
+  New append-only `MapFieldId.Temperature`. Derived from:
+  - Height field (elevation-based lapse rate: ~6.5°C per 1,000m equivalent)
+  - Y-axis position as latitude proxy (top of map = cold, bottom = warm, or configurable)
+  - CoastDist (maritime moderation: coastal cells have more moderate temperatures)
+  - Optional noise perturbation for local variation
+  - Formula: `base_temp - latitude_factor - (elevation × lapse_rate)
+    + coast_moderation + noise_perturbation`
+  - No RNG consumption required if noise uses coordinate hashing via MapNoiseBridge2D.
+
+- **Sub-stage M.2 — Moisture field:**
+  First authoritative write to `MapFieldId.Moisture` (registered but never written until now).
+  Derived from:
+  - CoastDist (coastal cells wetter, inland cells drier)
+  - FlowAccumulation from Phase L (proximity to rivers increases moisture)
+  - Optional noise perturbation for local variation
+  - If Phase L is not yet implemented, moisture falls back to CoastDist + noise only.
+  - Phase L dependency is optional — Phase M can run without rivers, producing less
+    ecologically rich but still functional moisture values.
+
+- **Sub-stage M.3 — Biome classification:**
+  New append-only `MapFieldId.Biome`. **Output format (resolved):** integer scalar field
+  where each cell stores a biome ID (integer encoded as float). A `BiomeDef[]` lookup table
+  (initially a code-side array; may be promoted to ScriptableObject later) defines biome
+  properties: name, vegetation density multiplier, tile palette reference, etc.
+  Classification uses a Whittaker-style Temperature × Moisture lookup table, with Height
+  for altitude-band overrides (alpine, beach) and optionally RegionId from Phase J for
+  macro-region coherence. If Phase J is not yet implemented, biome classification operates
+  per-cell from climate fields alone — noisier boundaries but functional.
+  - Phase J dependency is optional — Phase M can run without Voronoi regions.
+
+- **Downstream effects:**
+  - `Stage_Vegetation2D` (F5) should be refactored after Phase M to accept biome ID and
+    moisture as additional inputs, replacing the single noise threshold with per-biome
+    coverage parameters. This is Phase M2 (see below).
+  - `TilesetConfig` (Phase H3) can be extended with biome-conditional tile entries:
+    same MapLayerId, different tile per biome region. Unlocks visually distinct island
+    regions (tropical, temperate, arid) from a single pipeline run.
+  - Phase N (POI Placement) gains biome-based suitability constraints.
+- Depends on: F2 (Height), F4 (ShallowWater for shore detection), Phase G (CoastDist),
+  optionally Phase J (RegionId), optionally Phase L (FlowAccumulation for moisture).
+- New append-only IDs: `MapFieldId.Temperature`, `MapFieldId.Biome`.
+  `MapFieldId.Moisture` is already registered — Phase M is its confirmed write owner.
+
+### Phase M2 — Biome-Aware Vegetation & Region Naming
+Planning only. Sequenced after Phase M.
+
+Two sub-tasks that consume Phase M's biome output:
+
+- **M2.a — Biome-aware vegetation refactor:**
+  Refactors `Stage_Vegetation2D` (F5) to read `MapFieldId.Biome` and `MapFieldId.Moisture`
+  as additional inputs. Replaces the single global noise threshold (0.40f) with per-biome
+  vegetation density parameters from `BiomeDef`. Dense vegetation in wet forest biomes,
+  sparse in arid biomes, absent in tundra/alpine. The existing noise-based spatial pattern
+  is preserved — only the coverage threshold changes per biome.
+  - No new MapLayerId/MapFieldId. Modifies the write behavior of the existing
+    `Vegetation` mask based on biome context.
+
+- **M2.b — Contiguous region detection and naming:**
+  After Phase M produces a biome ID field, run connected-component analysis (using existing
+  `MaskTopologyOps2D` patterns) on each biome type to produce contiguous named regions.
+  Each region gets a unique ID and optionally a generated name ("The Western Forest,"
+  "Coral Bay Marshes"). Dwarf Fortress and RimWorld both do this.
+  - Output: a `MapFieldId.NamedRegionId` integer field, plus a region metadata table
+    (region ID → biome type, area, centroid, name).
+  - Region naming is a downstream adapter/content concern — the pipeline produces IDs
+    and metadata, adapters generate display names.
+  - New append-only ID: `MapFieldId.NamedRegionId`.
+
+### Phase N — World-Site / POI Placement
+Planning only.
+
+- Produces site-selection masks and placement coordinates for RPG-style POI types:
+  coastal villages/cities (suitability: `LandEdge` / ShallowWater-adjacent land),
+  forest dungeons (suitability: `Vegetation` + forest biome from Phase M),
+  cave/mine entrances (suitability: `Stairs` — HillsL1/HillsL2 boundary cells),
+  lakeside settlements (suitability: `Lakes`-adjacent land from Phase L),
+  open-plains camps (suitability: `Walkable AND NOT HillsL1 AND NOT Vegetation`), etc.
+- Uses suitability / exclusion logic derived from terrain layers
+  (`Land`, `Hills`, `Shore`, `Walkable`, `Stairs`, biome outputs, etc.).
+- Outputs are headless placement descriptors: typed coordinates and masks, not GameObjects
+  or scene content. Adapters-last boundary must be preserved.
+- Downstream adapters (existing dungeon layout generators, future village / ruin generators)
+  consume these placement outputs as adapters. Those generators remain layout strategies /
+  adapters, not core pipeline stages.
+- Depends on: F6 (Walkable, Stairs), Phase L (Hydrology — Rivers, Lakes), Phase M (Biome).
+
+### Phase O — Traversal Network / Paths
+Planning only.
+
+- Produces a `Paths` mask connecting POI sites across walkable terrain.
+  `MapLayerId.Paths = 5` is already registered in `MapIds2D`; ownership deferred to this phase.
+- Algorithm options (to be resolved at implementation time): A* or flood-corridor on `Walkable`,
+  noise-corridor traces seeded from POI coordinate pairs, skeleton extraction, etc.
+- Rivers from Phase L are obstacles that paths must bridge or avoid — path cost should
+  increase at River cells, with optional bridge placement at crossing points.
+- POI anchor coordinates from Phase N are the required inputs; implementing Paths before Phase N
+  would produce paths with no meaningful endpoints.
+- Depends on: F6 (Walkable, Stairs), Phase L (Rivers as obstacles), Phase N (POI placement).
+
+### Phase P — Pipeline Validation / World Rejection
+**Later (planning only). Recommended before Phase W; can be implemented any time after Phase M.**
+
+Adds a validate-and-retry mechanism to the pipeline runner, ensuring generated maps meet
+minimum quality requirements before being accepted. Only Dwarf Fortress implements this
+among the six researched games, but it is critical for any game that needs design-compliant
+output — the probability of degenerate maps increases as the pipeline gains more stages.
+
+- New `IMapValidator2D` interface with `bool Validate(MapContext2D ctx)` method.
+- Initial validators (composable, run in sequence):
+  - Minimum land percentage (e.g., ≥ 15% of total cells are Land)
+  - Minimum biome diversity (e.g., ≥ 2 distinct biome types present, after Phase M)
+  - Connectivity check (all Land cells reachable — single connected landmass, or all
+    landmasses have minimum area threshold)
+- `MapPipelineRunner2D` extended with an optional validate-or-retry loop:
+  max N attempts (tunable, default 10), incrementing the seed on each retry.
+  Same seed always produces the same map (determinism preserved per seed).
+  If all attempts fail, the last result is returned with a logged warning.
+- The user-facing seed may differ from the internal seed if rejection occurs.
+  This is documented behavior, matching DF's approach.
+- No new MapLayerId/MapFieldId. Infrastructure-level change to the runner.
 
 ### Phase W — Hierarchical World-to-Local Generation (Zoom-In)
 Planning / exploratory only. Not implementation authority.
@@ -409,9 +631,10 @@ candidates based on the current pipeline:
 | `LocalSeed` | Derived from world coordinates + world seed | `MapInputs.seed` |
 | `ElevationEnvelope` | World-scale height field | `MapTunables2D` (waterThreshold, islandRadius) |
 | `ShorelineMask` | World-scale coast geometry | `MapShapeInput` (Phase F2c hook) |
-| `BiomeType` | Phase M biome classification | Stage enable/disable flags |
+| `BiomeType` | Phase M biome classification | Stage enable/disable flags, `BiomeDef` lookup |
 | `HillinessIntensity` | World-scale elevation variance | Hills stage tunables |
 | `MoistureLevel` | Phase M / Phase L hydrology | `MapFieldId.Moisture` (Phase M) |
+| `TemperatureLevel` | Phase M climate | `MapFieldId.Temperature` (Phase M) |
 
 Every property must be derivable deterministically from world tile coordinates and the
 world seed so that local maps regenerate identically at any time.
@@ -422,89 +645,52 @@ silhouette. A coastal world tile can inject a shore mask derived from world-scal
 geometry directly into `Stage_BaseTerrain2D` without restructuring the pipeline.
 This is the primary integration point between world scale and local generation.
 
-**World map generation — two options (decision deferred):**
-
-*Option A — Pipeline at world scale:* The world map is itself a low-resolution
-`MapContext2D` (e.g. 64×64 or 128×128 tiles). The same stages run at world scale;
-each cell becomes a world tile. Architecturally clean; reuses all existing contracts.
+**World map structure (resolved):**
+The world map is a **rectangular grid** — a low-resolution `MapContext2D` (e.g. 64×64
+or 128×128 tiles). The same pipeline stages run at world scale; each cell becomes a world
+tile. This preserves the grid-first invariant at all scales and reuses all existing contracts.
 Requires the pipeline to be parametrizable across resolutions. Preferred long-term.
 
-*Option B — Noise-direct:* World tile properties (elevation, moisture, temperature,
-continentalness) are independent noise fields sampled at tile coordinates. No pipeline
-run at world scale. Simpler to prototype; less reusable. Suitable for early exploration.
+**Relationship to Phase J and Phase K (resolved):**
+- Phase J (Voronoi regions) operates *within* each local map for biome partitioning.
+  It is not involved in world-tile structure.
+- Phase K (Plate Tectonics) operates *at world scale* with a coarse Voronoi partition
+  to drive geological features (mountain ranges, volcanic chains) across the world grid.
+  Plate boundaries influence world-tile elevation envelopes but do not define world-tile
+  boundaries — those are always rectangular grid cells.
+- The world grid, Phase J's local Voronoi, and Phase K's geological Voronoi are three
+  independent spatial structures at three different scales.
 
 **Boundary matching:**
 Boundary matching between adjacent local maps (edges align correctly) is explicitly
 deferred. RimWorld does not solve this; DF solves it via shared regional constraint data.
-Option A's shared pipeline context makes boundary matching tractable in a later sub-phase.
+The rectangular grid structure makes boundary matching tractable in a later sub-phase.
 Implement zoom-in generation first without edge consistency; treat matching as Phase W2.
 
 **Open design decisions:**
-- Option A vs. Option B for world map generation.
-- World map resolution and coordinate system (grid of tiles, hex grid, Voronoi cells).
-- Whether world tile coordinates are the same grid as the Voronoi region graph (Phase J)
-  or a separate overlay — this decision must be made before Phase J is implemented.
+- World map resolution and exact coordinate system.
 - Whether `WorldTileContext` is a struct passed to `MapInputs` or a new `IMapWorldContext`
   interface layer.
 - Phase W2 (boundary matching) scope and timing — not in scope for Phase W.
 
 **Design compatibility requirements for earlier phases:**
-The following phases must be designed with Phase W in mind even though Phase W is
-implemented later:
-- **Phase J (Voronoi regions):** Region cells are the natural candidates for world tiles.
-  Phase J should produce region identity data in a format that a world tile lookup can consume.
-  Decide before implementing Phase J whether Voronoi cells are world tiles or only a driver
-  for local shape inputs.
 - **Phase K (Plate Tectonics):** Plate-derived elevation can become the `ElevationEnvelope`
   property in `WorldTileContext`. The Phase F2c shape-input mechanism already supports this.
 - **Phase M (Biome Classification):** World-scale biome assignment is the natural source of
-  `BiomeType` and `MoistureLevel` in `WorldTileContext`. Phase M's output format should be
-  legible at world tile granularity.
+  `BiomeType`, `MoistureLevel`, and `TemperatureLevel` in `WorldTileContext`. Phase M's
+  output format (integer biome ID field) is legible at world tile granularity.
 
 **Dependencies:**
 - Phase F2c (MapShapeInput) — already done; primary integration hook
-- Phase J (Voronoi regions) — world map structure
-- Phase M (Biome classification) — world tile properties (BiomeType, MoistureLevel)
+- Phase M (Biome classification) — world tile properties (BiomeType, MoistureLevel, TemperatureLevel)
 - Phase L (Hydrology) — optional; MoistureLevel source
+- Optionally Phase K (Plate Tectonics) — ElevationEnvelope source
 
 **Downstream:**
 - Phase N (POI Placement) — world tiles carry POI suitability hints; local generation
   produces the map into which POIs are placed
 - Phase O (Paths) — world-scale path network connects world tiles; local maps expose
   path entry points at tile edges
-
-**Recommended immediate action (pre-implementation):**
-Before Phase J is implemented, add a planning note to its design doc recording whether
-Voronoi cells and world tiles are the same concept or separate overlays. This decision
-is cheap to make now and expensive to change after Phase J is built.
-
-### Phase N — World-Site / POI Placement
-Planning only.
-
-- Produces site-selection masks and placement coordinates for RPG-style POI types:
-  coastal villages/cities (suitability: `LandEdge` / ShallowWater-adjacent land),
-  forest dungeons (suitability: `Vegetation`),
-  cave/mine entrances (suitability: `Stairs` — HillsL1/HillsL2 boundary cells),
-  open-plains camps (suitability: `Walkable AND NOT HillsL1 AND NOT Vegetation`), etc.
-- Uses suitability / exclusion logic derived from terrain layers
-  (`Land`, `Hills`, `Shore`, `Walkable`, `Stairs`, biome outputs, etc.).
-- Outputs are headless placement descriptors: typed coordinates and masks, not GameObjects
-  or scene content. Adapters-last boundary must be preserved.
-- Downstream adapters (existing dungeon layout generators, future village / ruin generators)
-  consume these placement outputs as adapters. Those generators remain layout strategies /
-  adapters, not core pipeline stages.
-- Depends on: F6 (Walkable, Stairs), Phase L (Hydrology), Phase M (Biome).
-
-### Phase O — Traversal Network / Paths
-Planning only.
-
-- Produces a `Paths` mask connecting POI sites across walkable terrain.
-  `MapLayerId.Paths = 5` is already registered in `MapIds2D`; ownership deferred to this phase.
-- Algorithm options (to be resolved at implementation time): A* or flood-corridor on `Walkable`,
-  noise-corridor traces seeded from POI coordinate pairs, skeleton extraction, etc.
-- POI anchor coordinates from Phase N are the required inputs; implementing Paths before Phase N
-  would produce paths with no meaningful endpoints.
-- Depends on: F6 (Walkable, Stairs), Phase N (POI placement).
 
 ## Legacy relationship
 Legacy map-generation documents are conceptual reference only for the new pipeline.
