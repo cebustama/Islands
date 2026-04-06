@@ -418,5 +418,122 @@ namespace Islands.PCG.Tests.EditMode.Maps
                 ctx.Dispose();
             }
         }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // 8. ApplyLayered — null guards
+        // ─────────────────────────────────────────────────────────────────────────
+
+        [Test]
+        public void ApplyLayered_NullExport_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() =>
+                TilemapAdapter2D.ApplyLayered(null, System.Array.Empty<TilemapLayerGroup>()));
+        }
+
+        [Test]
+        public void ApplyLayered_NullGroups_ThrowsArgumentNullException()
+        {
+            var (export, ctx) = RunSmallPipeline();
+            try
+            {
+                Assert.Throws<ArgumentNullException>(() =>
+                    TilemapAdapter2D.ApplyLayered(export, null));
+            }
+            finally { ctx.Dispose(); }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // 9. ApplyLayered — null Tilemap in group is silently skipped
+        // ─────────────────────────────────────────────────────────────────────────
+
+        [Test]
+        public void ApplyLayered_NullTilemapInGroup_IsSkippedSilently()
+        {
+            var (export, ctx) = RunSmallPipeline();
+            try
+            {
+                var groups = new[]
+                {
+                    new TilemapLayerGroup
+                    {
+                        Tilemap       = null,  // null Tilemap → must be skipped without exception
+                        PriorityTable = new[] { new TilemapLayerEntry { LayerId = MapLayerId.Land } },
+                        ClearFirst    = true,
+                    }
+                };
+
+                Assert.DoesNotThrow(() => TilemapAdapter2D.ApplyLayered(export, groups));
+            }
+            finally { ctx.Dispose(); }
+        }
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // 10. ApplyLayered — two groups stamp to independent tilemaps
+        // ─────────────────────────────────────────────────────────────────────────
+
+        [Test]
+        public void ApplyLayered_TwoGroups_StampIndependentLayers()
+        {
+            // Group A: DeepWater → tileDeepWater stamps to tilemapA.
+            // Group B: Land      → tileLand      stamps to tilemapB.
+            //
+            // DeepWater and Land are mutually exclusive per cell (pipeline contract).
+            // Therefore: tileDeepWater must never appear on tilemapB,
+            //            tileLand      must never appear on tilemapA.
+
+            var tilemapA = CreateTilemap();
+            var tilemapB = CreateTilemap();
+            var tileDeepWater = MakeTile("DeepWater");
+            var tileLand = MakeTile("Land");
+            var (export, ctx) = RunSmallPipeline();
+            try
+            {
+                Assume.That(export.HasLayer(MapLayerId.DeepWater), "DeepWater not exported — test skip.");
+                Assume.That(export.HasLayer(MapLayerId.Land), "Land not exported — test skip.");
+
+                var groups = new[]
+                {
+                    new TilemapLayerGroup
+                    {
+                        Tilemap       = tilemapA,
+                        PriorityTable = new[] { new TilemapLayerEntry { LayerId = MapLayerId.DeepWater, Tile = tileDeepWater } },
+                        FallbackTile  = null,
+                        ClearFirst    = true,
+                    },
+                    new TilemapLayerGroup
+                    {
+                        Tilemap       = tilemapB,
+                        PriorityTable = new[] { new TilemapLayerEntry { LayerId = MapLayerId.Land, Tile = tileLand } },
+                        FallbackTile  = null,
+                        ClearFirst    = true,
+                    },
+                };
+
+                TilemapAdapter2D.ApplyLayered(export, groups);
+
+                int w = export.Width;
+                int h = export.Height;
+
+                for (int y = 0; y < h; y++)
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        var pos = new Vector3Int(x, y, 0);
+                        Assert.AreNotSame(tileLand, tilemapA.GetTile(pos),
+                            $"tileLand must not appear on tilemapA at ({x},{y}).");
+                        Assert.AreNotSame(tileDeepWater, tilemapB.GetTile(pos),
+                            $"tileDeepWater must not appear on tilemapB at ({x},{y}).");
+                    }
+                }
+            }
+            finally
+            {
+                DestroyTilemap(tilemapA);
+                DestroyTilemap(tilemapB);
+                DestroyTile(tileDeepWater);
+                DestroyTile(tileLand);
+                ctx.Dispose();
+            }
+        }
     }
 }

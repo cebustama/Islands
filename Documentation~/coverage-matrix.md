@@ -44,3 +44,7 @@ Purpose: Map each important concept to its primary documentary owner.
 | Shader graphs and HLSL support surface | `reference/shaders.md` | governed reference / support | Active |
 | Shader implementation assets | `Runtime/Shaders/**` | support artifacts / non-subsystem implementation surface | Active |
 | Shader promotion | no separate shader subsystem SSoT at present | reference/support only after Batch 6 | Resolved for now |
+| `TilemapLayerGroup` — multi-layer group descriptor (H5) | `Runtime/PCG/Adapters/Tilemap/TilemapLayerGroup.cs` | adapter-side implementation truth | Active |
+| `TilemapAdapter2D.ApplyLayered` — multi-tilemap stamp (H5) | `Runtime/PCG/Adapters/Tilemap/TilemapAdapter2D.cs` | adapter-side implementation truth | Active |
+| `TilemapAdapter2D.SetupCollider` — physics collider auto-setup (H5) | `Runtime/PCG/Adapters/Tilemap/TilemapAdapter2D.cs` | adapter-side implementation truth | Active |
+| H5 test coverage (`ApplyLayered` null guards + independence, tests 8–11) | `Runtime/PCG/Tests/EditMode/PCG/Maps/TilemapAdapter2DTests.cs` | EditMode test gates | Active |

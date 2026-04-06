@@ -12,19 +12,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 60aa04ac40e5c564a883b9554fe066ea, type: 3}
   m_Name: WarpTest
   m_EditorClassIdentifier: Islands.PCG.Samples.Shared::Islands.PCG.Samples.MapGenerationPreset
-  seed: 99
+  seed: 137
   resolution: 64
   enableHillsStage: 1
   enableShoreStage: 1
   enableVegetationStage: 1
   enableTraversalStage: 1
   enableMorphologyStage: 1
-  islandRadius01: 0.624
-  waterThreshold01: 0.5
-  islandSmoothFrom01: 0.3
-  islandSmoothTo01: 0.7
+  islandRadius01: 0.35
   islandAspectRatio: 1
-  warpAmplitude01: 0.25
+  warpAmplitude01: 0.241
+  islandSmoothFrom01: 0.257
+  islandSmoothTo01: 0.73
+  waterThreshold01: 0.466
+  shallowWaterDepth01: 0.317
+  midWaterDepth01: 0.453
   noiseCellSize: 8
   noiseAmplitude: 0.18
   quantSteps: 1024

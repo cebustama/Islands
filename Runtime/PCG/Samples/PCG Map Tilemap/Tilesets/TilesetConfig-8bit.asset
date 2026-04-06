@@ -10,30 +10,30 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f9297941e9dd00a45a49617287a3a01a, type: 3}
-  m_Name: TilesetConfig-DragonWarrior
+  m_Name: TilesetConfig-8bit
   m_EditorClassIdentifier: Islands.PCG.Adapters.Tilemap::Islands.PCG.Adapters.Tilemap.TilesetConfig
   layers:
   - label: DeepWater
     layerId: 1
-    tile: {fileID: 11400000, guid: 6f82491bb5fddb44ea4ed4b330233fd8, type: 2}
+    tile: {fileID: 11400000, guid: 79265ec2f68a7a746bffb731ce381711, type: 2}
     animatedTile: {fileID: 0}
-    ruleTile: {fileID: 0}
+    ruleTile: {fileID: 11400000, guid: 48efa363f7477264d94e14daf96293d9, type: 2}
     enabled: 1
   - label: MidWater
     layerId: 12
-    tile: {fileID: 11400000, guid: 6f82491bb5fddb44ea4ed4b330233fd8, type: 2}
+    tile: {fileID: 11400000, guid: f5214fecceaf7554f9fa01d77fc2fc73, type: 2}
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 0}
     enabled: 1
   - label: ShallowWater
     layerId: 2
-    tile: {fileID: 11400000, guid: bc30c7b7df7d3764b829f4a63c180881, type: 2}
+    tile: {fileID: 11400000, guid: 1c1903108de27e545801fa09b849f03f, type: 2}
     animatedTile: {fileID: 0}
-    ruleTile: {fileID: 0}
+    ruleTile: {fileID: 11400000, guid: 26e3cfeacc92dbf408d4f85408c93025, type: 2}
     enabled: 1
   - label: Land
     layerId: 0
-    tile: {fileID: 11400000, guid: 12211b8df2efc954eb1754099a4ddaff, type: 2}
+    tile: {fileID: 11400000, guid: bbf6e7dffde48f1409c98450746fe47e, type: 2}
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 0}
     enabled: 1
@@ -51,19 +51,19 @@ MonoBehaviour:
     enabled: 1
   - label: Vegetation
     layerId: 7
-    tile: {fileID: 11400000, guid: 1643e2501fbee1a43ba1c5915a478d25, type: 2}
+    tile: {fileID: 11400000, guid: d207bf4d1a7fba746a90c0df7020bad9, type: 2}
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 0}
     enabled: 1
   - label: HillsL1
     layerId: 3
-    tile: {fileID: 11400000, guid: 8a1a2e2c9c1d5e84db3405901a14dd6b, type: 2}
+    tile: {fileID: 11400000, guid: 2bee46add68582b4c87e3fab8f2c40b0, type: 2}
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 0}
     enabled: 1
   - label: HillsL2
     layerId: 4
-    tile: {fileID: 11400000, guid: 6fc387ef492aff74891bb87ae82f79e0, type: 2}
+    tile: {fileID: 11400000, guid: 832d83309333f7d4c880e8e2243aa0b5, type: 2}
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 0}
     enabled: 1
@@ -75,7 +75,7 @@ MonoBehaviour:
     enabled: 1
   - label: LandEdge
     layerId: 9
-    tile: {fileID: 11400000, guid: b952eae3356f12241a46a5c6b6215b3b, type: 2}
+    tile: {fileID: 11400000, guid: 11d405f614d35384990d433e85e578f3, type: 2}
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 0}
     enabled: 1
@@ -91,4 +91,4 @@ MonoBehaviour:
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 0}
     enabled: 1
-  fallbackTile: {fileID: 11400000, guid: 6f82491bb5fddb44ea4ed4b330233fd8, type: 2}
+  fallbackTile: {fileID: 11400000, guid: 79265ec2f68a7a746bffb731ce381711, type: 2}

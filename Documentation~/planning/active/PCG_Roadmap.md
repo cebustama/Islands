@@ -37,8 +37,12 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase H2d: done
 - Phase H3: done
 - Phase H4: done
-- Phase H5: next
-- Phase H6: later (planning only)
+- Phase H5: done
+- Phase H7: done
+- Phase H6: done
+- Phase H8: later (planning only)
+- Phase F4b: done
+- Phase F4c: done
 - Phase I: later
 - Phase I2: later (planning only)
 - Phase J: later (planning only)
@@ -64,6 +68,23 @@ After Batch 6:
 - Surfaces remains governed reference / staged support rather than a subsystem SSoT.
 - Shaders remains governed reference / support only.
 This roadmap may mention those surfaces as planning dependencies or support infrastructure, but that does not promote them into subsystem authority.
+
+## Documentary note on Phase Design Documents
+Phases that require detailed specification (stage contracts, data structures, invariants,
+test plans) have dedicated design documents under `planning/active/design/`. These carry
+planning authority for their phase — the same authority level as this roadmap (not
+implementation truth until built and recorded in the SSoT).
+
+Phases that are simple enough to describe in a few bullet points remain inline here.
+A phase entry in this roadmap always includes intent, status, dependencies, and a pointer
+to its design doc if one exists. The design doc contains the implementation-depth detail.
+
+| Phase | Design document | Status |
+|-------|----------------|--------|
+| Phase M | [`Phase_M_Design.md`](design/Phase_M_Design.md) | Complete |
+| Phase W | [`Phase_W_Design.md`](design/Phase_W_Design.md) | Complete |
+| Phase M2 | [`Phase_M2_Design.md`](design/Phase_M2_Design.md) | Complete |
+| Phase L | [`Phase_L_Design.md`](design/Phase_L_Design.md) | Complete |
 
 ## Resolved design decisions (2026-04-06)
 
@@ -137,6 +158,19 @@ following the standard formula: `base_temp - latitude_factor - (elevation × lap
   - deterministic 1-cell shallow-water ring around all Land cells
   - `ShallowWater ∩ DeepWater` intentionally non-empty (see SSoT contracts)
   - added F4 stage + pipeline goldens
+- F4b Shore Depth Tunable
+  - `Stage_Shore2D` gains `ShallowWaterDepth01` field (default 0.0 = original 1-cell ring)
+  - When > 0, water cells with Height >= (waterThreshold − depth) also marked ShallowWater
+  - Adjacency ring always included. 5 new shore tests.
+- F4c Mid-Water Layer
+  - New `MapLayerId.MidWater = 12` (append-only, COUNT 12 → 13)
+  - `Stage_Shore2D` gains `MidWaterDepth01` field; writes MidWater when > 0
+  - `MidWater ⊆ NOT Land`, `MidWater ∩ ShallowWater == ∅`
+  - 3-band water depth: ShallowWater (shallowest) → MidWater → DeepWater (deepest)
+  - `TilesetConfig` priority: DeepWater → MidWater → ShallowWater → Land → ...
+  - MidWater added to base layers and collider layers (non-walkable)
+  - New Inspector slider + MapGenerationPreset field. 4 new MidWater tests.
+  - Default 0 = no MidWater layer. No golden changes at defaults.
 - F5 Vegetation
   - implemented `Stage_Vegetation2D`
   - `Vegetation ⊆ LandInterior`; excludes `HillsL2` peaks; noise-threshold coverage
@@ -263,22 +297,13 @@ following the standard formula: `base_temp - latitude_factor - (elevation × lap
 **Done.**
 
 - Natural evolution of `PCGMapTilemapSample` from "generate once on Start" to a live interactive
-  editor tool, matching the experience of `PCGMapCompositeVisualization`.
-- New `PCGMapTilemapVisualization` sample component alongside the existing `PCGMapTilemapSample`.
-- `[ExecuteAlways]`: regenerates in the Editor without entering Play mode, same pattern as
-  `PCGMapVisualization` and `PCGMapCompositeVisualization`.
-- Dirty tracking on all tunables: seed, resolution, all `MapTunables2D` fields,
-  stage toggles (Hills, Shore, Vegetation, Traversal, Morphology), flipY, priority table
-  (FNV-1a hash over LayerId + tile InstanceID), fallbackTile reference.
-- Full Inspector exposure: all customization options applied to a live Tilemap output.
-  Change any parameter → island regenerates immediately.
-- Context kept alive between runs (`Allocator.Persistent`; reallocated only on resolution change).
-- Console log on each rebuild: seed + tilesStamped count as informal regression baseline.
-- Lives in `Runtime/PCG/Adapters/Tilemap/` — same assembly as H2b. No new asmdef.
-- `Islands.PCG.Adapters.Tilemap.asmdef` gains `"Unity.Mathematics"` reference.
-- Smoke tests passed. LandCore priority ordering confirmed (must sit above Land, below Vegetation).
-- Pure sample-side. No new runtime contracts, no new MapLayerId/MapFieldId.
-- Coexists with `PCGMapTilemapSample`.
+  editor tool.
+- `PCGMapTilemapVisualization` `[ExecuteAlways]` MonoBehaviour: runs the full pipeline on every
+  Inspector change (dirty tracking via FNV-1a priority table hash + per-field comparison).
+  `MapContext2D` held `Persistent` across frames; reallocated only when resolution changes.
+  Console log per rebuild: seed, resolution, stage flags, tilesStamped/total.
+- `Islands.PCG.Adapters.Tilemap.asmdef` gains `Unity.Mathematics` reference.
+- Pure sample-side. No new runtime contracts or MapLayerId/MapFieldId.
 
 ### Phase H2d — Procedural Tile Generation
 **Done.**
@@ -335,42 +360,107 @@ following the standard formula: `base_temp - latitude_factor - (elevation × lap
   No new runtime contracts, no new MapLayerId/MapFieldId entries.
 
 ### Phase H5 — Multi-layer Tilemap & Collider Integration
-**Next. Sequenced after Phase H4.**
+**Done. Sequenced after Phase H4.**
 
 Separates pipeline layers across multiple stacked Unity Tilemaps on the same Grid, enabling
 transparency overlays and dedicated physics layers. Prerequisite for a physically navigable map.
 
-- **Multi-layer rendering**: separate Tilemaps per logical group on the same Grid:
-  - *Base layer* (opaque): DeepWater / ShallowWater / Land / LandCore / LandEdge
-  - *Overlay layer* (with transparency support): Vegetation / HillsL1 / HillsL2 / Stairs
-  - *Collider layer* (invisible, physics only): non-walkable cells (HillsL2 + water)
-  - Vegetation trees and hills render *over* the base terrain tile rather than replacing it,
-    matching the DW / classic JRPG aesthetic more faithfully and enabling visual layering.
-- **`TilemapAdapter2D` extension**: new `ApplyLayered()` overload accepting a descriptor that
-  maps each logical layer group to its target `Tilemap`. Adapters-last invariant preserved;
-  still reads `MapDataExport` only, never touches `MapContext2D`.
-- **Tilemap Collider integration**: auto-setup `TilemapCollider2D` + `CompositeCollider2D` on
-  the collider Tilemap, driven by the non-walkable mask (HillsL2 + water) from the export.
-  First step toward a physically navigable game map.
-- Design decisions to resolve at implementation time: exact layer grouping; transparency shader
-  requirements (URP Lit vs. Unlit); whether the collider tilemap is authored or generated.
-- Pure adapter/sample-side. No new runtime contracts or MapLayerId/MapFieldId entries.
+- **New type `TilemapLayerGroup`** (`Runtime/PCG/Adapters/Tilemap/TilemapLayerGroup.cs`):
+  `[Serializable]` sealed class. Fields: `Tilemap`, `PriorityTable` (`TilemapLayerEntry[]`),
+  `FallbackTile`, `ClearFirst` (default true), `FlipY`. Groups with null Tilemap or null
+  PriorityTable are silently skipped by `ApplyLayered`.
+- **`TilemapAdapter2D.ApplyLayered(MapDataExport, TilemapLayerGroup[])`**: iterates groups,
+  calls existing `Apply()` per group. Null group elements silently skipped. Null export or
+  groups array throws `ArgumentNullException`. Adapters-last invariant preserved.
+- **`TilemapAdapter2D.SetupCollider(Tilemap)`**: idempotent — adds `Rigidbody2D` (Static),
+  `TilemapCollider2D`, and `CompositeCollider2D` to the collider Tilemap's GameObject if
+  not already present. Wires `usedByComposite = true`. Safe to call on every rebuild.
+- **`PCGMapTilemapVisualization` patched** (H5 multi-layer section):
+  - New Inspector fields: `enableMultiLayer` (bool), `overlayTilemap`, `colliderTilemap`,
+    `colliderTile` (TileBase), `enableColliderAutoSetup` (bool).
+  - Dirty tracking: 5 new cached fields; `ParamsChanged()` extended.
+  - `StampMultiLayer()`: builds base / overlay / collider `TilemapLayerGroup` instances using
+    static partition arrays, calls `ApplyLayered`.
+  - `FilterTable(source, ids)`: filters the resolved priority table to a layer-id subset,
+    preserving order. Used to route base vs. overlay layers to their respective Tilemaps.
+  - `BuildColliderTable(tile, ids)`: maps all non-walkable layer IDs to a single sentinel tile.
+  - Single-tilemap path (`enableMultiLayer = false`) is fully backward compatible.
+  - Console log extended: `multiLayer={enableMultiLayer}` added.
+  - Layer partition: Base = {DeepWater, ShallowWater, Land, LandCore, LandEdge};
+    Overlay = {Vegetation, HillsL1, HillsL2, Stairs};
+    Collider = {DeepWater, ShallowWater, HillsL2}.
+- 4 new EditMode tests green (`TilemapAdapter2DTests.cs`, now 11 total):
+  - `ApplyLayered_NullExport_ThrowsArgumentNullException`
+  - `ApplyLayered_NullGroups_ThrowsArgumentNullException`
+  - `ApplyLayered_NullTilemapInGroup_IsSkippedSilently`
+  - `ApplyLayered_TwoGroups_StampIndependentLayers`
+- Pure adapter/sample-side. No new runtime contracts, no new MapLayerId/MapFieldId entries.
+  Adapters-last invariant preserved.
+
+### Phase H7 — Map Navigation Sample
+**Done. Sequenced after Phase H5.**
+
+Adds a minimal playable character to the PCG map tilemap scene to validate end-to-end
+integration: pipeline → tilemap layers → physics colliders → character movement. No new
+pipeline stages, MapLayerId, or MapFieldId. Pure sample-side.
+
+- **`MapPlayerController2D`** new sample MonoBehaviour
+  (`Runtime/PCG/Samples/PCG Map Tilemap/MapPlayerController2D.cs`):
+  - `Rigidbody2D`-based 4-directional movement (Dynamic body, `GravityScale = 0`).
+  - `Update` reads `Input.GetAxisRaw`; `FixedUpdate` sets `rb.linearVelocity`.
+  - Inspector tunables: `moveSpeed` (default 5f), optional `SpriteRenderer` for
+    horizontal flip, optional `frontSprite`/`backSprite` for North/South facing.
+  - **Resolved at implementation:** Dynamic body + `linearVelocity` (not Kinematic +
+    `MovePosition`) — natural collision response against CompositeCollider2D.
+  - **Resolved:** `CircleCollider2D` (radius 0.3) — smooth wall sliding, no corner catch.
+- **`CameraFollow2D`** new sample MonoBehaviour
+  (`Runtime/PCG/Samples/PCG Map Tilemap/CameraFollow2D.cs`):
+  - Simple `LateUpdate` + `Vector3.SmoothDamp` follow.
+  - **Resolved:** No Cinemachine dependency — avoids a package dep for a sample scene.
+- **Scene setup** (documented in `reference/map-tilemap-scene-setup.md`):
+  - Player GameObject: `Rigidbody2D` (Dynamic, GravityScale=0, FreezeRotation Z) +
+    `CircleCollider2D` + `MapPlayerController2D`.
+  - Physics layers: `Player` ↔ `MapCollider` enabled; all other cross-layer pairs disabled.
+  - Collider Tilemap: H5 `SetupCollider()` — non-walkable cells (DeepWater, ShallowWater,
+    HillsL2) carry the sentinel tile and drive `CompositeCollider2D`.
+- **Validation targets** (confirmed by smoke test):
+  - Player blocked by water and mountain (HillsL2) — H5 collision layer works.
+  - Player walks freely on land — F6 Walkable mask correctly excluded from collider.
+  - Seed change regenerates map and collision shapes update without restarting Play.
+  - Camera tracks player smoothly.
+  - Diagonal wall sliding works without corner-catching.
+- **No EditMode tests** — navigation is inherently a PlayMode concern. Smoke-test checklist
+  (7 items) replaces unit tests.
+- Pure sample-side. No new runtime contracts. Adapters-last invariant preserved.
 
 ### Phase H6 — Rule Tiles / Context-aware Tile Selection
-**Later (planning only). Sequenced after Phase H5.**
+### Done
+- `TilesetConfig.LayerEntry` extended with `ruleTile` field (TileBase).
+- Tile resolution priority (H6): ruleTile > animatedTile > tile > null.
+- `ComputeTilesetConfigHash()` extended to include `ruleTile` InstanceID.
+- Rule Tile assets support Animation output per-rule for animated transitions.
+- Pure adapter/sample-side. No new runtime stage contracts.
 
-Replaces flat single-sprite tiles with context-aware variants that select the correct sprite based
-on neighbor tile types, the single largest visual quality jump available without changing the pipeline.
+### Phase H8 — Mega-Tiles (2×2 Large Terrain Sprites)
+**Later (planning only).**
 
-- Unity's `RuleTile` (from 2D Tilemap Extras): define neighbor-matching rules per tile type;
-  Unity applies the correct sprite variant at stamp time.
-- Highest impact on: ShallowWater/Land boundary (beach corner and edge transitions), Vegetation
-  clusters (interior vs. edge vs. isolated tree), HillsL1/HillsL2 (slope directionality).
-- Requires additional sprite variants per tile type (e.g. DW-style corner and edge art for each
-  terrain type). Significant art-production dependency — deferred until art direction is settled.
-- `TilesetConfig` SO (Phase H3) extended with a `RuleTile` asset slot per layer entry.
-- Pipeline and adapter code changes are small; the art requirement dominates the schedule.
-- Pure adapter/sample-side. No new runtime contracts.
+Replaces clusters of same-type tiles with large multi-cell sprite groups.
+First target: 2×2 HillsL2 clusters → single large mountain sprite.
+
+- **Scan rule:** when a 2×2 block contains 3+ HillsL2 cells, the entire 2×2 block
+  is replaced by a 4-quadrant large mountain sprite (TL/TR/BL/BR).
+- **Candidate approaches** (to evaluate at implementation):
+  - **Rule Tile with Extended Neighbor** — Unity's RuleTile supports extending the
+    neighbor check beyond 3×3. Each cell in a qualifying 2×2 cluster gets a rule
+    that identifies its quadrant position and assigns the correct sub-sprite.
+  - **Adapter pre-pass** — scan the exported HillsL2 mask for 2×2 clusters before
+    stamping. Mark qualifying cells with their quadrant, then stamp the large sprite
+    parts. Keeps the logic in adapter code rather than Rule Tile config.
+  - **Custom TileBase subclass** — a `MegaTile` that overrides `GetTileData` and
+    checks its 2×2 neighborhood at render time.
+- Extensible beyond mountains: forest groves (2×2 Vegetation), town clusters, etc.
+- Pure adapter/sample-side. No new MapLayerId, MapFieldId, or runtime stage contracts.
+- Depends on: Phase H6 (Rule Tiles), tileset art with 2×2 large mountain variants.
 
 ### Phase I
 Burst / SIMD upgrades
@@ -480,7 +570,8 @@ Planning only.
   `MapFieldId.FlowAccumulation`.
 
 ### Phase M — Climate & Biome Classification
-Planning only.
+Planning only. **See [`Phase_M_Design.md`](design/Phase_M_Design.md) for detailed
+stage contracts, data structures, Whittaker table, invariants, and test plan.**
 
 Phase M is the "Climate + Biome" phase. It produces three new scalar fields (Temperature,
 Moisture, Biome) and enables all downstream biome-aware work. This is the single most
@@ -533,28 +624,28 @@ landscape with distinct ecological character.
 
 ### Phase M2 — Biome-Aware Vegetation & Region Naming
 Planning only. Sequenced after Phase M.
+**See [`Phase_M2_Design.md`](design/Phase_M2_Design.md) for detailed stage contracts,
+pipeline reordering rationale, `ScalarFieldCcaOps2D` operator, `RegionMetadata` struct,
+invariants, and test plan.**
 
-Two sub-tasks that consume Phase M's biome output:
+Two independent sub-tasks that consume Phase M's biome output:
 
 - **M2.a — Biome-aware vegetation refactor:**
-  Refactors `Stage_Vegetation2D` (F5) to read `MapFieldId.Biome` and `MapFieldId.Moisture`
-  as additional inputs. Replaces the single global noise threshold (0.40f) with per-biome
-  vegetation density parameters from `BiomeDef`. Dense vegetation in wet forest biomes,
-  sparse in arid biomes, absent in tundra/alpine. The existing noise-based spatial pattern
-  is preserved — only the coverage threshold changes per biome.
-  - No new MapLayerId/MapFieldId. Modifies the write behavior of the existing
-    `Vegetation` mask based on biome context.
+  Moves `Stage_Vegetation2D` after `Stage_Biome2D` in the pipeline (no intermediate stage
+  reads Vegetation). Replaces the single global noise threshold (0.40f) with per-biome
+  `BiomeDef.vegetationDensity`. Same noise salt and spatial pattern; only the threshold
+  changes per cell. No new MapLayerId/MapFieldId.
 
 - **M2.b — Contiguous region detection and naming:**
-  After Phase M produces a biome ID field, run connected-component analysis (using existing
-  `MaskTopologyOps2D` patterns) on each biome type to produce contiguous named regions.
-  Each region gets a unique ID and optionally a generated name ("The Western Forest,"
-  "Coral Bay Marshes"). Dwarf Fortress and RimWorld both do this.
-  - Output: a `MapFieldId.NamedRegionId` integer field, plus a region metadata table
-    (region ID → biome type, area, centroid, name).
-  - Region naming is a downstream adapter/content concern — the pipeline produces IDs
-    and metadata, adapters generate display names.
-  - New append-only ID: `MapFieldId.NamedRegionId`.
+  CCA (flood fill, 4-connected) on same-biome cells produces labeled contiguous regions.
+  Small regions (< `minRegionArea` tunable, default 8 cells) merged into largest adjacent
+  neighbor. Region naming is adapter-side, not pipeline.
+  - New operator: `ScalarFieldCcaOps2D` (multi-label CCA on scalar fields).
+  - New append-only ID: `MapFieldId.NamedRegionId = 5` (COUNT → 6).
+  - Output: `RegionMetadata[]` table (region ID → biome type, area, centroid, bounding box),
+    attached to `MapContext2D` via metadata bag.
+
+- Depends on: Phase M (Biome, Moisture fields), F5 (Stage_Vegetation2D, modified in place).
 
 ### Phase N — World-Site / POI Placement
 Planning only.
@@ -611,86 +702,23 @@ output — the probability of degenerate maps increases as the pipeline gains mo
 
 ### Phase W — Hierarchical World-to-Local Generation (Zoom-In)
 Planning / exploratory only. Not implementation authority.
+**See [`Phase_W_Design.md`](design/Phase_W_Design.md) for detailed architectural design,
+`WorldTileContext` struct, world map structure, and Phase J/K/M interaction model.**
 
 Enables selecting a tile on an overworld map and generating a full-resolution local map
 parametrised by that tile's world-scale properties — the zoom-in pattern used by RimWorld
 and Dwarf Fortress. This is the architectural prerequisite for any game that distinguishes
 a world view from a playable local map.
 
-**What this enables:**
-A world tile carries a compact property set. When selected, those properties drive a local
-`MapContext2D` pipeline run, producing a meaningfully different map for each tile (coastal
-vs. inland, forested vs. arid, flat vs. hilly) while remaining fully deterministic.
-
-**`WorldTileContext` — the handoff struct:**
-Minimal property set a world tile must carry to parametrise local generation. Natural
-candidates based on the current pipeline:
-
-| Property | Source | Consumed by |
-|---|---|---|
-| `LocalSeed` | Derived from world coordinates + world seed | `MapInputs.seed` |
-| `ElevationEnvelope` | World-scale height field | `MapTunables2D` (waterThreshold, islandRadius) |
-| `ShorelineMask` | World-scale coast geometry | `MapShapeInput` (Phase F2c hook) |
-| `BiomeType` | Phase M biome classification | Stage enable/disable flags, `BiomeDef` lookup |
-| `HillinessIntensity` | World-scale elevation variance | Hills stage tunables |
-| `MoistureLevel` | Phase M / Phase L hydrology | `MapFieldId.Moisture` (Phase M) |
-| `TemperatureLevel` | Phase M climate | `MapFieldId.Temperature` (Phase M) |
-
-Every property must be derivable deterministically from world tile coordinates and the
-world seed so that local maps regenerate identically at any time.
-
-**Architectural hook already in place:**
-`MapShapeInput` (Phase F2c) accepts an external mask that overrides the internal island
-silhouette. A coastal world tile can inject a shore mask derived from world-scale coast
-geometry directly into `Stage_BaseTerrain2D` without restructuring the pipeline.
-This is the primary integration point between world scale and local generation.
-
-**World map structure (resolved):**
-The world map is a **rectangular grid** — a low-resolution `MapContext2D` (e.g. 64×64
-or 128×128 tiles). The same pipeline stages run at world scale; each cell becomes a world
-tile. This preserves the grid-first invariant at all scales and reuses all existing contracts.
-Requires the pipeline to be parametrizable across resolutions. Preferred long-term.
-
-**Relationship to Phase J and Phase K (resolved):**
-- Phase J (Voronoi regions) operates *within* each local map for biome partitioning.
-  It is not involved in world-tile structure.
-- Phase K (Plate Tectonics) operates *at world scale* with a coarse Voronoi partition
-  to drive geological features (mountain ranges, volcanic chains) across the world grid.
-  Plate boundaries influence world-tile elevation envelopes but do not define world-tile
-  boundaries — those are always rectangular grid cells.
-- The world grid, Phase J's local Voronoi, and Phase K's geological Voronoi are three
-  independent spatial structures at three different scales.
-
-**Boundary matching:**
-Boundary matching between adjacent local maps (edges align correctly) is explicitly
-deferred. RimWorld does not solve this; DF solves it via shared regional constraint data.
-The rectangular grid structure makes boundary matching tractable in a later sub-phase.
-Implement zoom-in generation first without edge consistency; treat matching as Phase W2.
-
-**Open design decisions:**
-- World map resolution and exact coordinate system.
-- Whether `WorldTileContext` is a struct passed to `MapInputs` or a new `IMapWorldContext`
-  interface layer.
-- Phase W2 (boundary matching) scope and timing — not in scope for Phase W.
-
-**Design compatibility requirements for earlier phases:**
-- **Phase K (Plate Tectonics):** Plate-derived elevation can become the `ElevationEnvelope`
-  property in `WorldTileContext`. The Phase F2c shape-input mechanism already supports this.
-- **Phase M (Biome Classification):** World-scale biome assignment is the natural source of
-  `BiomeType`, `MoistureLevel`, and `TemperatureLevel` in `WorldTileContext`. Phase M's
-  output format (integer biome ID field) is legible at world tile granularity.
-
-**Dependencies:**
-- Phase F2c (MapShapeInput) — already done; primary integration hook
-- Phase M (Biome classification) — world tile properties (BiomeType, MoistureLevel, TemperatureLevel)
-- Phase L (Hydrology) — optional; MoistureLevel source
-- Optionally Phase K (Plate Tectonics) — ElevationEnvelope source
-
-**Downstream:**
-- Phase N (POI Placement) — world tiles carry POI suitability hints; local generation
-  produces the map into which POIs are placed
-- Phase O (Paths) — world-scale path network connects world tiles; local maps expose
-  path entry points at tile edges
+- **World map structure (resolved):** rectangular grid — a low-resolution `MapContext2D`.
+  Preserves grid-first invariant at all scales.
+- **`WorldTileContext` handoff struct:** carries LocalSeed, ElevationEnvelope, ShorelineMask,
+  BiomeType, HillinessIntensity, MoistureLevel, TemperatureLevel per world tile.
+- **Architectural hook:** `MapShapeInput` (Phase F2c) is the primary integration point.
+- **Relationship to Phase J and K (resolved):** Three independent spatial structures at
+  three scales — world grid (W), local Voronoi (J), geological Voronoi (K).
+- **Boundary matching:** Deferred to Phase W2.
+- Dependencies: Phase F2c (done), Phase M (biome data), optionally Phase K and Phase L.
 
 ## Legacy relationship
 Legacy map-generation documents are conceptual reference only for the new pipeline.

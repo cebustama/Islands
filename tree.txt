@@ -10,7 +10,12 @@
 |   |   \---README.md
 |   +---planning
 |   |   +---active
-|   |   |   \---PCG_Roadmap.md
+|   |   |   +---Noise_Composition_Improvements_Roadmap.md
+|   |   |   +---PCG_Roadmap.md
+|   |   |   +---Phase_L_Design.md
+|   |   |   +---Phase_M_Design.md
+|   |   |   +---Phase_M2_Design.md
+|   |   |   \---Phase_W_Design.md
 |   |   \---archive
 |   |       +---Islands_Governance_Migration_Roadmap.md
 |   |       +---Islands_PCG_MapPipelineByLayers_Roadmap_v0.1.0_2026-01-29.md
@@ -20,6 +25,7 @@
 |   |   +---GraphLibrary_Pipeline_Technical_Doc.md
 |   |   +---graphs.md
 |   |   +---legacy-map-generation-reference.md
+|   |   +---map-tilemap-scene-setup.md
 |   |   +---mesh.md
 |   |   +---noise.md
 |   |   +---overview.md
@@ -37,16 +43,38 @@
 |   |   |   \---Tangledeep and Rogues.md
 |   |   +---PCG Techniques
 |   |   |   +---Prompts (TEMP)
-|   |   |   |   +---pass1_noise_and_randomness.md
-|   |   |   |   +---pass2_terrain_and_erosion.md
-|   |   |   |   +---pass3_dungeons.md
-|   |   |   |   +---pass4_rules_and_constraints.md
-|   |   |   |   +---pass5_biomes_placement_regions.md
-|   |   |   |   +---pass6_multiscale_synthesis.md
+|   |   |   |   +---pass1a_randomness_and_fundamental_noise.md
+|   |   |   |   +---pass1b_fractal_composition_and_fields.md
+|   |   |   |   +---pass2a_heightmap_shaping_and_erosion.md
+|   |   |   |   +---pass2b_rivers_caves_and_volumetric.md
+|   |   |   |   +---pass3a_space_first_dungeon_generation.md
+|   |   |   |   +---pass3b_structure_first_dungeon_generation.md
+|   |   |   |   +---pass4a_local_rule_based_tile_placement.md
+|   |   |   |   +---pass4b_constraint_propagation_wfc_grammars.md
+|   |   |   |   +---pass5a_region_partitioning_and_biomes.md
+|   |   |   |   +---pass5b_placement_scattering_and_roads.md
+|   |   |   |   +---pass6a_multiscale_and_world_structure.md
+|   |   |   |   +---pass6b_composition_patterns_and_synthesis.md
 |   |   |   |   \---README_strategy.md
+|   |   |   +---Reports
+|   |   |   |   +---1a Randomness Primitives and Noise.md
+|   |   |   |   +---1b Procedural noise composition and field operations.md
+|   |   |   |   +---2a Heightmap construction, shaping, and erosion.md
+|   |   |   |   +---2b Procedural terrain rivers, caves, voxels, and mesh extraction.md
+|   |   |   |   +---3a Space-first dungeon generation a technical reference.md
+|   |   |   |   +---3b Structure-first dungeon generation.md
+|   |   |   |   +---4a Local rule-based tile and module placement.md
+|   |   |   |   +---4b Propagation and grammar techniques.md
+|   |   |   |   +---5a Region partitioning and biome systems.md
+|   |   |   |   +---5b object placement, scattering, and road generation.md
+|   |   |   |   +---6a Multi-scale generation and graph-based world structure.md
+|   |   |   |   +---pass_6b_composition_patterns_and_synthesis.md
+|   |   |   |   \---pcg_synthesis.md
+|   |   |   +---noise_cross_reference.md
 |   |   |   +---Pass 1 Claude Sonnet.md
 |   |   |   +---pcg_noise_reference.md
 |   |   |   \---pcg_technique_library.md
+|   |   +---pcg_crosscheck_analysis.md
 |   |   \---README.md
 |   +---systems
 |   |   +---map-pipeline-by-layers-ssot.md
@@ -124,6 +152,7 @@
 |   |   |       +---ProceduralTileFactory.cs
 |   |   |       +---TilemapAdapter2D.cs
 |   |   |       +---TilemapLayerEntry.cs
+|   |   |       +---TilemapLayerGroup.cs
 |   |   |       \---TilesetConfig.cs
 |   |   +---Core
 |   |   |   \---GridDomain2D.cs
@@ -189,9 +218,11 @@
 |   |   |   +---PCG Map Tilemap
 |   |   |   |   +---Palettes
 |   |   |   |   +---Tilesets
-|   |   |   |   |   +---DragonWarrior
-|   |   |   |   |   |   \---Tiles
+|   |   |   |   |   +---TilesetConfig-8bit.asset
 |   |   |   |   |   \---TilesetConfig-DragonWarrior.asset
+|   |   |   |   +---CameraFollow2D.cs
+|   |   |   |   +---MapPlayerAnimator2D.cs
+|   |   |   |   +---MapPlayerController2D.cs
 |   |   |   |   \---PCG Map Tilemap.unity
 |   |   |   +---PCG Mask
 |   |   |   |   +---MaskGrid2DBooleanOpsSmokeTest.cs
@@ -414,6 +445,7 @@
 |   |   \---ProceduralSurface.unity
 |   \---0.1.0-preview.zip
 +---copy-files-from-list_with-mode.bat
++---Documentation~.zip
 +---Documentation-snapshot.zip
 +---file_copies.zip
 +---files.txt

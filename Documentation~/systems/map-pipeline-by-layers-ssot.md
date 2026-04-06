@@ -138,13 +138,26 @@ Current `MapFieldId`:
 ### F4 shore contracts
 `Stage_Shore2D`
 - reads `Land` (read-only)
+- reads `Height` (read-only; only when `ShallowWaterDepth01 > 0` or `MidWaterDepth01 > 0`)
 - writes `ShallowWater`
-- `ShallowWater` = NOT Land AND (4-adjacent to at least one Land cell)
+- writes `MidWater` (only when `MidWaterDepth01 > 0`, F4c)
+- when `ShallowWaterDepth01 == 0` (default):
+  `ShallowWater` = NOT Land AND (4-adjacent to at least one Land cell)
+  Ring thickness is exactly 1 cell (4-adjacent only).
+- when `ShallowWaterDepth01 > 0` (F4b):
+  `ShallowWater` = NOT Land AND (4-adjacent to at least one Land cell
+  OR Height >= waterThreshold − ShallowWaterDepth01)
+  Adjacency ring always included; depth band extends coverage.
+- when `MidWaterDepth01 > 0` (F4c):
+  `MidWater` = NOT Land AND NOT ShallowWater AND Height >= waterThreshold − MidWaterDepth01
+  MidWaterDepth01 must be > ShallowWaterDepth01 for a visible band.
+  When == 0 (default), MidWater layer is not allocated.
 - `ShallowWater ⊆ NOT Land`
 - `ShallowWater ∩ Land == ∅`
-- `ShallowWater ∩ DeepWater` is intentionally non-empty: coastal cells are simultaneously
-  DeepWater (border-connected ocean, F2) and ShallowWater (land-adjacent ring, F4)
-- ring thickness is exactly 1 cell (4-adjacent only); no tunable
+- `MidWater ⊆ NOT Land`
+- `MidWater ∩ Land == ∅`
+- `MidWater ∩ ShallowWater == ∅`
+- `ShallowWater ∩ DeepWater` is intentionally non-empty
 - does not mutate `Land`, `DeepWater`, or `Height`
 - does not consume `ctx.Rng` (no noise, no randomness)
 
@@ -365,6 +378,15 @@ Current `MapFieldId`:
 - shore stage determinism
 - shore stage invariants (disjoint from Land, adjacency check, no-mutate)
 - F4 stage golden
+- F4b depth=0 matches adjacency-only (golden unchanged)
+- F4b depth>0 produces wider band
+- F4b depth>0 determinism
+- F4b depth>0 disjoint from Land
+- F4b depth>0 no-mutate
+- F4c MidWater produces cells when depth>0
+- F4c MidWater disjoint from Land and ShallowWater
+- F4c MidWater determinism
+- F4c MidWater not allocated when depth=0
 - F4 pipeline golden
 - vegetation stage determinism
 - vegetation stage invariants (subset checks: Land, LandInterior; disjoint checks: HillsL2, ShallowWater; no-mutate)

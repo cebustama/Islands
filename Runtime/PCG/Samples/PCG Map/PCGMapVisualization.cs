@@ -133,7 +133,7 @@ namespace Islands.PCG.Samples
                  "field or change the seed to force a refresh after editing preset colors.")]
         [SerializeField] private bool useLayerPresetColors = false;
 
-        [Tooltip("One entry per MapLayerId (COUNT=12). Index matches MapLayerId integer value.")]
+        [Tooltip("One entry per MapLayerId (COUNT=13). Index matches MapLayerId integer value.")]
         [SerializeField]
         private Color[] layerPresetOnColors = new Color[(int)MapLayerId.COUNT]
         {
@@ -149,6 +149,7 @@ namespace Islands.PCG.Samples
             new Color(0.90f, 0.20f, 0.20f, 1f),  // 9  LandEdge      — red
             new Color(0.30f, 0.75f, 0.30f, 1f),  // 10 LandInterior  — mid green
             new Color(0.00f, 0.65f, 0.40f, 1f),  // 11 LandCore      — teal
+            new Color(0.10f, 0.30f, 0.75f, 1f),  // 12 MidWater      — medium blue (F4c)
         };
 
         [Header("F2 Tunables (Shape + Threshold)")]

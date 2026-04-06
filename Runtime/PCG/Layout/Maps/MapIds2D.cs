@@ -23,7 +23,10 @@ namespace Islands.PCG.Layout.Maps
         // Phase G append-only additions (do not reorder existing IDs)
         LandCore = 11,
 
-        COUNT = 12
+        // Phase F4c append-only additions (do not reorder existing IDs)
+        MidWater = 12,
+
+        COUNT = 13
     }
 
     /// <summary>

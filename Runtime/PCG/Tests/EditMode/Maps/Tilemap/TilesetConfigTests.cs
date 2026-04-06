@@ -6,24 +6,15 @@ using Islands.PCG.Layout.Maps;
 
 /// <summary>
 /// EditMode tests for <see cref="TilesetConfig"/>.
-///
-/// Key contracts tested:
-///   1. Default layers use the visual priority order (Hills after Vegetation).
-///   2. Each LayerEntry stores its own explicit MapLayerId — not derived from position.
-///   3. Unassigned/disabled entries emit null (null-means-skip; fallbackTile not propagated).
-///   4. Length mismatch guard returns null.
-///   5. [H4] animatedTile wins over tile when both are assigned.
-///   6. [H4] animatedTile null → static tile is used (backward compatible).
-///
-/// Phase H3 / H3-fix / H4.
+/// Phase H3 / H3-fix / H4 / H6 / F4c.
 /// </summary>
 [TestFixture]
 public class TilesetConfigTests
 {
-    // Visual priority order must match s_defaultPriorityOrder in TilesetConfig.
     private static readonly MapLayerId[] ExpectedDefaultOrder =
     {
         MapLayerId.DeepWater,
+        MapLayerId.MidWater,        // F4c
         MapLayerId.ShallowWater,
         MapLayerId.Land,
         MapLayerId.LandInterior,
@@ -80,10 +71,17 @@ public class TilesetConfigTests
     [Test]
     public void DefaultLayers_AllAnimatedTilesNull()
     {
-        // H4: animatedTile defaults to null — no animation assigned out of the box.
         for (int i = 0; i < _config.layers.Length; i++)
             Assert.IsNull(_config.layers[i].animatedTile,
                 $"Layer at position {i} ({_config.layers[i].layerId}) animatedTile should be null by default.");
+    }
+
+    [Test]
+    public void DefaultLayers_AllRuleTilesNull()
+    {
+        for (int i = 0; i < _config.layers.Length; i++)
+            Assert.IsNull(_config.layers[i].ruleTile,
+                $"Layer at position {i} ({_config.layers[i].layerId}) ruleTile should be null by default.");
     }
 
     [Test]
@@ -95,30 +93,36 @@ public class TilesetConfigTests
     }
 
     // ------------------------------------------------------------------
-    // Visual priority order (critical correctness test)
+    // Visual priority order
     // ------------------------------------------------------------------
 
     [Test]
     public void DefaultLayers_VisualPriorityOrder_HillsAfterVegetation()
     {
-        // Hills must appear AFTER Vegetation in the array so they have higher stamp priority.
-        // A cell that is both Vegetation and HillsL1 should show the HillsL1 tile.
-        int vegIdx = -1;
-        int hills1Idx = -1;
-        int hills2Idx = -1;
-
+        int vegIdx = -1, hills1Idx = -1, hills2Idx = -1;
         for (int i = 0; i < _config.layers.Length; i++)
         {
             if (_config.layers[i].layerId == MapLayerId.Vegetation) vegIdx = i;
             if (_config.layers[i].layerId == MapLayerId.HillsL1) hills1Idx = i;
             if (_config.layers[i].layerId == MapLayerId.HillsL2) hills2Idx = i;
         }
+        Assert.Greater(hills1Idx, vegIdx, "HillsL1 must appear after Vegetation.");
+        Assert.Greater(hills2Idx, vegIdx, "HillsL2 must appear after Vegetation.");
+    }
 
-        Assert.Greater(hills1Idx, vegIdx,
-            "HillsL1 must appear after Vegetation in the priority array " +
-            "(HillsL1 should overwrite Vegetation, not the reverse).");
-        Assert.Greater(hills2Idx, vegIdx,
-            "HillsL2 must appear after Vegetation in the priority array.");
+    [Test]
+    public void DefaultLayers_VisualPriorityOrder_MidWaterBetweenDeepAndShallow()
+    {
+        // F4c: MidWater must sit between DeepWater and ShallowWater in priority.
+        int deepIdx = -1, midIdx = -1, shallowIdx = -1;
+        for (int i = 0; i < _config.layers.Length; i++)
+        {
+            if (_config.layers[i].layerId == MapLayerId.DeepWater) deepIdx = i;
+            if (_config.layers[i].layerId == MapLayerId.MidWater) midIdx = i;
+            if (_config.layers[i].layerId == MapLayerId.ShallowWater) shallowIdx = i;
+        }
+        Assert.Greater(midIdx, deepIdx, "MidWater must appear after DeepWater.");
+        Assert.Greater(shallowIdx, midIdx, "ShallowWater must appear after MidWater.");
     }
 
     [Test]
@@ -134,21 +138,15 @@ public class TilesetConfigTests
     }
 
     // ------------------------------------------------------------------
-    // Explicit layerId — decoupled from position
+    // Explicit layerId
     // ------------------------------------------------------------------
 
     [Test]
     public void DefaultLayers_LayerIdIsExplicit_NotDerivedFromPosition()
     {
-        // LayerId is stored per-entry and matches the visual priority order,
-        // NOT the MapLayerId integer sequence (0,1,2,...).
-        // Spot-check: position 0 should be DeepWater, position 5 should be Vegetation.
-        Assert.AreEqual(MapLayerId.DeepWater, _config.layers[0].layerId,
-            "Position 0 should be DeepWater.");
-        Assert.AreEqual(MapLayerId.Vegetation, _config.layers[5].layerId,
-            "Position 5 should be Vegetation (after LandCore, before HillsL1).");
-        Assert.AreEqual(MapLayerId.HillsL1, _config.layers[6].layerId,
-            "Position 6 should be HillsL1 (after Vegetation).");
+        Assert.AreEqual(MapLayerId.DeepWater, _config.layers[0].layerId, "Position 0 should be DeepWater.");
+        Assert.AreEqual(MapLayerId.MidWater, _config.layers[1].layerId, "Position 1 should be MidWater.");
+        Assert.AreEqual(MapLayerId.Vegetation, _config.layers[6].layerId, "Position 6 should be Vegetation.");
     }
 
     // ------------------------------------------------------------------
@@ -170,7 +168,6 @@ public class TilesetConfigTests
     [Test]
     public void ToLayerEntries_LayerIdsMatchExplicitEntryLayerIds()
     {
-        // Output LayerIds must come from layers[i].layerId, not from position.
         TilemapLayerEntry[] entries = _config.ToLayerEntries();
         for (int i = 0; i < entries.Length; i++)
             Assert.AreEqual(_config.layers[i].layerId, entries[i].LayerId,
@@ -178,52 +175,38 @@ public class TilesetConfigTests
     }
 
     // ------------------------------------------------------------------
-    // ToLayerEntries — null-means-skip contract (core correctness)
+    // ToLayerEntries — null-means-skip
     // ------------------------------------------------------------------
 
     [Test]
     public void ToLayerEntries_EnabledEntryNullTile_ProducesNullInTable()
     {
-        // All default entries are enabled with null tiles → all output tiles must be null.
         TilemapLayerEntry[] entries = _config.ToLayerEntries();
         for (int i = 0; i < entries.Length; i++)
             Assert.IsNull(entries[i].Tile,
-                $"Entry {i} ({_config.layers[i].layerId}): enabled with null tile must " +
-                "produce null in the priority table (null-means-skip contract).");
+                $"Entry {i} ({_config.layers[i].layerId}): enabled with null tile must produce null.");
     }
 
     [Test]
     public void ToLayerEntries_DisabledEntry_ProducesNullInTable()
     {
-        // Find the Vegetation entry and disable it.
         int vegIdx = -1;
         for (int i = 0; i < _config.layers.Length; i++)
             if (_config.layers[i].layerId == MapLayerId.Vegetation) { vegIdx = i; break; }
-
-        Assert.GreaterOrEqual(vegIdx, 0, "Vegetation entry must exist in default layers.");
+        Assert.GreaterOrEqual(vegIdx, 0);
 
         _config.layers[vegIdx].enabled = false;
-        TilemapLayerEntry[] entries = _config.ToLayerEntries();
-
-        Assert.IsNull(entries[vegIdx].Tile,
-            "Disabled Vegetation entry must produce null tile in the priority table.");
+        Assert.IsNull(_config.ToLayerEntries()[vegIdx].Tile,
+            "Disabled entry must produce null tile.");
     }
 
     [Test]
     public void ToLayerEntries_FallbackTile_NotPropagatedToEntries()
     {
-        // Regression: fallbackTile must NOT appear in individual priority entries.
-        // If it did, high-priority subset layers (LandCore ⊆ Land) would overwrite
-        // the parent tile with the fallback, causing visually incorrect results.
-        //
-        // All tiles are null by default. The output array must be all-null regardless
-        // of fallbackTile. (We can't assign a real TileBase in EditMode tests without
-        // a tile asset, but the logic is the same: null tile → null entry, period.)
         TilemapLayerEntry[] entries = _config.ToLayerEntries();
         for (int i = 0; i < entries.Length; i++)
             Assert.IsNull(entries[i].Tile,
-                $"Entry {i}: unassigned tile must be null — fallbackTile must not be " +
-                "propagated into priority table entries.");
+                $"Entry {i}: unassigned tile must be null — fallbackTile must not be propagated.");
     }
 
     // ------------------------------------------------------------------
@@ -234,85 +217,118 @@ public class TilesetConfigTests
     public void ToLayerEntries_MismatchedArrayLength_ReturnsNull()
     {
         _config.layers = new TilesetConfig.LayerEntry[0];
-        Assert.IsNull(_config.ToLayerEntries(),
-            "ToLayerEntries should return null when layers.Length != MapLayerId.COUNT.");
+        Assert.IsNull(_config.ToLayerEntries());
     }
 
     [Test]
     public void ToLayerEntries_NullLayersArray_ReturnsNull()
     {
         _config.layers = null;
-        Assert.IsNull(_config.ToLayerEntries(),
-            "ToLayerEntries should return null when layers is null.");
+        Assert.IsNull(_config.ToLayerEntries());
     }
 
     // ------------------------------------------------------------------
-    // ToLayerEntries — H4 animated tile precedence
+    // H4 — animated tile precedence
     // ------------------------------------------------------------------
 
     [Test]
     public void ToLayerEntries_AnimatedTileWinsOverStaticTile()
     {
-        // When both tile and animatedTile are assigned, animatedTile must win.
-        // Uses Tile (concrete TileBase from UnityEngine.Tilemaps, no Extras required)
-        // to produce non-null, distinct TileBase instances for the assertion.
         Tile staticTile = ScriptableObject.CreateInstance<Tile>();
         Tile animatedTile = ScriptableObject.CreateInstance<Tile>();
-
         try
         {
-            // Assign both to the DeepWater entry (position 0 in default priority order).
-            int deepWaterIdx = -1;
-            for (int i = 0; i < _config.layers.Length; i++)
-                if (_config.layers[i].layerId == MapLayerId.DeepWater) { deepWaterIdx = i; break; }
-
-            Assert.GreaterOrEqual(deepWaterIdx, 0, "DeepWater entry must exist.");
-
-            _config.layers[deepWaterIdx].tile = staticTile;
-            _config.layers[deepWaterIdx].animatedTile = animatedTile;
-            _config.layers[deepWaterIdx].enabled = true;
-
-            TilemapLayerEntry[] entries = _config.ToLayerEntries();
-
-            Assert.AreSame(animatedTile, entries[deepWaterIdx].Tile,
-                "When both tile and animatedTile are assigned, animatedTile must take precedence " +
-                "in the output priority table (H4 animated tile wins contract).");
+            int idx = FindEntry(MapLayerId.DeepWater);
+            _config.layers[idx].tile = staticTile;
+            _config.layers[idx].animatedTile = animatedTile;
+            _config.layers[idx].enabled = true;
+            Assert.AreSame(animatedTile, _config.ToLayerEntries()[idx].Tile,
+                "animatedTile must take precedence over tile.");
         }
-        finally
-        {
-            Object.DestroyImmediate(staticTile);
-            Object.DestroyImmediate(animatedTile);
-        }
+        finally { Object.DestroyImmediate(staticTile); Object.DestroyImmediate(animatedTile); }
     }
 
     [Test]
     public void ToLayerEntries_AnimatedTileNull_FallsBackToStaticTile()
     {
-        // When animatedTile is null but tile is assigned, tile must be used unchanged.
-        // This is the pre-H4 backward-compatible path.
         Tile staticTile = ScriptableObject.CreateInstance<Tile>();
-
         try
         {
-            int deepWaterIdx = -1;
-            for (int i = 0; i < _config.layers.Length; i++)
-                if (_config.layers[i].layerId == MapLayerId.DeepWater) { deepWaterIdx = i; break; }
-
-            Assert.GreaterOrEqual(deepWaterIdx, 0, "DeepWater entry must exist.");
-
-            _config.layers[deepWaterIdx].tile = staticTile;
-            _config.layers[deepWaterIdx].animatedTile = null;    // explicitly null — no animation
-            _config.layers[deepWaterIdx].enabled = true;
-
-            TilemapLayerEntry[] entries = _config.ToLayerEntries();
-
-            Assert.AreSame(staticTile, entries[deepWaterIdx].Tile,
-                "When animatedTile is null, the static tile must be used (H4 backward " +
-                "compatibility — animatedTile null falls back to tile).");
+            int idx = FindEntry(MapLayerId.DeepWater);
+            _config.layers[idx].tile = staticTile;
+            _config.layers[idx].animatedTile = null;
+            _config.layers[idx].enabled = true;
+            Assert.AreSame(staticTile, _config.ToLayerEntries()[idx].Tile,
+                "When animatedTile is null, static tile must be used.");
         }
-        finally
+        finally { Object.DestroyImmediate(staticTile); }
+    }
+
+    // ------------------------------------------------------------------
+    // H6 — rule tile precedence
+    // ------------------------------------------------------------------
+
+    [Test]
+    public void ToLayerEntries_RuleTileWinsOverAnimatedAndStaticTile()
+    {
+        Tile s = ScriptableObject.CreateInstance<Tile>();
+        Tile a = ScriptableObject.CreateInstance<Tile>();
+        Tile r = ScriptableObject.CreateInstance<Tile>();
+        try
         {
-            Object.DestroyImmediate(staticTile);
+            int idx = FindEntry(MapLayerId.ShallowWater);
+            _config.layers[idx].tile = s;
+            _config.layers[idx].animatedTile = a;
+            _config.layers[idx].ruleTile = r;
+            _config.layers[idx].enabled = true;
+            Assert.AreSame(r, _config.ToLayerEntries()[idx].Tile,
+                "ruleTile must take precedence over animatedTile and tile.");
         }
+        finally { Object.DestroyImmediate(s); Object.DestroyImmediate(a); Object.DestroyImmediate(r); }
+    }
+
+    [Test]
+    public void ToLayerEntries_RuleTileNull_FallsBackToAnimatedTile()
+    {
+        Tile s = ScriptableObject.CreateInstance<Tile>();
+        Tile a = ScriptableObject.CreateInstance<Tile>();
+        try
+        {
+            int idx = FindEntry(MapLayerId.ShallowWater);
+            _config.layers[idx].tile = s;
+            _config.layers[idx].animatedTile = a;
+            _config.layers[idx].ruleTile = null;
+            _config.layers[idx].enabled = true;
+            Assert.AreSame(a, _config.ToLayerEntries()[idx].Tile,
+                "When ruleTile is null, animatedTile must win.");
+        }
+        finally { Object.DestroyImmediate(s); Object.DestroyImmediate(a); }
+    }
+
+    [Test]
+    public void ToLayerEntries_DisabledEntry_RuleTileIgnored()
+    {
+        Tile r = ScriptableObject.CreateInstance<Tile>();
+        try
+        {
+            int idx = FindEntry(MapLayerId.ShallowWater);
+            _config.layers[idx].ruleTile = r;
+            _config.layers[idx].enabled = false;
+            Assert.IsNull(_config.ToLayerEntries()[idx].Tile,
+                "Disabled entry with ruleTile must still produce null.");
+        }
+        finally { Object.DestroyImmediate(r); }
+    }
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+
+    private int FindEntry(MapLayerId id)
+    {
+        for (int i = 0; i < _config.layers.Length; i++)
+            if (_config.layers[i].layerId == id) return i;
+        Assert.Fail($"{id} entry not found in default layers.");
+        return -1;
     }
 }

@@ -1,4 +1,5 @@
-﻿using Unity.Collections;
+﻿using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Tilemaps;
@@ -36,6 +37,18 @@ namespace Islands.PCG.Adapters.Tilemap
     /// Phase H4: ComputeTilesetConfigHash() extended to include animatedTile InstanceID
     ///           per layer entry, so assigning or swapping an AnimatedTile asset in the
     ///           TilesetConfig Inspector triggers a real-time rebuild.
+    /// Phase H6: ComputeTilesetConfigHash() extended to include ruleTile InstanceID per
+    ///           layer entry, so assigning or swapping a RuleTile asset triggers rebuild.
+    /// Phase F4b: shallowWaterDepth01 Inspector field added. When > 0, Shore stage marks
+    ///           water cells above (waterThreshold - depth) as ShallowWater, producing a
+    ///           variable-width coastal shelf. Adjacency ring always included.
+    /// Phase F4c: midWaterDepth01 Inspector field added. When > 0, Shore stage writes a
+    ///           MidWater layer for water cells between shallow and deep thresholds,
+    ///           producing a 3-band water depth system.
+    /// Phase H5: Multi-layer Tilemap support. Enable Multi Layer to separate pipeline
+    ///           layers across base (opaque), overlay (transparent), and collider
+    ///           (invisible physics) Tilemaps. SetupCollider auto-adds physics components
+    ///           to the collider Tilemap. Single-tilemap path is fully backward compatible.
     /// </summary>
     [ExecuteAlways]
     [AddComponentMenu("Islands/PCG/Map Tilemap Visualization")]
@@ -45,7 +58,9 @@ namespace Islands.PCG.Adapters.Tilemap
         // Inspector — Tilemap Target
         // =====================================================================
         [Header("Tilemap Target")]
-        [Tooltip("The Unity Tilemap to stamp. Must be assigned before the visualization runs.")]
+        [Tooltip("The Unity Tilemap to stamp. Must be assigned before the visualization runs.\n" +
+                 "In Multi-layer mode this receives the base (opaque) layers:\n" +
+                 "DeepWater, ShallowWater, Land, LandCore, LandEdge.")]
         [SerializeField] private UnityEngine.Tilemaps.Tilemap tilemap;
 
         // =====================================================================
@@ -91,6 +106,23 @@ namespace Islands.PCG.Adapters.Tilemap
         [Tooltip("Include F4 Shore (ShallowWater) stage. Requires Hills enabled for correct results.")]
         [SerializeField] private bool enableShoreStage = true;
 
+        [Tooltip("Height band below waterThreshold that qualifies as shallow water (F4b).\n" +
+                 "0 = adjacency-only (original 1-cell ring). > 0 = water cells with Height\n" +
+                 "above (waterThreshold - this value) are also marked ShallowWater, producing\n" +
+                 "a variable-width coastal shelf that follows terrain contours.\n" +
+                 "The 1-cell adjacency ring is always included regardless of this value.\n" +
+                 "Typical: 0.05 = subtle shelf, 0.15 = wide shelf.")]
+        [Range(0f, 0.5f)]
+        [SerializeField] private float shallowWaterDepth01 = 0f;
+
+        [Tooltip("Height band below waterThreshold for mid-depth water (F4c).\n" +
+                 "0 = no MidWater layer (default). > 0 = water cells between\n" +
+                 "shallow and deep thresholds become MidWater. Must be greater\n" +
+                 "than Shallow Water Depth for a visible band to appear.\n" +
+                 "Typical: 0.15 = subtle mid band, 0.30 = wide mid band.")]
+        [Range(0f, 0.5f)]
+        [SerializeField] private float midWaterDepth01 = 0f;
+
         [Tooltip("Include F5 Vegetation stage. Requires Shore enabled for correct results.")]
         [SerializeField] private bool enableVegetationStage = true;
 
@@ -134,6 +166,45 @@ namespace Islands.PCG.Adapters.Tilemap
                  "Set false to composite on top of existing content.")]
         [SerializeField] private bool clearBeforeRun = true;
 
+        // =====================================================================
+        // Inspector — Multi-layer Tilemaps (H5)
+        // =====================================================================
+        [Header("Multi-layer Tilemaps (H5)")]
+        [Tooltip("When enabled, stamps base layers to the main Tilemap, overlay layers to\n" +
+                 "Overlay Tilemap (if assigned), and physics collision cells to Collider\n" +
+                 "Tilemap (if assigned).\n\n" +
+                 "Base layers:    DeepWater, MidWater, ShallowWater, Land, LandCore, LandEdge\n" +
+                 "Overlay layers: Vegetation, HillsL1, HillsL2, Stairs\n" +
+                 "Collider cells: DeepWater, MidWater, ShallowWater, HillsL2 (non-walkable)\n\n" +
+                 "When disabled, the existing single-tilemap Apply() path is used (backward compatible).")]
+        [SerializeField] private bool enableMultiLayer = false;
+
+        [Tooltip("Overlay Tilemap (H5): receives Vegetation, HillsL1, HillsL2, Stairs.\n" +
+                 "Set its Tilemap Renderer Order In Layer above the main Tilemap.\n" +
+                 "Enable transparency on its material so underlying tiles show through.\n" +
+                 "Ignored when Enable Multi Layer is disabled or this field is null.")]
+        [SerializeField] private UnityEngine.Tilemaps.Tilemap overlayTilemap;
+
+        [Tooltip("Collider Tilemap (H5): receives a sentinel tile at non-walkable cells\n" +
+                 "(DeepWater, ShallowWater, HillsL2) to drive physics collision.\n" +
+                 "Set Tilemap Renderer Color Alpha = 0 to hide this layer visually.\n" +
+                 "Ignored when Enable Multi Layer is disabled or this field is null.\n" +
+                 "Enable Auto-setup Collider to add physics components automatically.")]
+        [SerializeField] private UnityEngine.Tilemaps.Tilemap colliderTilemap;
+
+        [Tooltip("Tile stamped at non-walkable cells on the Collider Tilemap.\n" +
+                 "Any non-null tile works — use a small invisible or solid-color tile.\n" +
+                 "Null = collider group is skipped even if Collider Tilemap is assigned.")]
+        [SerializeField] private TileBase colliderTile;
+
+        [Tooltip("When true, calls TilemapAdapter2D.SetupCollider() on the Collider Tilemap\n" +
+                 "before each stamp. Adds TilemapCollider2D + CompositeCollider2D +\n" +
+                 "Rigidbody2D (static) if not already present. Idempotent — safe to leave on.")]
+        [SerializeField] private bool enableColliderAutoSetup = true;
+
+        // =====================================================================
+        // Inspector — Priority Table (inline fallback)
+        // =====================================================================
         [Header("Priority Table  (low → high priority)")]
         [Tooltip("Ordered entries: earlier = lower priority. Last matching layer wins per cell.\n" +
                  "Typical order: DeepWater, ShallowWater, Land, Vegetation, HillsL1, HillsL2,\n" +
@@ -194,6 +265,8 @@ namespace Islands.PCG.Adapters.Tilemap
         private int lastResolution;
         private bool lastEnableHillsStage;
         private bool lastEnableShoreStage;
+        private float lastShallowWaterDepth01;  // F4b
+        private float lastMidWaterDepth01;      // F4c
         private bool lastEnableVegetationStage;
         private bool lastEnableTraversalStage;
         private bool lastEnableMorphologyStage;
@@ -218,6 +291,13 @@ namespace Islands.PCG.Adapters.Tilemap
         private bool lastUseProceduralTiles;
         private ulong lastProceduralHash;
         private Color lastProceduralFallbackColor;
+
+        // H5 — multi-layer dirty cache
+        private bool lastEnableMultiLayer;
+        private UnityEngine.Tilemaps.Tilemap lastOverlayTilemap;
+        private UnityEngine.Tilemaps.Tilemap lastColliderTilemap;
+        private TileBase lastColliderTile;
+        private bool lastEnableColliderAutoSetup;
 
         // =====================================================================
         // MonoBehaviour lifecycle
@@ -289,6 +369,12 @@ namespace Islands.PCG.Adapters.Tilemap
             baseStage.noiseAmplitude = Mathf.Max(0f, eAmp);
             baseStage.quantSteps = Mathf.Max(0, eQuant);
 
+            // ---- Configure shore stage (F4b / F4c) ----
+            float eShallowDepth = preset != null ? preset.shallowWaterDepth01 : shallowWaterDepth01;
+            float eMidDepth = preset != null ? preset.midWaterDepth01 : midWaterDepth01;
+            shoreStage.ShallowWaterDepth01 = Mathf.Max(0f, eShallowDepth);
+            shoreStage.MidWaterDepth01 = Mathf.Max(0f, eMidDepth);
+
             var inputs = new MapInputs(
                 seed: eSeed,
                 domain: new GridDomain2D(eRes, eRes),
@@ -332,14 +418,23 @@ namespace Islands.PCG.Adapters.Tilemap
                 activeFallback = fallbackTile;
             }
 
-            // ---- Stamp tilemap ----
-            TilemapAdapter2D.Apply(
-                export,
-                tilemap,
-                activeTable,
-                activeFallback,
-                clearFirst: true,
-                flipY: flipY);
+            // ---- Stamp tilemap(s) ----
+            // H5: multi-layer path separates base, overlay, and collider groups.
+            // Single-tilemap path (enableMultiLayer = false) is fully backward compatible.
+            if (enableMultiLayer)
+            {
+                StampMultiLayer(export, activeTable, activeFallback);
+            }
+            else
+            {
+                TilemapAdapter2D.Apply(
+                    export,
+                    tilemap,
+                    activeTable,
+                    activeFallback,
+                    clearFirst: true,
+                    flipY: flipY);
+            }
 
             // ---- Count stamped tiles for console diagnostics ----
             int stamped = CountStampedTiles(eRes);
@@ -353,6 +448,7 @@ namespace Islands.PCG.Adapters.Tilemap
                 $"veg={eVeg} traversal={eTrav} " +
                 $"morphology={eMorph} flipY={flipY} " +
                 $"proceduralTiles={useProceduralTiles} " +
+                $"multiLayer={enableMultiLayer} " +
                 $"tilesStamped={stamped}/{eRes * eRes}");
         }
 
@@ -414,6 +510,8 @@ namespace Islands.PCG.Adapters.Tilemap
             lastResolution = preset != null ? preset.resolution : resolution;
             lastEnableHillsStage = preset != null ? preset.enableHillsStage : enableHillsStage;
             lastEnableShoreStage = preset != null ? preset.enableShoreStage : enableShoreStage;
+            lastShallowWaterDepth01 = preset != null ? preset.shallowWaterDepth01 : shallowWaterDepth01;
+            lastMidWaterDepth01 = preset != null ? preset.midWaterDepth01 : midWaterDepth01;
             lastEnableVegetationStage = preset != null ? preset.enableVegetationStage : enableVegetationStage;
             lastEnableTraversalStage = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
@@ -434,6 +532,13 @@ namespace Islands.PCG.Adapters.Tilemap
             lastUseProceduralTiles = useProceduralTiles;
             lastProceduralFallbackColor = proceduralFallbackColor;
             lastProceduralHash = ComputeProceduralHash();
+
+            // H5 — multi-layer dirty cache
+            lastEnableMultiLayer = enableMultiLayer;
+            lastOverlayTilemap = overlayTilemap;
+            lastColliderTilemap = colliderTilemap;
+            lastColliderTile = colliderTile;
+            lastEnableColliderAutoSetup = enableColliderAutoSetup;
         }
 
         private bool ParamsChanged()
@@ -445,6 +550,8 @@ namespace Islands.PCG.Adapters.Tilemap
                 || (preset != null ? preset.resolution : resolution) != lastResolution
                 || (preset != null ? preset.enableHillsStage : enableHillsStage) != lastEnableHillsStage
                 || (preset != null ? preset.enableShoreStage : enableShoreStage) != lastEnableShoreStage
+                || !Mathf.Approximately(preset != null ? preset.shallowWaterDepth01 : shallowWaterDepth01, lastShallowWaterDepth01)
+                || !Mathf.Approximately(preset != null ? preset.midWaterDepth01 : midWaterDepth01, lastMidWaterDepth01)
                 || (preset != null ? preset.enableVegetationStage : enableVegetationStage) != lastEnableVegetationStage
                 || (preset != null ? preset.enableTraversalStage : enableTraversalStage) != lastEnableTraversalStage
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
@@ -463,16 +570,23 @@ namespace Islands.PCG.Adapters.Tilemap
                 || ComputePriorityHash() != lastPriorityHash
                 || useProceduralTiles != lastUseProceduralTiles
                 || proceduralFallbackColor != lastProceduralFallbackColor
-                || ComputeProceduralHash() != lastProceduralHash;
+                || ComputeProceduralHash() != lastProceduralHash
+                // H5 — multi-layer dirty checks
+                || enableMultiLayer != lastEnableMultiLayer
+                || overlayTilemap != lastOverlayTilemap
+                || colliderTilemap != lastColliderTilemap
+                || colliderTile != lastColliderTile
+                || enableColliderAutoSetup != lastEnableColliderAutoSetup;
         }
 
         // FNV-1a over TilesetConfig content (layerId + tile InstanceIDs + animatedTile InstanceIDs
-        // + enabled booleans + fallback InstanceID).
-        // Detects tile swaps, animated tile swaps, enabled-toggle edits, layerId changes, and
-        // fallback changes made directly to the SO asset while it is assigned.
+        // + ruleTile InstanceIDs + enabled booleans + fallback InstanceID).
+        // Detects tile swaps, animated tile swaps, rule tile swaps, enabled-toggle edits,
+        // layerId changes, and fallback changes made directly to the SO asset while it is assigned.
         // Reference-equality alone cannot detect these in-place edits.
         // Runs every Update() frame; cost is O(MapLayerId.COUNT) — negligible (12 iterations).
         // H4: animatedTile InstanceID added to loop so Inspector edits to animated slots trigger rebuild.
+        // H6: ruleTile InstanceID added to loop so Inspector edits to rule tile slots trigger rebuild.
         private ulong ComputeTilesetConfigHash()
         {
             const ulong FnvOffset = 14695981039346656037UL;
@@ -488,10 +602,12 @@ namespace Islands.PCG.Adapters.Tilemap
                 {
                     int tileId = layers[i].tile != null ? layers[i].tile.GetInstanceID() : 0;
                     int animTileId = layers[i].animatedTile != null ? layers[i].animatedTile.GetInstanceID() : 0; // H4
+                    int ruleTileId = layers[i].ruleTile != null ? layers[i].ruleTile.GetInstanceID() : 0; // H6
                     int layerId = (int)layers[i].layerId;
                     h ^= (ulong)(uint)layerId; h *= FnvPrime;
                     h ^= (ulong)(uint)tileId; h *= FnvPrime;
                     h ^= (ulong)(uint)animTileId; h *= FnvPrime;  // H4: animated tile slot
+                    h ^= (ulong)(uint)ruleTileId; h *= FnvPrime;  // H6: rule tile slot
                     h ^= layers[i].enabled ? 1UL : 0UL; h *= FnvPrime;
                 }
             }
@@ -548,6 +664,124 @@ namespace Islands.PCG.Adapters.Tilemap
         }
 
         // =====================================================================
+        // H5 — Multi-layer stamping
+        // =====================================================================
+
+        // Static layer partition tables for multi-layer mode.
+        //   Base:     opaque ground tiles — water and land.
+        //   Overlay:  semi-transparent decoration tiles — vegetation, hills, stairs.
+        //   Collider: non-walkable physics cells (DeepWater + MidWater + ShallowWater + HillsL2).
+        // Reordering within each group preserves priority semantics (last match per cell wins).
+        private static readonly MapLayerId[] s_baseLayers =
+        {
+            MapLayerId.DeepWater, MapLayerId.MidWater, MapLayerId.ShallowWater,
+            MapLayerId.Land, MapLayerId.LandCore, MapLayerId.LandEdge,
+        };
+
+        private static readonly MapLayerId[] s_overlayLayers =
+        {
+            MapLayerId.Vegetation, MapLayerId.HillsL1, MapLayerId.HillsL2, MapLayerId.Stairs,
+        };
+
+        private static readonly MapLayerId[] s_colliderLayers =
+        {
+            MapLayerId.DeepWater, MapLayerId.MidWater, MapLayerId.ShallowWater, MapLayerId.HillsL2,
+        };
+
+        private void StampMultiLayer(
+            MapDataExport export,
+            TilemapLayerEntry[] activeTable,
+            TileBase activeFallback)
+        {
+            // Base group — main Tilemap, ground and water tiles.
+            var baseGroup = new TilemapLayerGroup
+            {
+                Tilemap = tilemap,
+                PriorityTable = FilterTable(activeTable, s_baseLayers),
+                FallbackTile = activeFallback,
+                ClearFirst = true,
+                FlipY = flipY,
+            };
+
+            // Overlay group — optional transparent Tilemap, vegetation + hills.
+            TilemapLayerGroup overlayGroup = null;
+            if (overlayTilemap != null)
+            {
+                overlayGroup = new TilemapLayerGroup
+                {
+                    Tilemap = overlayTilemap,
+                    PriorityTable = FilterTable(activeTable, s_overlayLayers),
+                    FallbackTile = null,
+                    ClearFirst = true,
+                    FlipY = flipY,
+                };
+            }
+
+            // Collider group — optional invisible Tilemap, non-walkable physics cells.
+            TilemapLayerGroup colliderGroup = null;
+            if (colliderTilemap != null && colliderTile != null)
+            {
+                if (enableColliderAutoSetup)
+                    TilemapAdapter2D.SetupCollider(colliderTilemap);
+
+                colliderGroup = new TilemapLayerGroup
+                {
+                    Tilemap = colliderTilemap,
+                    PriorityTable = BuildColliderTable(colliderTile, s_colliderLayers),
+                    FallbackTile = null,
+                    ClearFirst = true,
+                    FlipY = flipY,
+                };
+            }
+
+            // Assemble the groups array (only include assigned/valid groups).
+            int count = 1
+                + (overlayGroup != null ? 1 : 0)
+                + (colliderGroup != null ? 1 : 0);
+            var groups = new TilemapLayerGroup[count];
+            int gi = 0;
+            groups[gi++] = baseGroup;
+            if (overlayGroup != null) groups[gi++] = overlayGroup;
+            if (colliderGroup != null) groups[gi++] = colliderGroup;
+
+            TilemapAdapter2D.ApplyLayered(export, groups);
+        }
+
+        /// <summary>
+        /// Returns entries from <paramref name="source"/> whose LayerId is contained in
+        /// <paramref name="ids"/>, preserving order. Unmatched entries are excluded.
+        /// </summary>
+        private static TilemapLayerEntry[] FilterTable(
+            TilemapLayerEntry[] source,
+            MapLayerId[] ids)
+        {
+            if (source == null || source.Length == 0)
+                return System.Array.Empty<TilemapLayerEntry>();
+
+            var idSet = new HashSet<MapLayerId>(ids);
+            var result = new List<TilemapLayerEntry>(ids.Length);
+            for (int i = 0; i < source.Length; i++)
+                if (idSet.Contains(source[i].LayerId))
+                    result.Add(source[i]);
+            return result.ToArray();
+        }
+
+        /// <summary>
+        /// Builds a priority table that maps every id in <paramref name="ids"/> to
+        /// <paramref name="tile"/>. Used for the collider group where all non-walkable
+        /// cells receive the same sentinel tile regardless of which layer they belong to.
+        /// </summary>
+        private static TilemapLayerEntry[] BuildColliderTable(
+            TileBase tile,
+            MapLayerId[] ids)
+        {
+            var result = new TilemapLayerEntry[ids.Length];
+            for (int i = 0; i < ids.Length; i++)
+                result[i] = new TilemapLayerEntry { LayerId = ids[i], Tile = tile };
+            return result;
+        }
+
+        // =====================================================================
         // Procedural palette presets (H2d)
         //
         // Context-menu helpers that populate proceduralColorTable with a
@@ -571,6 +805,7 @@ namespace Islands.PCG.Adapters.Tilemap
             proceduralColorTable = new[]
             {
                 Entry(MapLayerId.DeepWater,   "#1A3A5C"), // dark navy
+                Entry(MapLayerId.MidWater,   "#2D6080"), // slate blue (F4c)
                 Entry(MapLayerId.ShallowWater,"#4A90A4"), // steel blue
                 Entry(MapLayerId.Land,        "#5A8A3C"), // grass green
                 Entry(MapLayerId.LandCore,    "#3D6B1A"), // deep olive / island interior  ← above Land, below terrain features
@@ -597,6 +832,7 @@ namespace Islands.PCG.Adapters.Tilemap
             proceduralColorTable = new[]
             {
                 Entry(MapLayerId.DeepWater,   "#0033CC"), // saturated blue
+                Entry(MapLayerId.MidWater,   "#0066FF"), // medium blue (F4c)
                 Entry(MapLayerId.ShallowWater,"#00CCFF"), // cyan
                 Entry(MapLayerId.Land,        "#33CC33"), // bright green
                 Entry(MapLayerId.LandCore,    "#880000"), // dark red  ← above Land, below terrain features
@@ -623,6 +859,7 @@ namespace Islands.PCG.Adapters.Tilemap
             proceduralColorTable = new[]
             {
                 Entry(MapLayerId.DeepWater,   "#0D1B2A"), // deep midnight navy
+                Entry(MapLayerId.MidWater,   "#143448"), // dark steel blue (F4c)
                 Entry(MapLayerId.ShallowWater,"#1B4D6B"), // dark teal
                 Entry(MapLayerId.Land,        "#3D2B5A"), // dark purple
                 Entry(MapLayerId.LandCore,    "#5A1B5A"), // deep magenta-purple interior  ← above Land, below terrain features

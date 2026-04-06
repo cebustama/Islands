@@ -9,36 +9,17 @@ namespace Islands.PCG.Adapters.Tilemap
     /// map tilemap components.
     ///
     /// Provides one <see cref="LayerEntry"/> per <see cref="MapLayerId"/> — label,
-    /// explicit layer identity, <see cref="TileBase"/> asset, optional animated
-    /// <see cref="TileBase"/> asset, and enabled toggle — plus a fallback
-    /// <see cref="TileBase"/> for unmatched cells.
-    ///
-    /// When assigned to a tilemap component's <c>tilesetConfig</c> slot it
-    /// replaces the component's inline <see cref="TilemapLayerEntry"/> array as the
-    /// source of tile-to-layer bindings (procedural tile mode takes precedence over
-    /// both).  When null the inline array is used unchanged.
+    /// explicit layer identity, tile assets (static, animated, rule tile),
+    /// and enabled toggle — plus a fallback <see cref="TileBase"/> for unmatched cells.
     ///
     /// Priority ordering:
     ///   The array order IS the stamp priority — entries earlier in the array are
-    ///   lower priority (later entries overwrite them). Reorder entries freely in
-    ///   the Inspector to change priority without breaking the LayerId mapping.
-    ///   The default order matches the recommended visual priority for JRPG-style maps:
-    ///   DeepWater → ShallowWater → Land → LandInterior → LandCore → Vegetation
-    ///   → HillsL1 → HillsL2 → Stairs → LandEdge → Walkable → Paths
-    ///   (Hills overwrite Vegetation; LandEdge is a high-priority coast highlight.)
+    ///   lower priority (later entries overwrite them).
     ///
     /// Phase H3: initial implementation.
-    /// Phase H3 fix (null-means-skip): unassigned/disabled entries emit null tile,
-    ///   matching the TilemapAdapter2D skip contract. fallbackTile is the per-cell
-    ///   adapter fallback, not a per-entry tile.
-    /// Phase H3 fix (explicit layerId): each LayerEntry stores its own MapLayerId,
-    ///   decoupling identity from array position so the Inspector array can be freely
-    ///   reordered to adjust priority without scrambling the LayerId-to-tile mapping.
-    /// Phase H4 (animated tile slot): LayerEntry gains an optional animatedTile field
-    ///   (TileBase). When assigned, animatedTile takes precedence over tile at stamp
-    ///   time, enabling AnimatedTile assets (e.g. ocean waves on DeepWater) without
-    ///   changing TilemapAdapter2D or any runtime pipeline contract. The static tile
-    ///   field remains the non-animated fallback.
+    /// Phase H4: animatedTile slot.
+    /// Phase H6: ruleTile slot (context-aware neighbor-matching).
+    /// Phase F4c: MidWater added to default priority order.
     /// </summary>
     [CreateAssetMenu(
         fileName = "TilesetConfig",
@@ -48,23 +29,22 @@ namespace Islands.PCG.Adapters.Tilemap
     {
         // ------------------------------------------------------------------
         // Visual priority order (low → high) used for BuildDefaultLayers().
-        // Reordering entries in the Inspector changes priority at runtime.
-        // Hills appear AFTER Vegetation so mountains overwrite forest tiles.
         // ------------------------------------------------------------------
         private static readonly MapLayerId[] s_defaultPriorityOrder =
         {
-            MapLayerId.DeepWater,     // 0 — base ocean
-            MapLayerId.ShallowWater,  // 1 — coastal water (overlaps DeepWater)
-            MapLayerId.Land,          // 2 — grass base
-            MapLayerId.LandInterior,  // 3 — interior tint (coast-edge excluded)
-            MapLayerId.LandCore,      // 4 — deep interior tint (eroded, Phase G)
-            MapLayerId.Vegetation,    // 5 — forest (overwrites interior land)
-            MapLayerId.HillsL1,       // 6 — hills (overwrites vegetation)
-            MapLayerId.HillsL2,       // 7 — mountain peaks (overwrites hills)
-            MapLayerId.Stairs,        // 8 — mountain passes (overwrites HillsL1 edge)
-            MapLayerId.LandEdge,      // 9 — coast highlight (high priority)
-            MapLayerId.Walkable,      // 10 — traversal (usually no tile; informational)
-            MapLayerId.Paths,         // 11 — path network (reserved; Phase O)
+            MapLayerId.DeepWater,     // 0 — base ocean (deepest)
+            MapLayerId.MidWater,      // 1 — intermediate depth (F4c; overwrites DeepWater)
+            MapLayerId.ShallowWater,  // 2 — coastal water (overwrites MidWater)
+            MapLayerId.Land,          // 3 — grass base
+            MapLayerId.LandInterior,  // 4 — interior tint (coast-edge excluded)
+            MapLayerId.LandCore,      // 5 — deep interior tint (eroded, Phase G)
+            MapLayerId.Vegetation,    // 6 — forest (overwrites interior land)
+            MapLayerId.HillsL1,       // 7 — hills (overwrites vegetation)
+            MapLayerId.HillsL2,       // 8 — mountain peaks (overwrites hills)
+            MapLayerId.Stairs,        // 9 — mountain passes (overwrites HillsL1 edge)
+            MapLayerId.LandEdge,      // 10 — coast highlight (high priority)
+            MapLayerId.Walkable,      // 11 — traversal (usually no tile; informational)
+            MapLayerId.Paths,         // 12 — path network (reserved; Phase O)
         };
 
         // ------------------------------------------------------------------
@@ -74,14 +54,12 @@ namespace Islands.PCG.Adapters.Tilemap
         /// <summary>
         /// One layer-to-tile binding inside a <see cref="TilesetConfig"/>.
         ///
-        /// <see cref="layerId"/> stores which pipeline layer this entry represents.
-        /// Array position determines stamp priority (low → high); reorder freely.
-        ///
-        /// Tile resolution priority (H4):
-        ///   enabled + animatedTile assigned → animatedTile stamped
-        ///   enabled + tile assigned         → tile stamped
-        ///   enabled + both null             → null (skipped)
-        ///   disabled                        → null (skipped)
+        /// Tile resolution priority (H6):
+        ///   enabled + ruleTile assigned      → ruleTile stamped
+        ///   enabled + animatedTile assigned   → animatedTile stamped
+        ///   enabled + tile assigned           → tile stamped
+        ///   enabled + all null               → null (skipped)
+        ///   disabled                          → null (skipped)
         /// </summary>
         [System.Serializable]
         public struct LayerEntry
@@ -89,28 +67,19 @@ namespace Islands.PCG.Adapters.Tilemap
             [Tooltip("Human-readable layer name. Edit freely — no runtime effect.")]
             public string label;
 
-            [Tooltip("Which pipeline layer this entry represents.\n" +
-                     "Each MapLayerId should appear exactly once across all entries.\n" +
-                     "Array ORDER determines priority (low→high) — reorder entries to " +
-                     "change which layer draws on top of which.")]
+            [Tooltip("Which pipeline layer this entry represents.")]
             public MapLayerId layerId;
 
-            [Tooltip("Static tile asset to stamp when this layer's cell is ON.\n" +
-                     "Leave null to skip this layer (it will not affect the tilemap).\n" +
-                     "Ignored when Animated Tile is assigned (animated wins).")]
+            [Tooltip("Static tile asset. Ignored when Animated Tile or Rule Tile is assigned.")]
             public TileBase tile;
 
-            [Tooltip("Animated tile asset (e.g. AnimatedTile from 2D Tilemap Extras) for this layer.\n" +
-                     "When assigned, takes precedence over the static Tile field at stamp time.\n" +
-                     "Natural candidates: DeepWater (ocean waves), ShallowWater (coastal ripples).\n" +
-                     "Leave null to use the static Tile instead. Enabled toggle applies to both.\n\n" +
-                     "Requires the 2D Tilemap Extras package (Package Manager → " +
-                     "com.unity.2d.tilemap.extras). Sprite sheets are sliced per " +
-                     "Documentation~/reference/tileset-import-guide.md.")]
+            [Tooltip("Animated tile asset. Ignored when Rule Tile is assigned.")]
             public TileBase animatedTile;
 
-            [Tooltip("Include this layer in the stamp pass. " +
-                     "Disabled entries are skipped (produce null in the priority table).")]
+            [Tooltip("Rule Tile asset (context-aware neighbor-matching). Highest priority.")]
+            public TileBase ruleTile;
+
+            [Tooltip("Include this layer in the stamp pass.")]
             public bool enabled;
         }
 
@@ -118,20 +87,10 @@ namespace Islands.PCG.Adapters.Tilemap
         // Inspector fields
         // ------------------------------------------------------------------
 
-        [Tooltip("One entry per MapLayerId. Array ORDER is stamp priority (low → high).\n" +
-                 "Reorder entries in the Inspector to change which layer draws on top.\n\n" +
-                 "Tile resolution per entry (H4):\n" +
-                 "  enabled + Animated Tile assigned → animated tile stamped\n" +
-                 "  enabled + Tile assigned          → static tile stamped\n" +
-                 "  enabled + both null              → skipped\n" +
-                 "  disabled                         → skipped\n\n" +
-                 "Assign an animated tile only to layers you want to animate (e.g. DeepWater).")]
+        [Tooltip("One entry per MapLayerId. Array ORDER is stamp priority (low → high).")]
         public LayerEntry[] layers = BuildDefaultLayers();
 
-        [Tooltip("Tile stamped for cells not matched by any enabled, tile-assigned entry.\n" +
-                 "Applied per-cell by the adapter — NOT propagated into individual entries.\n\n" +
-                 "Typical use: assign your DeepWater tile here so unmatched cells\n" +
-                 "fall back to open ocean.")]
+        [Tooltip("Tile stamped for cells not matched by any enabled, tile-assigned entry.")]
         public TileBase fallbackTile;
 
         // ------------------------------------------------------------------
@@ -139,21 +98,8 @@ namespace Islands.PCG.Adapters.Tilemap
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Converts this config to a <see cref="TilemapLayerEntry"/> array for
-        /// <see cref="TilemapAdapter2D.Apply"/>.
-        ///
-        /// Array order is preserved as the priority order (low → high).
-        /// Returns <c>null</c> if <see cref="layers"/> length does not match
-        /// <see cref="MapLayerId.COUNT"/>; callers fall back to their inline array.
-        ///
-        /// Entry behavior (H4 tile resolution priority):
-        ///   enabled + animatedTile → animatedTile stamped when layerId's cell is ON
-        ///   enabled + tile         → tile stamped when layerId's cell is ON
-        ///   enabled + both null    → null (skipped; layerId has no visual effect)
-        ///   disabled               → null (skipped)
-        ///
-        /// <see cref="fallbackTile"/> is NOT propagated into entries — pass it
-        /// separately as the per-cell adapter fallback.
+        /// Converts this config to a <see cref="TilemapLayerEntry"/> array.
+        /// H6 tile resolution: ruleTile > animatedTile > tile.
         /// </summary>
         public TilemapLayerEntry[] ToLayerEntries()
         {
@@ -169,20 +115,12 @@ namespace Islands.PCG.Adapters.Tilemap
             var result = new TilemapLayerEntry[(int)MapLayerId.COUNT];
             for (int i = 0; i < result.Length; i++)
             {
-                // LayerId is stored explicitly in the entry — decoupled from position.
-                // Array order = stamp priority (low → high); reorder without breaking mapping.
-                //
-                // H4 tile resolution priority (animated wins over static):
-                //   enabled + animatedTile → animatedTile
-                //   enabled + tile         → tile
-                //   enabled + both null    → null (skipped)
-                //   disabled               → null (skipped)
-                //
-                // fallbackTile is the per-cell adapter fallback — NOT substituted here.
                 TileBase entryTile = null;
                 if (layers[i].enabled)
                 {
-                    if (layers[i].animatedTile != null)
+                    if (layers[i].ruleTile != null)
+                        entryTile = layers[i].ruleTile;
+                    else if (layers[i].animatedTile != null)
                         entryTile = layers[i].animatedTile;
                     else if (layers[i].tile != null)
                         entryTile = layers[i].tile;
@@ -190,7 +128,7 @@ namespace Islands.PCG.Adapters.Tilemap
 
                 result[i] = new TilemapLayerEntry
                 {
-                    LayerId = layers[i].layerId,   // explicit — not derived from position
+                    LayerId = layers[i].layerId,
                     Tile = entryTile,
                 };
             }
@@ -214,6 +152,7 @@ namespace Islands.PCG.Adapters.Tilemap
                     layerId = id,
                     tile = null,
                     animatedTile = null,
+                    ruleTile = null,
                     enabled = true,
                 };
             }
