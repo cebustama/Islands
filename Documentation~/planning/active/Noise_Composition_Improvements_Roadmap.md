@@ -27,7 +27,7 @@ identifies which downstream phases consume each addition.
 
 | # | Technique | Current Status | Impact | Complexity |
 |---|-----------|---------------|--------|------------|
-| N1 | Power Redistribution | **Already planned as Phase J2** | Medium | Trivial |
+| N1 | Power Redistribution | **Done (Phase J2)** | Medium | Trivial |
 | N2 | Spline Remapping | Not implemented | Very High | Low–Medium |
 | N3 | Ridged Multifractal (full Musgrave) | Partial (Turbulence wrapper only) | High | Medium |
 
@@ -46,19 +46,24 @@ All three can be implemented independently; the sequencing is based on impact-pe
 
 ## 3. N1 — Power Redistribution
 
-### Status: Already planned as Phase J2
+### Status: Done (Phase J2)
 
-Phase J2 in the PCG Roadmap already fully specifies this improvement:
+Implemented as part of Phase J2. The implementation chose inline post-processing inside
+`Stage_BaseTerrain2D.Execute()` (not a separate stage), applied after height quantization
+and before the Land threshold:
 
 - New tunable: `MapTunables2D.heightRedistributionExponent` (default 1.0, clamped [0.5, 4.0])
-- Applied as `pow(height01, exponent)` after the Height field is written
-- Default 1.0 preserves existing goldens; exponents > 1.0 flatten lowlands and sharpen peaks
+- Applied as `pow(height01, exponent)` with a `!= 1.0f` guard for zero-cost default path
+- Default 1.0 preserves all existing golden hashes (pow(x, 1) == x by identity)
+- Exposed in `MapGenerationPreset` and all three visualization components' Inspectors
 - Dwarf Fortress uses a "non-linear parabola" for the same purpose (confirmed by Tarn Adams)
-- Implementation: inline post-processing step or new `Stage_HeightRedistribution2D`
-- Can be implemented any time after current H-series
 
-**No new design work needed.** Phase J2 is complete as specified. This document references
-it for completeness and to confirm it covers the technique identified in the cross-reference.
+**Side-effect cleanup:** The three duplicate `BaseTerrainStage_Configurable` nested classes
+(one per visualization component) were consolidated into a single shared class at
+`Runtime/PCG/Samples/Presets/BaseTerrainStage_Configurable.cs` in the
+`Islands.PCG.Samples.Shared` asmdef. The consolidation threshold ("factor out when 3+
+consumers exist") was met. `Islands.PCG.Samples.Shared.asmdef` gained `Unity.Mathematics`
+and `Unity.Collections` references to support the extracted class.
 
 ### Open question (minor)
 
@@ -367,13 +372,15 @@ compatibility. Estimated: 1–2 focused sessions.
 ## 6. Sequencing Summary
 
 ```
-NOW (already designed)
-  └─ N1: Power Redistribution ──── Phase J2 (ready to implement)
+DONE
+  └─ N1: Power Redistribution ──── Phase J2 (implemented)
+                                    Inline pow() in Stage_BaseTerrain2D + shared
+                                    BaseTerrainStage_Configurable for visualizations.
 
 NEXT (new, low complexity)
   └─ N2: Spline Remapping ──────── New ScalarSpline utility + MapTunables integration
                                     Can be implemented any time; no phase dependencies.
-                                    Highest impact-per-effort of the three.
+                                    Highest impact-per-effort of the remaining two.
 
 LATER (new, medium complexity)
   └─ N3: Ridged Multifractal ───── Noise runtime extension or standalone operator.
@@ -384,7 +391,8 @@ LATER (new, medium complexity)
 ### Dependency map
 
 ```
-N1 (Phase J2)  ──→  consumed by: Height field, optionally Temperature/Moisture
+N1 (Phase J2)  ──→  DONE. Consumed by: Height field.
+                     Optionally extendable to Temperature/Moisture (Phase M).
                      no dependency on N2 or N3
 
 N2 (Spline)    ──→  consumed by: Height, Temperature, Moisture, any future field
@@ -396,8 +404,8 @@ N3 (Ridged)    ──→  consumed by: Phase K (mountains), Phase W (local eleva
                      benefits from N2 (spline remap of ridged output)
 ```
 
-All three are independently implementable. N2 is recommended next because it has the
-broadest applicability and lowest risk.
+All three are independently implementable. N1 is done. N2 is recommended next because
+it has the broadest applicability and lowest risk.
 
 ---
 

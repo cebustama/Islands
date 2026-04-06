@@ -10,7 +10,8 @@ using Islands.PCG.Operators;
 namespace Islands.PCG.Layout.Maps.Stages
 {
     /// <summary>
-    /// F2c — Base terrain stage: ellipse + domain-warp silhouette, with optional external shape input.
+    /// F2c / J2 — Base terrain stage: ellipse + domain-warp silhouette, with optional
+    /// external shape input and height redistribution.
     ///
     /// Writes:
     /// - Field: Height    (ScalarField2D) in [0..1]
@@ -31,6 +32,11 @@ namespace Islands.PCG.Layout.Maps.Stages
     ///   4. mask01 = shape.GetUnchecked(x, y) ? 1f : 0f  (replaces ellipse+warp).
     ///   5. Add small high-frequency height perturbation noise (same as F2b path).
     ///
+    /// Height redistribution (J2):
+    ///   After quantization, height is passed through pow(h01, exponent).
+    ///   Default exponent 1.0 = identity (no change). Exponents > 1.0 flatten lowlands
+    ///   and sharpen peaks. Applied before the Land threshold.
+    ///
     /// Determinism:
     /// - Uses only ctx.Rng for all randomness (seed-driven, stage-order stable).
     /// - RNG consumption order: island noise → warpX noise → warpY noise.
@@ -48,6 +54,8 @@ namespace Islands.PCG.Layout.Maps.Stages
     /// - islandAspectRatio = 1.0 + warpAmplitude01 = 0.0 => geometrically identical circle
     ///   to the pre-F2b implementation. Goldens differ because warp arrays are always allocated
     ///   and filled from ctx.Rng even at zero amplitude.
+    /// - heightRedistributionExponent = 1.0 => pow(x, 1) == x => no height change =>
+    ///   all existing goldens preserved.
     /// </summary>
     public sealed class Stage_BaseTerrain2D : IMapStage2D
     {
@@ -88,6 +96,9 @@ namespace Islands.PCG.Layout.Maps.Stages
 
             var t = inputs.Tunables;
             float waterThreshold = t.waterThreshold01;
+
+            // J2: height redistribution exponent.
+            float redistExp = t.heightRedistributionExponent;
 
             // --- Shared geometry (F2b path; computed regardless so variables are in scope) ---
             float minDim = math.min((float)w, (float)h);
@@ -175,6 +186,11 @@ namespace Islands.PCG.Layout.Maps.Stages
 
                         if (QuantSteps > 1)
                             h01 = math.floor(h01 * QuantSteps) * invQuant;
+
+                        // J2: power redistribution — reshape height distribution.
+                        // pow(x, 1.0) == x, so default exponent preserves all existing goldens.
+                        if (redistExp != 1.0f)
+                            h01 = math.pow(h01, redistExp);
 
                         height.Values[baseRow + x] = h01;
                         land.SetUnchecked(x, y, h01 >= waterThreshold);

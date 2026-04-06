@@ -176,6 +176,13 @@ namespace Islands.PCG.Samples
         [Range(0f, 1f)]
         [SerializeField] private float warpAmplitude01 = 0.00f;
 
+        [Header("Height Redistribution (J2)")]
+        [Tooltip("Power-curve exponent applied to terrain height.\n" +
+                 "1.0 = no change (identity). > 1 = flat lowlands, sharp peaks.\n" +
+                 "< 1 = raised lowlands, compressed peaks. Range [0.5..4.0].")]
+        [Range(0.5f, 4f)]
+        [SerializeField] private float heightRedistributionExponent = 1.0f;
+
         [Header("F2 Tunables (Noise Inside Island)")]
         [Min(1)][SerializeField] private int noiseCellSize = 8;
         [Range(0f, 1f)][SerializeField] private float noiseAmplitude = 0.18f;
@@ -229,6 +236,7 @@ namespace Islands.PCG.Samples
         private float lastIslandSmoothTo01;
         private float lastIslandAspectRatio;
         private float lastWarpAmplitude01;
+        private float lastHeightRedistributionExponent;
         private int lastNoiseCellSize;
         private float lastNoiseAmplitude;
         private int lastQuantSteps;
@@ -322,7 +330,8 @@ namespace Islands.PCG.Samples
                 : new MapTunables2D(
                       islandRadius01, waterThreshold01,
                       islandSmoothFrom01, islandSmoothTo01,
-                      islandAspectRatio, warpAmplitude01);
+                      islandAspectRatio, warpAmplitude01,
+                      heightRedistributionExponent);
 
             EnsureContextAllocated(eRes);
             EnsureTextureAllocated(eRes);
@@ -540,6 +549,7 @@ namespace Islands.PCG.Samples
             lastIslandSmoothTo01 = preset != null ? preset.islandSmoothTo01 : islandSmoothTo01;
             lastIslandAspectRatio = preset != null ? preset.islandAspectRatio : islandAspectRatio;
             lastWarpAmplitude01 = preset != null ? preset.warpAmplitude01 : warpAmplitude01;
+            lastHeightRedistributionExponent = preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent;
             lastNoiseCellSize = preset != null ? preset.noiseCellSize : noiseCellSize;
             lastNoiseAmplitude = preset != null ? preset.noiseAmplitude : noiseAmplitude;
             lastQuantSteps = preset != null ? preset.quantSteps : quantSteps;
@@ -568,6 +578,7 @@ namespace Islands.PCG.Samples
                 || !Mathf.Approximately(preset != null ? preset.islandSmoothTo01 : islandSmoothTo01, lastIslandSmoothTo01)
                 || !Mathf.Approximately(preset != null ? preset.islandAspectRatio : islandAspectRatio, lastIslandAspectRatio)
                 || !Mathf.Approximately(preset != null ? preset.warpAmplitude01 : warpAmplitude01, lastWarpAmplitude01)
+                || !Mathf.Approximately(preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent, lastHeightRedistributionExponent)
                 || (preset != null ? preset.noiseCellSize : noiseCellSize) != lastNoiseCellSize
                 || !Mathf.Approximately(preset != null ? preset.noiseAmplitude : noiseAmplitude, lastNoiseAmplitude)
                 || (preset != null ? preset.quantSteps : quantSteps) != lastQuantSteps
@@ -580,131 +591,5 @@ namespace Islands.PCG.Samples
                 || ComputeSlotsHash() != lastSlotsHash;
         }
 
-        // =====================================================================
-        // BaseTerrainStage_Configurable
-        //
-        // IMPORTANT: Keep in sync with Stage_BaseTerrain2D and the identical copy
-        // inside PCGMapVisualization.  Both must produce bit-identical outputs for
-        // the same inputs and RNG state.  The two copies exist because the class is
-        // a private nested sample-side helper; factoring it out as `internal` is a
-        // follow-up task once three or more consumers exist.
-        // =====================================================================
-        private sealed class BaseTerrainStage_Configurable : IMapStage2D
-        {
-            public string Name => "base_terrain_configurable";
-
-            public int noiseCellSize;
-            public float noiseAmplitude;
-            public int quantSteps;
-
-            private const int WarpCellSize = 16;
-
-            public void Execute(ref MapContext2D ctx, in MapInputs inputs)
-            {
-                GridDomain2D d = ctx.Domain;
-                int w = d.Width;
-                int h = d.Height;
-
-                ref ScalarField2D height = ref ctx.EnsureField(MapFieldId.Height, clearToZero: true);
-                ref MaskGrid2D land = ref ctx.EnsureLayer(MapLayerId.Land, clearToZero: true);
-                ref MaskGrid2D deepWater = ref ctx.EnsureLayer(MapLayerId.DeepWater, clearToZero: true);
-
-                var t = inputs.Tunables;
-                float waterThreshold = t.waterThreshold01;
-
-                float minDim = math.min((float)w, (float)h);
-                float radius = math.max(1f, minDim * t.islandRadius01);
-                float invRadiusSq = 1f / (radius * radius);
-                float fromSq = t.islandSmoothFrom01 * t.islandSmoothFrom01;
-                float toSq = t.islandSmoothTo01 * t.islandSmoothTo01;
-                float2 center = new float2(w * 0.5f, h * 0.5f);
-
-                float aspect = t.islandAspectRatio;
-                float invAspectSq = 1f / (aspect * aspect);
-                float warpAmp = t.warpAmplitude01 * minDim;
-
-                int cs = noiseCellSize < 1 ? 1 : noiseCellSize;
-                float amp = math.max(0f, noiseAmplitude);
-                int qs = quantSteps;
-
-                int nw = (w / cs) + 2;
-                int nh = (h / cs) + 2;
-                int wcs = WarpCellSize;
-                int mw = (w / wcs) + 2;
-                int mh = (h / wcs) + 2;
-
-                float invQuant = (qs > 1) ? (1f / qs) : 0f;
-
-                NativeArray<float> noise = default;
-                NativeArray<float> warpX = default;
-                NativeArray<float> warpY = default;
-                try
-                {
-                    noise = new NativeArray<float>(nw * nh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                    warpX = new NativeArray<float>(mw * mh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                    warpY = new NativeArray<float>(mw * mh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-
-                    for (int i = 0; i < noise.Length; i++) noise[i] = ctx.Rng.NextFloat();
-                    for (int i = 0; i < warpX.Length; i++) warpX[i] = ctx.Rng.NextFloat();
-                    for (int i = 0; i < warpY.Length; i++) warpY[i] = ctx.Rng.NextFloat();
-
-                    for (int y = 0; y < h; y++)
-                    {
-                        int baseRow = y * w;
-
-                        for (int x = 0; x < w; x++)
-                        {
-                            float n = BilinearSample(noise, x, y, cs, nw);
-                            float wx = BilinearSample(warpX, x, y, wcs, mw) * 2f - 1f;
-                            float wy = BilinearSample(warpY, x, y, wcs, mw) * 2f - 1f;
-
-                            float2 p = new float2(x + 0.5f, y + 0.5f);
-                            float2 pw = p + new float2(wx, wy) * warpAmp;
-
-                            float2 v = pw - center;
-                            float distSq = v.x * v.x * invAspectSq + v.y * v.y;
-
-                            float radial01Sq = math.saturate(distSq * invRadiusSq);
-                            float s = math.smoothstep(fromSq, toSq, radial01Sq);
-                            float mask01 = 1f - s;
-
-                            float h01 = mask01 + (n - 0.5f) * amp * mask01;
-                            h01 = math.saturate(h01);
-
-                            if (qs > 1)
-                                h01 = math.floor(h01 * qs) * invQuant;
-
-                            height.Values[baseRow + x] = h01;
-                            land.SetUnchecked(x, y, h01 >= waterThreshold);
-                        }
-                    }
-
-                    MaskFloodFillOps2D.FloodFillBorderConnected_NotSolid(ref land, ref deepWater);
-                }
-                finally
-                {
-                    if (noise.IsCreated) noise.Dispose();
-                    if (warpX.IsCreated) warpX.Dispose();
-                    if (warpY.IsCreated) warpY.Dispose();
-                }
-            }
-
-            private static float BilinearSample(
-                NativeArray<float> grid, int px, int py, int cellSize, int gridWidth)
-            {
-                int gx = px / cellSize;
-                float tx = ((px % cellSize) + 0.5f) / cellSize;
-                int gy = py / cellSize;
-                float ty = ((py % cellSize) + 0.5f) / cellSize;
-
-                float n00 = grid[gx + gy * gridWidth];
-                float n10 = grid[(gx + 1) + gy * gridWidth];
-                float n01 = grid[gx + (gy + 1) * gridWidth];
-                float n11 = grid[(gx + 1) + (gy + 1) * gridWidth];
-
-                return math.lerp(math.lerp(n00, n10, tx),
-                                 math.lerp(n01, n11, tx), ty);
-            }
-        }
     }
 }

@@ -2,7 +2,9 @@
     "name": "Islands.PCG.Samples.Shared",
     "rootNamespace": "Islands.PCG.Samples",
     "references": [
-        "Islands.PCG.Runtime"
+        "Islands.PCG.Runtime",
+        "Unity.Mathematics",
+        "Unity.Collections"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

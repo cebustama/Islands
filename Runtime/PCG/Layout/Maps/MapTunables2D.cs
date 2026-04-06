@@ -1,4 +1,4 @@
-using Unity.Mathematics;
+ï»¿using Unity.Mathematics;
 
 namespace Islands.PCG.Layout.Maps
 {
@@ -10,6 +10,10 @@ namespace Islands.PCG.Layout.Maps
     /// Both are consumed only by Stage_BaseTerrain2D (and its configurable lantern twin).
     /// Default values (1.0 / 0.0) produce the same circle geometry as the pre-F2b
     /// implementation; goldens differ because warp arrays are always filled from ctx.Rng.
+    ///
+    /// J2 addition: heightRedistributionExponent.
+    /// Consumed by Stage_BaseTerrain2D after height quantization, before land threshold.
+    /// Default 1.0 = identity (pow(x, 1) == x); existing goldens unaffected.
     /// </summary>
     public readonly struct MapTunables2D
     {
@@ -20,7 +24,7 @@ namespace Islands.PCG.Layout.Maps
         /// <summary>Island size in [0..1] relative to min(width, height).</summary>
         public readonly float islandRadius01;
 
-        /// <summary>Water threshold in [0..1] — cells with Height >= this are Land.</summary>
+        /// <summary>Water threshold in [0..1] ï¿½ cells with Height >= this are Land.</summary>
         public readonly float waterThreshold01;
 
         /// <summary>
@@ -53,12 +57,26 @@ namespace Islands.PCG.Layout.Maps
         public readonly float warpAmplitude01;
 
         // ------------------------------------------------------------------
+        // J2 addition
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Power-curve exponent applied to the Height field after quantization.
+        /// pow(height01, exponent) reshapes the height distribution:
+        ///   1.0 = identity (no change; preserves existing goldens).
+        ///   >1.0 = flattens lowlands, sharpens peaks (e.g. 2.0 is a strong effect).
+        ///   &lt;1.0 = raises lowlands, compresses peaks.
+        /// Clamped to [0.5, 4.0].
+        /// </summary>
+        public readonly float heightRedistributionExponent;
+
+        // ------------------------------------------------------------------
         // Default
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Default tunables: circular island (aspect 1.0, no warp),
-        /// matching pre-F2b geometry. Suitable for all golden tests.
+        /// Default tunables: circular island (aspect 1.0, no warp, no redistribution),
+        /// matching pre-J2 geometry. Suitable for all golden tests.
         /// </summary>
         public static MapTunables2D Default => new MapTunables2D(
             islandRadius01: 0.45f,
@@ -66,7 +84,8 @@ namespace Islands.PCG.Layout.Maps
             islandSmoothFrom01: 0.30f,
             islandSmoothTo01: 0.70f,
             islandAspectRatio: 1.00f,
-            warpAmplitude01: 0.00f
+            warpAmplitude01: 0.00f,
+            heightRedistributionExponent: 1.00f
         );
 
         // ------------------------------------------------------------------
@@ -79,13 +98,15 @@ namespace Islands.PCG.Layout.Maps
         /// <param name="islandSmoothTo01">Smoothstep outer edge. [0..1].</param>
         /// <param name="islandAspectRatio">Ellipse x/y ratio. 1.0 = circle. [0.25..4.0].</param>
         /// <param name="warpAmplitude01">Domain warp strength as fraction of min(w,h). [0..1].</param>
+        /// <param name="heightRedistributionExponent">Height power-curve exponent. 1.0 = identity. [0.5..4.0].</param>
         public MapTunables2D(
             float islandRadius01,
             float waterThreshold01,
             float islandSmoothFrom01,
             float islandSmoothTo01,
             float islandAspectRatio = 1.0f,
-            float warpAmplitude01 = 0.0f)
+            float warpAmplitude01 = 0.0f,
+            float heightRedistributionExponent = 1.0f)
         {
             // Clamp and order all values deterministically (pure math, no RNG).
             float r = math.clamp(islandRadius01, 0f, 1f);
@@ -97,6 +118,7 @@ namespace Islands.PCG.Layout.Maps
 
             float aspect = math.clamp(islandAspectRatio, 0.25f, 4.0f);
             float warp = math.clamp(warpAmplitude01, 0f, 1f);
+            float redistExp = math.clamp(heightRedistributionExponent, 0.5f, 4.0f);
 
             this.islandRadius01 = r;
             this.waterThreshold01 = wt;
@@ -104,6 +126,7 @@ namespace Islands.PCG.Layout.Maps
             this.islandSmoothTo01 = b;
             this.islandAspectRatio = aspect;
             this.warpAmplitude01 = warp;
+            this.heightRedistributionExponent = redistExp;
         }
     }
 }

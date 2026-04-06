@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using Islands.PCG.Layout.Maps;
 
 namespace Islands.PCG.Samples
@@ -12,11 +12,12 @@ namespace Islands.PCG.Samples
     /// fields are used unchanged (fully backward-compatible).
     ///
     /// Display-only settings (palette colors, view mode, view layer, scalar range)
-    /// are intentionally excluded — they remain per-component.
+    /// are intentionally excluded ï¿½ they remain per-component.
     ///
     /// Phase H3: initial implementation.
     /// Phase F4b: shallowWaterDepth01 field.
     /// Phase F4c: midWaterDepth01 field.
+    /// Phase J2: heightRedistributionExponent field.
     /// </summary>
     [CreateAssetMenu(
         fileName = "MapGenerationPreset",
@@ -37,7 +38,7 @@ namespace Islands.PCG.Samples
                  "detailed maps but take longer to generate. Minimum 4.\n\n" +
                  "Honored by PCGMapCompositeVisualization, PCGMapTilemapVisualization,\n" +
                  "and PCGMapTilemapSample. PCGMapVisualization reads resolution from\n" +
-                 "its base Visualization class — this field is ignored there.")]
+                 "its base Visualization class ï¿½ this field is ignored there.")]
         [Min(4)]
         public int resolution = 64;
 
@@ -175,6 +176,18 @@ namespace Islands.PCG.Samples
         public int quantSteps = 1024;
 
         // ==================================================================
+        // Height Redistribution (J2)
+        // ==================================================================
+
+        [Header("Height Redistribution (J2)")]
+        [Range(0.5f, 4f)]
+        [Tooltip("Power-curve exponent applied to the Height field after quantization.\n" +
+                 "1.0 = no change (identity). > 1.0 = flattens lowlands, sharpens peaks.\n" +
+                 "< 1.0 = raises lowlands, compresses peaks.\n" +
+                 "2.0 is a strong effect; 1.5 is subtle. Range [0.5 .. 4.0].")]
+        public float heightRedistributionExponent = 1.0f;
+
+        // ==================================================================
         // Run Behavior
         // ==================================================================
 
@@ -199,6 +212,7 @@ namespace Islands.PCG.Samples
             islandSmoothFrom01: islandSmoothFrom01,
             islandSmoothTo01: islandSmoothTo01,
             islandAspectRatio: islandAspectRatio,
-            warpAmplitude01: warpAmplitude01);
+            warpAmplitude01: warpAmplitude01,
+            heightRedistributionExponent: heightRedistributionExponent);
     }
 }
