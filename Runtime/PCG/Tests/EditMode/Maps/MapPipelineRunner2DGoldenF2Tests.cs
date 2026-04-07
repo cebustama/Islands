@@ -30,8 +30,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // ---------------------------------------------------------------------
         // These should match the stage-level goldens (F2.1). If you intentionally
         // change the stage behavior, update both places together.
-        private const ulong ExpectedLandHash64 = 0x56F997102CA872E7UL;
-        private const ulong ExpectedDeepWaterHash64 = 0x451D80227667D2A7UL;
+        private const ulong ExpectedLandHash64 = 0x3324CA0629C037B7UL;
+        private const ulong ExpectedDeepWaterHash64 = 0x0BB222C9B6B41947UL;
 
         [Test]
         public void MapPipelineRunner2D_GoldenHash_F2Pipeline_IsLocked()
@@ -54,7 +54,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
                 ulong deepHash = ctx.GetLayer(MapLayerId.DeepWater).SnapshotHash64(includeDimensions: true);
 
                 // If goldens are not set yet, fail once with copy/paste values.
-                if (ExpectedLandHash64 == 0UL || ExpectedDeepWaterHash64 == 0UL)
+                if (ExpectedLandHash64 == 0x56F997102CA872E7 || ExpectedDeepWaterHash64 == 0UL)
                 {
                     Assert.Fail(
                         "F2 pipeline goldens are not initialized.\n" +

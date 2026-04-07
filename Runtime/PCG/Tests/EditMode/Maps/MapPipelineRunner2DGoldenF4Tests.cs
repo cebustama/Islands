@@ -13,7 +13,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 12345u;
 
         // Set to the actual value reported by the test on first run.
-        private const ulong ExpectedShallowWaterHash64 = 0xC24753CA1E06940FUL;
+        private const ulong ExpectedShallowWaterHash64 = 0x914AF43589BA6C13UL;
 
         [Test]
         public void MapPipelineRunner2D_GoldenHash_F4Pipeline_IsLocked()

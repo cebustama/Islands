@@ -20,6 +20,9 @@ namespace Islands.PCG.Samples
     /// Phase F4c: midWaterDepth01 field.
     /// Phase J2: heightRedistributionExponent field.
     /// Phase N2: heightRemapCurve field (AnimationCurve → ScalarSpline bridge).
+    /// Phase N4: TerrainNoiseSettings replaces noiseCellSize/noiseAmplitude/quantSteps.
+    ///           Separate warp noise settings. heightQuantSteps tunable.
+    /// Phase F3b: hillsThresholdL1 / hillsThresholdL2 for height-coherent hills.
     /// </summary>
     [CreateAssetMenu(
         fileName = "MapGenerationPreset",
@@ -49,8 +52,8 @@ namespace Islands.PCG.Samples
         // ==================================================================
 
         [Header("Stage Toggles")]
-        [Tooltip("Include the Hills + topology stage (F3).\n" +
-                 "Produces HillsL1, HillsL2, LandEdge, LandInterior layers.\n" +
+        [Tooltip("Include the Hills + topology stage (F3/F3b).\n" +
+                 "Produces HillsL1, HillsL2 (from Height thresholds), LandEdge, LandInterior layers.\n" +
                  "Disable to see flat base terrain only.")]
         public bool enableHillsStage = true;
 
@@ -147,35 +150,96 @@ namespace Islands.PCG.Samples
         public float midWaterDepth01 = 0f;
 
         // ==================================================================
-        // Terrain Noise
+        // Terrain Noise (N4)
         // ==================================================================
 
-        [Header("Terrain Noise")]
-        [Min(1)]
-        [Tooltip("Noise cell size in grid cells. Controls the scale of terrain\n" +
-                 "variation within the island silhouette.\n" +
-                 "Smaller values = finer, more detailed terrain features.\n" +
-                 "Larger values = broader, smoother terrain regions.\n" +
-                 "Default 8 gives a good balance for 64x64 maps.")]
-        public int noiseCellSize = 8;
+        [Header("Terrain Noise (N4)")]
+        [Tooltip("Noise algorithm for terrain height perturbation.\n" +
+                 "Perlin (default) = smooth, low artifacts.\n" +
+                 "Simplex = slightly different gradient character.\n" +
+                 "Value = blobby grid artifacts (for comparison).\n" +
+                 "Worley = cell-based (experimental for terrain).")]
+        public TerrainNoiseType terrainNoiseType = TerrainNoiseType.Perlin;
+
+        [Range(1, 32)]
+        [Tooltip("Noise frequency — features across the map. Resolution-independent.\n" +
+                 "Higher = finer features. 8 ≈ medium detail (matches old noiseCellSize=8 at 64×64).")]
+        public int terrainFrequency = 8;
+
+        [Range(1, 6)]
+        [Tooltip("fBm octaves. More = finer detail layered on top of base features.\n" +
+                 "1 = smooth single-scale. 4 = good natural variation. 6 = maximum detail.")]
+        public int terrainOctaves = 4;
+
+        [Range(2, 4)]
+        [Tooltip("Frequency multiplier per octave. 2 = each octave doubles frequency.")]
+        public int terrainLacunarity = 2;
 
         [Range(0f, 1f)]
-        [Tooltip("Noise amplitude multiplier inside the island silhouette.\n" +
-                 "Controls how much height variation the noise adds to the\n" +
-                 "base radial falloff. Higher values = more varied terrain\n" +
-                 "(more hills, valleys, and coastal irregularity).\n" +
-                 "0 = perfectly smooth dome. ~0.18 = subtle variation.\n" +
-                 "~0.40 = highly varied terrain with potential inland lakes.")]
-        public float noiseAmplitude = 0.18f;
+        [Tooltip("Amplitude decay per octave. 0.5 = each octave halves amplitude.\n" +
+                 "Lower = less fine detail relative to base. Higher = more fine detail.")]
+        public float terrainPersistence = 0.5f;
 
+        [Range(0f, 1f)]
+        [Tooltip("How much height variation noise adds to the island silhouette.\n" +
+                 "0 = perfectly smooth dome. 0.35 = natural variation (default).\n" +
+                 "Higher values produce more varied terrain with potential inland lakes.")]
+        public float terrainAmplitude = 0.35f;
+
+        // ==================================================================
+        // Warp Noise (N4)
+        // ==================================================================
+
+        [Header("Warp Noise (N4)")]
+        [Tooltip("Noise algorithm for domain warp (coastline shape distortion).\n" +
+                 "Same options as terrain noise; lower frequency produces broader warp.")]
+        public TerrainNoiseType warpNoiseType = TerrainNoiseType.Perlin;
+
+        [Range(1, 32)]
+        [Tooltip("Warp noise frequency. Lower = broader distortion features.\n" +
+                 "4 ≈ old WarpCellSize=16 at 64×64 resolution.")]
+        public int warpFrequency = 4;
+
+        [Range(1, 6)]
+        [Tooltip("Warp noise octaves. 1 = simple smooth warping (default).")]
+        public int warpOctaves = 1;
+
+        [Range(2, 4)]
+        public int warpLacunarity = 2;
+
+        [Range(0f, 1f)]
+        public float warpPersistence = 0.5f;
+
+        // ==================================================================
+        // Hills (F3b)
+        // ==================================================================
+
+        [Header("Hills (F3b)")]
+        [Range(0f, 1f)]
+        [Tooltip("Height threshold for hill slopes (HillsL1).\n" +
+                 "Land cells with Height >= this become passable slopes.\n" +
+                 "0.65 = default. Lower values = more slope coverage.\n" +
+                 "Must be <= Hills Peak Threshold (clamped internally if reversed).")]
+        public float hillsThresholdL1 = 0.65f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Height threshold for hill peaks (HillsL2).\n" +
+                 "Land cells with Height >= this become impassable peaks.\n" +
+                 "0.80 = default. Lower values = more peak coverage.\n" +
+                 "Must be >= Hills Slope Threshold (clamped internally if reversed).")]
+        public float hillsThresholdL2 = 0.80f;
+
+        // ==================================================================
+        // Height Quantization (N4 — moved from constant)
+        // ==================================================================
+
+        [Header("Height Quantization (N4)")]
         [Min(0)]
-        [Tooltip("Height quantization steps. Rounds continuous height values\n" +
-                 "into discrete elevation bands, producing visible contour rings.\n" +
+        [Tooltip("Rounds height values into discrete elevation bands.\n" +
                  "0 = no quantization (smooth gradients).\n" +
-                 "Low values (4-16) = dramatic terraced appearance.\n" +
-                 "High values (512-1024) = effectively smooth.\n" +
-                 "Default 1024 is visually smooth.")]
-        public int quantSteps = 1024;
+                 "4–16 = dramatic terraced appearance.\n" +
+                 "1024 = effectively smooth (default).")]
+        public int heightQuantSteps = 1024;
 
         // ==================================================================
         // Height Redistribution (J2)
@@ -217,9 +281,11 @@ namespace Islands.PCG.Samples
         // ==================================================================
 
         /// <summary>
-        /// Produces a <see cref="MapTunables2D"/> from this preset's shape fields.
+        /// Produces a <see cref="MapTunables2D"/> from this preset's fields.
         /// MapTunables2D clamps and orders all values deterministically.
         /// The AnimationCurve is sampled into a piecewise-linear ScalarSpline (N2).
+        /// Phase N4: includes terrain noise, warp noise, and height quant settings.
+        /// Phase F3b: includes hills threshold settings.
         /// </summary>
         public MapTunables2D ToTunables() => new MapTunables2D(
             islandRadius01: islandRadius01,
@@ -229,6 +295,27 @@ namespace Islands.PCG.Samples
             islandAspectRatio: islandAspectRatio,
             warpAmplitude01: warpAmplitude01,
             heightRedistributionExponent: heightRedistributionExponent,
-            heightRemapSpline: ScalarSpline.FromAnimationCurve(heightRemapCurve));
+            heightRemapSpline: ScalarSpline.FromAnimationCurve(heightRemapCurve),
+            terrainNoise: new TerrainNoiseSettings
+            {
+                noiseType = terrainNoiseType,
+                frequency = terrainFrequency,
+                octaves = terrainOctaves,
+                lacunarity = terrainLacunarity,
+                persistence = terrainPersistence,
+                amplitude = terrainAmplitude,
+            },
+            warpNoise: new TerrainNoiseSettings
+            {
+                noiseType = warpNoiseType,
+                frequency = warpFrequency,
+                octaves = warpOctaves,
+                lacunarity = warpLacunarity,
+                persistence = warpPersistence,
+                amplitude = 1.0f, // warp scaling comes from warpAmplitude01
+            },
+            heightQuantSteps: heightQuantSteps,
+            hillsThresholdL1: hillsThresholdL1,
+            hillsThresholdL2: hillsThresholdL2);
     }
 }

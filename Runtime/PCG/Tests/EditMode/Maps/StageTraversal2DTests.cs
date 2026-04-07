@@ -14,8 +14,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 12345u;
 
         // Set to values reported on first run.
-        private const ulong ExpectedWalkableHash64 = 0x2461F5FF61399257UL;
-        private const ulong ExpectedStairsHash64 = 0xC4A0355A024FD9B0UL;
+        private const ulong ExpectedWalkableHash64 = 0xB726EAA2F984C49BUL;
+        private const ulong ExpectedStairsHash64 = 0x74183135BE3C8913UL;
 
         // -----------------------------------------------------------------------
         // Determinism
@@ -64,11 +64,13 @@ namespace Islands.PCG.Tests.EditMode.Maps
                 var scratch = new MaskGrid2D(domain, Allocator.Persistent, clearToZero: true);
                 try
                 {
-                    // Walkable ⊆ Land
+                    // Walkable ⊆ (Land ∪ ShallowWater)
+                    // Post-N2 Issue 3: ShallowWater cells are walkable (player can wade).
                     scratch.CopyFrom(walkable);
                     scratch.AndNot(land);
+                    scratch.AndNot(shallowWater);
                     Assert.AreEqual(0, scratch.CountOnes(),
-                        "Walkable must be a subset of Land.");
+                        "Walkable must be a subset of (Land ∪ ShallowWater).");
 
                     // Walkable ∩ HillsL2 == ∅
                     scratch.CopyFrom(walkable);

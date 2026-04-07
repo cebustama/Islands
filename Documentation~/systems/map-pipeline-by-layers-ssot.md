@@ -114,7 +114,42 @@ Current `MapFieldId`:
 - `Land ⊆ shape mask`: no Land cell exists outside the provided shape (guaranteed by construction).
 - F2b goldens unchanged. F2c goldens locked for center-circle test shape (64×64, seed=12345, radius=20).
 
-### F3 topology + hills contracts
+### F3 / F3b — Hills + Topology (Stage_Hills2D)
+
+**Pipeline position:** After Stage_BaseTerrain2D (F2), before Stage_Shore2D (F4).
+
+**Reads (read-only):**
+- `Land` (MapLayerId 0) — eligibility mask
+- `Height` (MapFieldId 0) — elevation source for threshold classification
+
+**Writes:**
+- `HillsL1` (MapLayerId 7) — passable slopes: `Land AND Height >= hillsThresholdL1 AND NOT HillsL2`
+- `HillsL2` (MapLayerId 8) — impassable peaks: `Land AND Height >= hillsThresholdL2`
+- `LandEdge` (MapLayerId 9) — `Land AND 4-adjacent-to-any-non-Land-cell`
+- `LandInterior` (MapLayerId 10) — `Land AND NOT LandEdge`
+
+**Tunables (on MapTunables2D):**
+- `hillsThresholdL1` (float, [0..1], default 0.65) — Height value above which Land cells become HillsL1 slopes.
+- `hillsThresholdL2` (float, [0..1], default 0.80) — Height value above which Land cells become HillsL2 peaks. Clamped >= hillsThresholdL1.
+
+**Subset invariants:**
+- `HillsL2 ⊆ Land`
+- `HillsL1 ⊆ Land`
+- `HillsL1 ∩ HillsL2 == ∅` (disjoint — a cell is L1 or L2, never both)
+- `LandEdge ∪ LandInterior == Land`
+- `LandEdge ∩ LandInterior == ∅`
+
+**RNG / Noise:** None. Zero ctx.Rng consumption. No MapNoiseBridge2D usage.
+Purely algorithmic: reads Height field, classifies by threshold. LandEdge/LandInterior
+derived by MaskTopologyOps2D.ExtractEdgeAndInterior4 (4-neighbor boundary detection).
+
+**No-mutate:** Does not modify Land, DeepWater, or Height.
+
+**Phase history:** Original F3 used independent SimplexPerlin noise via MapNoiseBridge2D
+(salt 0xA511E9B3) on LandInterior with MaskTopologyOps2D neighbor counting. HillsL2 was
+a subset of HillsL1 (overlap). F3b (2026-04-08) replaced this with height-threshold
+classification, making hills spatially coherent with the Height field. Full golden break
+for F3+ hashes.
 `MaskTopologyOps2D`
 - 4-neighborhood/cardinal topology only
 - out-of-bounds neighbors count as OFF

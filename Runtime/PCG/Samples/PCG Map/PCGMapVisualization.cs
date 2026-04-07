@@ -46,10 +46,7 @@ namespace Islands.PCG.Samples
     ///          visualization (scalarMin/scalarMax normalization); per-layer preset ON colors
     ///          (useLayerPresetColors toggle + layerPresetOnColors array).
     /// Phase H3: added optional MapGenerationPreset slot (override-at-resolve pattern).
-    ///           When assigned, all pipeline parameters are read from the preset; inline
-    ///           Inspector fields remain active as fallback when preset is null.
-    ///           Resolution is controlled by the base Visualization class and is NOT
-    ///           overridable via the preset in this component.
+    /// Phase N4: TerrainNoiseSettings replaces noiseCellSize/noiseAmplitude/quantSteps.
     /// </summary>
     public sealed class PCGMapVisualization : Visualization
     {
@@ -71,55 +68,21 @@ namespace Islands.PCG.Samples
         [SerializeField] private uint seed = 1u;
 
         [Header("Pipeline")]
-        [Tooltip("Si est? activo, a?ade la etapa F3 Hills + topology despu?s del terreno base.")]
         [SerializeField] private bool enableHillsStage = true;
-
-        [Tooltip("Si est? activo, a?ade la etapa F4 Shore (ShallowWater) despu?s de Hills.\n" +
-                 "Requiere Enable Hills Stage activo para resultados correctos.")]
         [SerializeField] private bool enableShoreStage = true;
-
-        [Tooltip("Si est? activo, a?ade la etapa F5 Vegetation despu?s de Shore.\n" +
-                 "Requiere Enable Shore Stage activo para resultados correctos.")]
         [SerializeField] private bool enableVegetationStage = true;
-
-        [Tooltip("Si est? activo, a?ade la etapa F6 Traversal (Walkable + Stairs) despu?s de Vegetation.\n" +
-                 "Requiere Enable Vegetation Stage activo para resultados correctos.")]
         [SerializeField] private bool enableTraversalStage = true;
-
-        [Tooltip("Si est? activo, a?ade la etapa Phase G Morphology (LandCore + CoastDist) despu?s de Traversal.\n" +
-                 "Requiere Enable Traversal Stage activo para resultados correctos.")]
         [SerializeField] private bool enableMorphologyStage = true;
 
         [Header("View Mode")]
-        [Tooltip("MaskLayer: renders the selected MapLayerId as binary ON/OFF.\n" +
-                 "ScalarField: renders the selected MapFieldId as a normalized color ramp\n" +
-                 "(maskOffColor = scalarMin end; maskOnColor = scalarMax end).")]
         [SerializeField] private PCGViewMode viewMode = PCGViewMode.MaskLayer;
 
         [Header("Layer View  (View Mode = MaskLayer)")]
-        [Tooltip("Qu? capa (MaskGrid2D) quieres visualizar.\n" +
-                 "Capas F2: Land, DeepWater.\n" +
-                 "Capas F3: LandEdge, LandInterior, HillsL1, HillsL2.\n" +
-                 "Capas F4: ShallowWater.\n" +
-                 "Capas F5: Vegetation.\n" +
-                 "Capas F6: Walkable, Stairs.\n" +
-                 "Capas Phase G: LandCore.\n" +
-                 "Si la capa no existe a?n, se muestra todo OFF.")]
         [SerializeField] private MapLayerId viewLayer = MapLayerId.Land;
 
         [Header("Field View  (View Mode = ScalarField)")]
-        [Tooltip("Qu? campo escalar (ScalarField2D) quieres visualizar.\n" +
-                 "Height (F2): values [0..1]. Suggested scalarMin=0, scalarMax=1.\n" +
-                 "CoastDist (Phase G): -1 sentinel for water/unreached, 0 at coast, positive inland.\n" +
-                 "  Suggested scalarMin=-1, scalarMax=20 (or the CoastDistMax tunable if set).\n" +
-                 "Moisture: registered but not yet written (Phase M) — shows all-low ramp.\n" +
-                 "Requires the producing stage to be enabled.")]
         [SerializeField] private MapFieldId viewField = MapFieldId.Height;
-
-        [Tooltip("Scalar value mapped to maskOffColor (ramp low end).")]
         [SerializeField] private float scalarMin = -1f;
-
-        [Tooltip("Scalar value mapped to maskOnColor (ramp high end).")]
         [SerializeField] private float scalarMax = 20f;
 
         [Header("Palette  (MaskLayer: OFF/ON — ScalarField: Low/High ramp)")]
@@ -127,70 +90,63 @@ namespace Islands.PCG.Samples
         [SerializeField] private Color maskOnColor = new Color(0.0f, 0.4f, 0.0f, 1f);
 
         [Header("Layer Preset Colors  (MaskLayer mode only)")]
-        [Tooltip("When enabled, maskOnColor is overridden at display time by the preset for the\n" +
-                 "active viewLayer. maskOffColor is still used as-is.\n" +
-                 "Note: changes to the color array do not trigger dirty detection; toggle this\n" +
-                 "field or change the seed to force a refresh after editing preset colors.")]
         [SerializeField] private bool useLayerPresetColors = false;
 
-        [Tooltip("One entry per MapLayerId (COUNT=13). Index matches MapLayerId integer value.")]
         [SerializeField]
         private Color[] layerPresetOnColors = new Color[(int)MapLayerId.COUNT]
         {
-            new Color(0.10f, 0.60f, 0.10f, 1f),  // 0  Land          — green
-            new Color(0.00f, 0.10f, 0.60f, 1f),  // 1  DeepWater     — dark blue
-            new Color(0.20f, 0.50f, 0.90f, 1f),  // 2  ShallowWater  — light blue
-            new Color(0.60f, 0.40f, 0.10f, 1f),  // 3  HillsL1       — tan
-            new Color(0.40f, 0.25f, 0.00f, 1f),  // 4  HillsL2       — dark brown
-            new Color(0.80f, 0.80f, 0.00f, 1f),  // 5  Paths         — yellow (unwritten)
-            new Color(0.90f, 0.55f, 0.00f, 1f),  // 6  Stairs        — orange
-            new Color(0.00f, 0.35f, 0.10f, 1f),  // 7  Vegetation    — dark green
-            new Color(0.50f, 0.80f, 0.50f, 1f),  // 8  Walkable      — pale green
-            new Color(0.90f, 0.20f, 0.20f, 1f),  // 9  LandEdge      — red
-            new Color(0.30f, 0.75f, 0.30f, 1f),  // 10 LandInterior  — mid green
-            new Color(0.00f, 0.65f, 0.40f, 1f),  // 11 LandCore      — teal
-            new Color(0.10f, 0.30f, 0.75f, 1f),  // 12 MidWater      — medium blue (F4c)
+            new Color(0.10f, 0.60f, 0.10f, 1f),  // 0  Land
+            new Color(0.00f, 0.10f, 0.60f, 1f),  // 1  DeepWater
+            new Color(0.20f, 0.50f, 0.90f, 1f),  // 2  ShallowWater
+            new Color(0.60f, 0.40f, 0.10f, 1f),  // 3  HillsL1
+            new Color(0.40f, 0.25f, 0.00f, 1f),  // 4  HillsL2
+            new Color(0.80f, 0.80f, 0.00f, 1f),  // 5  Paths
+            new Color(0.90f, 0.55f, 0.00f, 1f),  // 6  Stairs
+            new Color(0.00f, 0.35f, 0.10f, 1f),  // 7  Vegetation
+            new Color(0.50f, 0.80f, 0.50f, 1f),  // 8  Walkable
+            new Color(0.90f, 0.20f, 0.20f, 1f),  // 9  LandEdge
+            new Color(0.30f, 0.75f, 0.30f, 1f),  // 10 LandInterior
+            new Color(0.00f, 0.65f, 0.40f, 1f),  // 11 LandCore
+            new Color(0.10f, 0.30f, 0.75f, 1f),  // 12 MidWater
         };
 
         [Header("F2 Tunables (Shape + Threshold)")]
-        [Range(0f, 1f)]
-        [SerializeField] private float islandRadius01 = 0.45f;
-
-        [Range(0f, 1f)]
-        [SerializeField] private float waterThreshold01 = 0.50f;
-
-        [Range(0f, 1f)]
-        [SerializeField] private float islandSmoothFrom01 = 0.30f;
-
-        [Range(0f, 1f)]
-        [SerializeField] private float islandSmoothTo01 = 0.70f;
+        [Range(0f, 1f)][SerializeField] private float islandRadius01 = 0.45f;
+        [Range(0f, 1f)][SerializeField] private float waterThreshold01 = 0.50f;
+        [Range(0f, 1f)][SerializeField] private float islandSmoothFrom01 = 0.30f;
+        [Range(0f, 1f)][SerializeField] private float islandSmoothTo01 = 0.70f;
 
         [Header("F2 Tunables (Island Shape — Ellipse + Warp)")]
-        [Tooltip("Ellipse aspect ratio. 1.0 = circle. >1 = wider. <1 = taller. Range [0.25..4.0].")]
-        [Range(0.25f, 4f)]
-        [SerializeField] private float islandAspectRatio = 1.00f;
-
-        [Tooltip("Domain warp amplitude as a fraction of map size. " +
-                 "0 = no warp (pure circle/ellipse). ~0.15 = subtle organic coast. ~0.30 = strong bays.")]
-        [Range(0f, 1f)]
-        [SerializeField] private float warpAmplitude01 = 0.00f;
+        [Range(0.25f, 4f)][SerializeField] private float islandAspectRatio = 1.00f;
+        [Range(0f, 1f)][SerializeField] private float warpAmplitude01 = 0.00f;
 
         [Header("Height Redistribution (J2)")]
-        [Tooltip("Power-curve exponent applied to terrain height.\n" +
-                 "1.0 = no change (identity). > 1 = flat lowlands, sharp peaks.\n" +
-                 "< 1 = raised lowlands, compressed peaks. Range [0.5..4.0].")]
-        [Range(0.5f, 4f)]
-        [SerializeField] private float heightRedistributionExponent = 1.0f;
+        [Range(0.5f, 4f)][SerializeField] private float heightRedistributionExponent = 1.0f;
 
-        [Header("F2 Tunables (Noise Inside Island)")]
-        [Min(1)]
-        [SerializeField] private int noiseCellSize = 8;
+        [Header("Hills (F3b)")]
+        [Range(0f, 1f)][SerializeField] private float hillsThresholdL1 = 0.65f;
+        [Range(0f, 1f)][SerializeField] private float hillsThresholdL2 = 0.80f;
 
-        [Range(0f, 1f)]
-        [SerializeField] private float noiseAmplitude = 0.18f;
+        // N4: terrain noise settings (replaces noiseCellSize, noiseAmplitude)
+        [Header("Terrain Noise (N4)")]
+        [SerializeField] private TerrainNoiseType terrainNoiseType = TerrainNoiseType.Perlin;
+        [Range(1, 32)][SerializeField] private int terrainFrequency = 8;
+        [Range(1, 6)][SerializeField] private int terrainOctaves = 4;
+        [Range(2, 4)][SerializeField] private int terrainLacunarity = 2;
+        [Range(0f, 1f)][SerializeField] private float terrainPersistence = 0.5f;
+        [Range(0f, 1f)][SerializeField] private float terrainAmplitude = 0.35f;
 
-        [Min(0)]
-        [SerializeField] private int quantSteps = 1024;
+        // N4: warp noise settings
+        [Header("Warp Noise (N4)")]
+        [SerializeField] private TerrainNoiseType warpNoiseType = TerrainNoiseType.Perlin;
+        [Range(1, 32)][SerializeField] private int warpFrequency = 4;
+        [Range(1, 6)][SerializeField] private int warpOctaves = 1;
+        [Range(2, 4)][SerializeField] private int warpLacunarity = 2;
+        [Range(0f, 1f)][SerializeField] private float warpPersistence = 0.5f;
+
+        // N4: height quantization (replaces quantSteps)
+        [Header("Height Quantization (N4)")]
+        [Min(0)][SerializeField] private int heightQuantSteps = 1024;
 
         [Header("Run Behavior")]
         [SerializeField] private bool clearBeforeRun = true;
@@ -203,7 +159,7 @@ namespace Islands.PCG.Samples
         private int ctxResolution = -1;
         private bool dirty = true;
 
-        // ---- Dirty-tracking cache (H3: effective values cached, not raw fields) ----
+        // ---- Dirty-tracking cache ----
         private MapGenerationPreset _lastPreset;
         private uint lastSeed;
         private bool lastEnableHillsStage;
@@ -226,9 +182,16 @@ namespace Islands.PCG.Samples
         private float lastIslandAspectRatio;
         private float lastWarpAmplitude01;
         private float lastHeightRedistributionExponent;
-        private int lastNoiseCellSize;
-        private float lastNoiseAmplitude;
-        private int lastQuantSteps;
+        // F3b hills dirty tracking
+        private float lastHillsThresholdL1;
+        private float lastHillsThresholdL2;
+        // N4 noise dirty tracking
+        private TerrainNoiseType lastTerrainNoiseType, lastWarpNoiseType;
+        private int lastTerrainFrequency, lastTerrainOctaves, lastTerrainLacunarity;
+        private float lastTerrainPersistence, lastTerrainAmplitude;
+        private int lastWarpFrequency, lastWarpOctaves, lastWarpLacunarity;
+        private float lastWarpPersistence;
+        private int lastHeightQuantSteps;
         private bool lastClearBeforeRun;
 
         private bool loggedFirstUpdate = false;
@@ -324,17 +287,38 @@ namespace Islands.PCG.Samples
             bool eVeg = preset != null ? preset.enableVegetationStage : enableVegetationStage;
             bool eTrav = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             bool eMorph = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
-            int eCell = preset != null ? preset.noiseCellSize : noiseCellSize;
-            float eAmp = preset != null ? preset.noiseAmplitude : noiseAmplitude;
-            int eQuant = preset != null ? preset.quantSteps : quantSteps;
             bool eClear = preset != null ? preset.clearBeforeRun : clearBeforeRun;
+
+            // N4: build tunables with noise settings
             var eTun = preset != null
                 ? preset.ToTunables()
                 : new MapTunables2D(
                       islandRadius01, waterThreshold01,
                       islandSmoothFrom01, islandSmoothTo01,
                       islandAspectRatio, warpAmplitude01,
-                      heightRedistributionExponent);
+                      heightRedistributionExponent,
+                      default, // heightRemapSpline
+                      terrainNoise: new TerrainNoiseSettings
+                      {
+                          noiseType = terrainNoiseType,
+                          frequency = terrainFrequency,
+                          octaves = terrainOctaves,
+                          lacunarity = terrainLacunarity,
+                          persistence = terrainPersistence,
+                          amplitude = terrainAmplitude,
+                      },
+                      warpNoise: new TerrainNoiseSettings
+                      {
+                          noiseType = warpNoiseType,
+                          frequency = warpFrequency,
+                          octaves = warpOctaves,
+                          lacunarity = warpLacunarity,
+                          persistence = warpPersistence,
+                          amplitude = 1.0f,
+                      },
+                      heightQuantSteps: heightQuantSteps,
+                      hillsThresholdL1: hillsThresholdL1,
+                      hillsThresholdL2: hillsThresholdL2);
 
             ApplyPaletteToMpb();
             EnsureContextAllocated(resolution);
@@ -347,9 +331,10 @@ namespace Islands.PCG.Samples
 
             if (dirty)
             {
-                baseStage.noiseCellSize = Mathf.Max(1, eCell);
-                baseStage.noiseAmplitude = Mathf.Max(0f, eAmp);
-                baseStage.quantSteps = Mathf.Max(0, eQuant);
+                // N4: feed noise settings to configurable stage.
+                baseStage.terrainNoise = eTun.terrainNoise;
+                baseStage.warpNoise = eTun.warpNoise;
+                baseStage.heightQuantSteps = eTun.heightQuantSteps;
 
                 var inputs = new MapInputs(
                     seed: eSeed,
@@ -371,9 +356,6 @@ namespace Islands.PCG.Samples
             // --- display ---
             if (viewMode == PCGViewMode.ScalarField)
             {
-                // Scalar field: normalize values from [scalarMin..scalarMax] → [0..1] and pack.
-                // -1f sentinel values (CoastDist water/unreached) map to 0 when scalarMin = -1.
-                // Fields not yet written (e.g. Moisture before Phase M) show all-low ramp.
                 if (ctx.IsFieldCreated(viewField))
                     PackFromFieldAndUpload(ref ctx.GetField(viewField), resolution);
                 else
@@ -381,7 +363,6 @@ namespace Islands.PCG.Samples
             }
             else
             {
-                // Mask layer: binary ON/OFF. Optionally override maskOnColor with layer preset.
                 if (useLayerPresetColors)
                 {
                     int idx = (int)viewLayer;
@@ -402,7 +383,6 @@ namespace Islands.PCG.Samples
                 ulong hash = 0ul;
                 if (viewMode == PCGViewMode.ScalarField)
                 {
-                    // No SnapshotHash64 on ScalarField2D; log field availability only.
                     hash = ctx.IsFieldCreated(viewField) ? 0xFFFFFFFFFFFFFFFFul : 0ul;
                 }
                 else
@@ -469,12 +449,6 @@ namespace Islands.PCG.Samples
             return mask.Get(x, y) ? 1f : 0f;
         }
 
-        /// <summary>
-        /// Packs normalized scalar field values into the GPU buffer.
-        /// Maps [scalarMin..scalarMax] → [0..1] using math.saturate.
-        /// The existing shader interpolates maskOffColor (0) to maskOnColor (1),
-        /// giving a color ramp with no shader changes required.
-        /// </summary>
         private void PackFromFieldAndUpload(ref ScalarField2D field, int resolution)
         {
             int totalInstances = resolution * resolution;
@@ -512,8 +486,6 @@ namespace Islands.PCG.Samples
             mpb.SetColor(MaskOnColorId, maskOnColor);
         }
 
-        // H3: CacheParams caches effective values (not raw fields) so that
-        // both preset-field edits and inline-field edits are detected correctly.
         private void CacheParams()
         {
             _lastPreset = preset;
@@ -538,9 +510,22 @@ namespace Islands.PCG.Samples
             lastIslandAspectRatio = preset != null ? preset.islandAspectRatio : islandAspectRatio;
             lastWarpAmplitude01 = preset != null ? preset.warpAmplitude01 : warpAmplitude01;
             lastHeightRedistributionExponent = preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent;
-            lastNoiseCellSize = preset != null ? preset.noiseCellSize : noiseCellSize;
-            lastNoiseAmplitude = preset != null ? preset.noiseAmplitude : noiseAmplitude;
-            lastQuantSteps = preset != null ? preset.quantSteps : quantSteps;
+            // F3b hills params
+            lastHillsThresholdL1 = preset != null ? preset.hillsThresholdL1 : hillsThresholdL1;
+            lastHillsThresholdL2 = preset != null ? preset.hillsThresholdL2 : hillsThresholdL2;
+            // N4 noise params
+            lastTerrainNoiseType = preset != null ? preset.terrainNoiseType : terrainNoiseType;
+            lastTerrainFrequency = preset != null ? preset.terrainFrequency : terrainFrequency;
+            lastTerrainOctaves = preset != null ? preset.terrainOctaves : terrainOctaves;
+            lastTerrainLacunarity = preset != null ? preset.terrainLacunarity : terrainLacunarity;
+            lastTerrainPersistence = preset != null ? preset.terrainPersistence : terrainPersistence;
+            lastTerrainAmplitude = preset != null ? preset.terrainAmplitude : terrainAmplitude;
+            lastWarpNoiseType = preset != null ? preset.warpNoiseType : warpNoiseType;
+            lastWarpFrequency = preset != null ? preset.warpFrequency : warpFrequency;
+            lastWarpOctaves = preset != null ? preset.warpOctaves : warpOctaves;
+            lastWarpLacunarity = preset != null ? preset.warpLacunarity : warpLacunarity;
+            lastWarpPersistence = preset != null ? preset.warpPersistence : warpPersistence;
+            lastHeightQuantSteps = preset != null ? preset.heightQuantSteps : heightQuantSteps;
             lastClearBeforeRun = preset != null ? preset.clearBeforeRun : clearBeforeRun;
         }
 
@@ -568,9 +553,22 @@ namespace Islands.PCG.Samples
                 || !Mathf.Approximately(preset != null ? preset.islandAspectRatio : islandAspectRatio, lastIslandAspectRatio)
                 || !Mathf.Approximately(preset != null ? preset.warpAmplitude01 : warpAmplitude01, lastWarpAmplitude01)
                 || !Mathf.Approximately(preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent, lastHeightRedistributionExponent)
-                || (preset != null ? preset.noiseCellSize : noiseCellSize) != lastNoiseCellSize
-                || !Mathf.Approximately(preset != null ? preset.noiseAmplitude : noiseAmplitude, lastNoiseAmplitude)
-                || (preset != null ? preset.quantSteps : quantSteps) != lastQuantSteps
+                // F3b hills params
+                || !Mathf.Approximately(preset != null ? preset.hillsThresholdL1 : hillsThresholdL1, lastHillsThresholdL1)
+                || !Mathf.Approximately(preset != null ? preset.hillsThresholdL2 : hillsThresholdL2, lastHillsThresholdL2)
+                // N4 noise params
+                || (preset != null ? preset.terrainNoiseType : terrainNoiseType) != lastTerrainNoiseType
+                || (preset != null ? preset.terrainFrequency : terrainFrequency) != lastTerrainFrequency
+                || (preset != null ? preset.terrainOctaves : terrainOctaves) != lastTerrainOctaves
+                || (preset != null ? preset.terrainLacunarity : terrainLacunarity) != lastTerrainLacunarity
+                || !Mathf.Approximately(preset != null ? preset.terrainPersistence : terrainPersistence, lastTerrainPersistence)
+                || !Mathf.Approximately(preset != null ? preset.terrainAmplitude : terrainAmplitude, lastTerrainAmplitude)
+                || (preset != null ? preset.warpNoiseType : warpNoiseType) != lastWarpNoiseType
+                || (preset != null ? preset.warpFrequency : warpFrequency) != lastWarpFrequency
+                || (preset != null ? preset.warpOctaves : warpOctaves) != lastWarpOctaves
+                || (preset != null ? preset.warpLacunarity : warpLacunarity) != lastWarpLacunarity
+                || !Mathf.Approximately(preset != null ? preset.warpPersistence : warpPersistence, lastWarpPersistence)
+                || (preset != null ? preset.heightQuantSteps : heightQuantSteps) != lastHeightQuantSteps
                 || (preset != null ? preset.clearBeforeRun : clearBeforeRun) != lastClearBeforeRun;
         }
     }

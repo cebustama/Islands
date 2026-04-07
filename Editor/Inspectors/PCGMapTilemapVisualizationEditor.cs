@@ -9,6 +9,8 @@ namespace Islands.PCG.Editor
     /// When a MapGenerationPreset is assigned, hides the inline pipeline parameter
     /// fields. Section headers come from [Header] attributes on the component fields.
     /// Phase N2. Post-N2: scalar heatmap tilemap fields.
+    /// Phase N4: TerrainNoiseSettings + WarpNoiseSettings + heightQuantSteps.
+    /// Phase F3b: hillsThresholdL1 / hillsThresholdL2.
     /// </summary>
     [CustomEditor(typeof(PCGMapTilemapVisualization))]
     public sealed class PCGMapTilemapVisualizationEditor : UnityEditor.Editor
@@ -26,8 +28,15 @@ namespace Islands.PCG.Editor
         private SerializedProperty enableHillsStage, enableShoreStage, enableVegetationStage, enableTraversalStage, enableMorphologyStage;
         private SerializedProperty islandRadius01, islandAspectRatio, warpAmplitude01, islandSmoothFrom01, islandSmoothTo01;
         private SerializedProperty waterThreshold01, shallowWaterDepth01, midWaterDepth01;
-        private SerializedProperty noiseCellSize, noiseAmplitude, quantSteps;
+        // N4: terrain noise
+        private SerializedProperty terrainNoiseType, terrainFrequency, terrainOctaves, terrainLacunarity, terrainPersistence, terrainAmplitude;
+        // N4: warp noise
+        private SerializedProperty warpNoiseType, warpFrequency, warpOctaves, warpLacunarity, warpPersistence;
+        // N4: height quantization
+        private SerializedProperty heightQuantSteps;
         private SerializedProperty heightRedistributionExponent, heightRemapCurve;
+        // F3b: hills thresholds
+        private SerializedProperty hillsThresholdL1, hillsThresholdL2;
         private SerializedProperty clearBeforeRun;
 
         private void OnEnable()
@@ -50,11 +59,26 @@ namespace Islands.PCG.Editor
             waterThreshold01 = serializedObject.FindProperty("waterThreshold01");
             shallowWaterDepth01 = serializedObject.FindProperty("shallowWaterDepth01");
             midWaterDepth01 = serializedObject.FindProperty("midWaterDepth01");
-            noiseCellSize = serializedObject.FindProperty("noiseCellSize");
-            noiseAmplitude = serializedObject.FindProperty("noiseAmplitude");
-            quantSteps = serializedObject.FindProperty("quantSteps");
+            // N4: terrain noise
+            terrainNoiseType = serializedObject.FindProperty("terrainNoiseType");
+            terrainFrequency = serializedObject.FindProperty("terrainFrequency");
+            terrainOctaves = serializedObject.FindProperty("terrainOctaves");
+            terrainLacunarity = serializedObject.FindProperty("terrainLacunarity");
+            terrainPersistence = serializedObject.FindProperty("terrainPersistence");
+            terrainAmplitude = serializedObject.FindProperty("terrainAmplitude");
+            // N4: warp noise
+            warpNoiseType = serializedObject.FindProperty("warpNoiseType");
+            warpFrequency = serializedObject.FindProperty("warpFrequency");
+            warpOctaves = serializedObject.FindProperty("warpOctaves");
+            warpLacunarity = serializedObject.FindProperty("warpLacunarity");
+            warpPersistence = serializedObject.FindProperty("warpPersistence");
+            // N4: height quantization
+            heightQuantSteps = serializedObject.FindProperty("heightQuantSteps");
             heightRedistributionExponent = serializedObject.FindProperty("heightRedistributionExponent");
             heightRemapCurve = serializedObject.FindProperty("heightRemapCurve");
+            // F3b: hills thresholds
+            hillsThresholdL1 = serializedObject.FindProperty("hillsThresholdL1");
+            hillsThresholdL2 = serializedObject.FindProperty("hillsThresholdL2");
             clearBeforeRun = serializedObject.FindProperty("clearBeforeRun");
             flipY = serializedObject.FindProperty("flipY");
             enableMultiLayer = serializedObject.FindProperty("enableMultiLayer");
@@ -114,11 +138,30 @@ namespace Islands.PCG.Editor
                 EditorGUILayout.PropertyField(shallowWaterDepth01);
                 EditorGUILayout.PropertyField(midWaterDepth01);
 
-                EditorGUILayout.PropertyField(noiseCellSize);  // draws [Header("Terrain Noise")]
-                EditorGUILayout.PropertyField(noiseAmplitude);
-                EditorGUILayout.PropertyField(quantSteps);
+                // N4: terrain noise
+                EditorGUILayout.PropertyField(terrainNoiseType);  // draws [Header("Terrain Noise (N4)")]
+                EditorGUILayout.PropertyField(terrainFrequency);
+                EditorGUILayout.PropertyField(terrainOctaves);
+                EditorGUILayout.PropertyField(terrainLacunarity);
+                EditorGUILayout.PropertyField(terrainPersistence);
+                EditorGUILayout.PropertyField(terrainAmplitude);
+
+                // N4: warp noise
+                EditorGUILayout.PropertyField(warpNoiseType);  // draws [Header("Warp Noise (N4)")]
+                EditorGUILayout.PropertyField(warpFrequency);
+                EditorGUILayout.PropertyField(warpOctaves);
+                EditorGUILayout.PropertyField(warpLacunarity);
+                EditorGUILayout.PropertyField(warpPersistence);
+
+                // N4: height quantization
+                EditorGUILayout.PropertyField(heightQuantSteps);  // draws [Header("Height Quantization (N4)")]
 
                 EditorGUILayout.PropertyField(heightRedistributionExponent); // draws [Header("Height Redistribution (J2)")]
+
+                // F3b: hills thresholds
+                EditorGUILayout.PropertyField(hillsThresholdL1);  // draws [Header("Hills (F3b)")]
+                EditorGUILayout.PropertyField(hillsThresholdL2);
+
                 EditorGUILayout.PropertyField(heightRemapCurve);             // draws [Header("Height Remap (N2)")]
                 EditorGUILayout.PropertyField(clearBeforeRun);               // draws [Header("Run Behavior")]
             }

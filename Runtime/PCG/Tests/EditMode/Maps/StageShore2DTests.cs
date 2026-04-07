@@ -19,7 +19,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const int H = 64;
         private const uint Seed = 12345u;
 
-        private const ulong ExpectedShallowWaterHash64 = 0xC24753CA1E06940FUL;
+        private const ulong ExpectedShallowWaterHash64 = 0x914AF43589BA6C13UL;
 
         // -----------------------------------------------------------------------
         // Determinism

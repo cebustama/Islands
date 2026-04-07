@@ -1,5 +1,42 @@
 # Changelog — SSoT
 
+## Phase F3b — Height-Coherent Hills (Clean Break)
+Date: 2026-04-08
+
+### What changed
+- `Stage_Hills2D` rewritten: topology-based hill placement (independent noise on
+  LandInterior + MaskTopologyOps2D neighbor counting) replaced with height-threshold
+  classification from the Height scalar field.
+- New contract: `HillsL2 = Land AND Height >= thresholdL2`;
+  `HillsL1 = Land AND Height >= thresholdL1 AND NOT HillsL2`.
+- HillsL1 and HillsL2 are now disjoint (`HillsL1 ∩ HillsL2 == ∅`);
+  previously `HillsL2 ⊆ HillsL1` (overlap).
+- Hills domain broadened from `LandInterior` to `Land` (coastal cliffs can be hills).
+- LandEdge / LandInterior derivation unchanged (MaskTopologyOps2D.ExtractEdgeAndInterior4).
+- All MapNoiseBridge2D usage and independent noise removed from Stage_Hills2D.
+  Zero RNG consumption (continues N4 pattern — entire pipeline uses coordinate hashing).
+- `MapTunables2D` extended with `hillsThresholdL1` (default 0.65) and
+  `hillsThresholdL2` (default 0.80). Constructor-validated (L2 clamped >= L1).
+- `MapGenerationPreset` extended with matching fields + `ToTunables()` updated.
+- All three visualization Inspectors updated (PCGMapVisualization,
+  PCGMapCompositeVisualization, PCGMapTilemapVisualization) with Hills (F3b) header,
+  dirty tracking, tunables wiring.
+- `PCGMapTilemapVisualizationEditor` updated to draw the new fields when no preset assigned.
+
+### Golden impact
+Full golden break for F3+ hashes (F3, F4, F5, F6, Phase G). All pipeline and stage
+golden hashes re-locked. F0–F2 goldens unaffected.
+
+### Test corrections
+- `StageTraversal2DTests.Stage_Traversal2D_Invariants_Hold`: corrected `Walkable ⊆ Land`
+  to `Walkable ⊆ (Land ∪ ShallowWater)`. This was a latent test bug since Post-N2 Issue 3
+  (ShallowWater walkability), surfaced by the F3b golden break.
+
+### Authority
+- `Stage_Hills2D.cs` is runtime implementation truth.
+- `MapTunables2D` is runtime implementation truth.
+- Visualization consumers are sample-side only.
+
 ## 2026-04-04 (Phase H4 — Animated Tiles)
 - Phase H4 — Animated Tiles implemented and smoke-test verified.
 - `TilesetConfig.LayerEntry` struct (`Runtime/PCG/Adapters/Tilemap/TilesetConfig.cs`) extended:

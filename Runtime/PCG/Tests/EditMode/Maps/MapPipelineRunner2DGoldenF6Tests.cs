@@ -14,8 +14,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 42u;
 
         // Set to values reported on first run.
-        private const ulong ExpectedWalkableHash = 0xFE19DAE6F1DBC139UL;
-        private const ulong ExpectedStairsHash = 0x6066EABE516523E3UL;
+        private const ulong ExpectedWalkableHash = 0xA9A213FFB5842CF7UL;
+        private const ulong ExpectedStairsHash = 0x678993F8298D975FUL;
 
         [Test]
         public void Pipeline_F6_GoldenHash_IsLocked()

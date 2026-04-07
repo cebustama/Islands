@@ -14,7 +14,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 42u;
 
         // Set to values reported on first run.
-        private const ulong ExpectedVegetationHash = 0xF3B336350FA3C892UL;
+        private const ulong ExpectedVegetationHash = 0x7929C1150266E4B5UL;
 
         [Test]
         public void Pipeline_F5_GoldenHash_IsLocked()

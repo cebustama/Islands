@@ -10,7 +10,7 @@ namespace Islands.PCG.Layout.Maps
     /// F2b additions: islandAspectRatio, warpAmplitude01.
     /// Both are consumed only by Stage_BaseTerrain2D (and its configurable lantern twin).
     /// Default values (1.0 / 0.0) produce the same circle geometry as the pre-F2b
-    /// implementation; goldens differ because warp arrays are always filled from ctx.Rng.
+    /// implementation. Goldens differ because warp arrays are always filled from ctx.Rng.
     ///
     /// J2 addition: heightRedistributionExponent.
     /// Consumed by Stage_BaseTerrain2D after height quantization, before land threshold.
@@ -19,6 +19,18 @@ namespace Islands.PCG.Layout.Maps
     /// N2 addition: heightRemapSpline.
     /// Piecewise-linear spline applied after J2 redistribution, before land threshold.
     /// Default (null arrays) = identity; existing goldens unaffected.
+    ///
+    /// N4 additions: terrainNoise, warpNoise, heightQuantSteps.
+    /// Replace the hardcoded NoiseCellSize/NoiseAmplitude/QuantSteps/WarpCellSize constants
+    /// in Stage_BaseTerrain2D with configurable noise runtime parameters. Noise is now
+    /// generated via coordinate hashing (MapNoiseBridge2D) instead of sequential RNG,
+    /// eliminating all ctx.Rng consumption in the base terrain stage.
+    /// Full golden break — all hashes change.
+    ///
+    /// F3b additions: hillsThresholdL1, hillsThresholdL2.
+    /// Consumed by Stage_Hills2D for height-threshold hill classification.
+    /// Replaces topology-based hill placement with Height field thresholds.
+    /// Full golden break for F3+ hashes.
     /// </summary>
     public readonly struct MapTunables2D
     {
@@ -54,10 +66,6 @@ namespace Islands.PCG.Layout.Maps
         /// Domain warp amplitude as a fraction of min(width, height).
         /// 0.0 = no warp (pure ellipse / circle). ~0.15 = subtle organic coast.
         /// ~0.30 = strong bays and peninsulas. Clamped to [0..1].
-        ///
-        /// The two warp noise arrays are always allocated and filled from ctx.Rng
-        /// regardless of this value, keeping RNG consumption count stable so that
-        /// changing warpAmplitude01 never shifts the RNG state seen by downstream stages.
         /// </summary>
         public readonly float warpAmplitude01;
 
@@ -88,12 +96,61 @@ namespace Islands.PCG.Layout.Maps
         public readonly ScalarSpline heightRemapSpline;
 
         // ------------------------------------------------------------------
+        // N4 additions
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Noise settings for terrain height perturbation.
+        /// Replaces the old NoiseCellSize + NoiseAmplitude constants in Stage_BaseTerrain2D.
+        /// Consumed via <see cref="MapNoiseBridge2D.FillNoise01"/>.
+        /// </summary>
+        public readonly TerrainNoiseSettings terrainNoise;
+
+        /// <summary>
+        /// Noise settings for domain warp (coastline shape distortion).
+        /// Replaces the old WarpCellSize constant + RNG arrays in Stage_BaseTerrain2D.
+        /// Actual warp displacement = warpAmplitude01 * minDim * warpNoise sample.
+        /// Consumed via <see cref="MapNoiseBridge2D.FillNoise01"/>.
+        /// </summary>
+        public readonly TerrainNoiseSettings warpNoise;
+
+        /// <summary>
+        /// Height quantization steps. Rounds continuous height values into discrete
+        /// elevation bands, producing visible contour rings.
+        /// 0 = no quantization (smooth gradients). 1024 = effectively smooth.
+        /// Low values (4–16) = dramatic terraced appearance.
+        /// Moved from a hardcoded constant in Stage_BaseTerrain2D to a tunable in Phase N4.
+        /// </summary>
+        public readonly int heightQuantSteps;
+
+        // ------------------------------------------------------------------
+        // F3b additions
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Height threshold for HillsL1 (passable slopes).
+        /// Land cells with Height >= this value become HillsL1 (unless >= hillsThresholdL2).
+        /// [0..1]. Default 0.65.
+        /// </summary>
+        public readonly float hillsThresholdL1;
+
+        /// <summary>
+        /// Height threshold for HillsL2 (impassable peaks).
+        /// Land cells with Height >= this value become HillsL2.
+        /// Must be >= hillsThresholdL1 (clamped internally).
+        /// [0..1]. Default 0.80.
+        /// </summary>
+        public readonly float hillsThresholdL2;
+
+        // ------------------------------------------------------------------
         // Default
         // ------------------------------------------------------------------
 
         /// <summary>
         /// Default tunables: circular island (aspect 1.0, no warp, no redistribution,
-        /// no spline remap), matching pre-N2 geometry. Suitable for all golden tests.
+        /// no spline remap), with Perlin fBm terrain noise at frequency 8.
+        /// Phase N4: full golden break from pre-N4 defaults.
+        /// Phase F3b: full golden break for F3+ hashes.
         /// </summary>
         public static MapTunables2D Default => new MapTunables2D(
             islandRadius01: 0.45f,
@@ -103,7 +160,12 @@ namespace Islands.PCG.Layout.Maps
             islandAspectRatio: 1.00f,
             warpAmplitude01: 0.00f,
             heightRedistributionExponent: 1.00f,
-            heightRemapSpline: default
+            heightRemapSpline: default,
+            terrainNoise: TerrainNoiseSettings.DefaultTerrain,
+            warpNoise: TerrainNoiseSettings.DefaultWarp,
+            heightQuantSteps: 1024,
+            hillsThresholdL1: 0.65f,
+            hillsThresholdL2: 0.80f
         );
 
         // ------------------------------------------------------------------
@@ -118,6 +180,11 @@ namespace Islands.PCG.Layout.Maps
         /// <param name="warpAmplitude01">Domain warp strength as fraction of min(w,h). [0..1].</param>
         /// <param name="heightRedistributionExponent">Height power-curve exponent. 1.0 = identity. [0.5..4.0].</param>
         /// <param name="heightRemapSpline">Piecewise-linear height remap curve. default = identity (no remap).</param>
+        /// <param name="terrainNoise">Noise settings for height perturbation. Default = Perlin fBm freq 8.</param>
+        /// <param name="warpNoise">Noise settings for domain warp. Default = Perlin freq 4.</param>
+        /// <param name="heightQuantSteps">Height quantization steps. 0 = none, 1024 = smooth. Default = 1024.</param>
+        /// <param name="hillsThresholdL1">Height threshold for HillsL1 slopes. [0..1]. Default = 0.65.</param>
+        /// <param name="hillsThresholdL2">Height threshold for HillsL2 peaks. [0..1]. Must be >= hillsThresholdL1. Default = 0.80.</param>
         public MapTunables2D(
             float islandRadius01,
             float waterThreshold01,
@@ -126,7 +193,12 @@ namespace Islands.PCG.Layout.Maps
             float islandAspectRatio = 1.0f,
             float warpAmplitude01 = 0.0f,
             float heightRedistributionExponent = 1.0f,
-            ScalarSpline heightRemapSpline = default)
+            ScalarSpline heightRemapSpline = default,
+            TerrainNoiseSettings terrainNoise = default,
+            TerrainNoiseSettings warpNoise = default,
+            int heightQuantSteps = 1024,
+            float hillsThresholdL1 = 0.65f,
+            float hillsThresholdL2 = 0.80f)
         {
             // Clamp and order all values deterministically (pure math, no RNG).
             float r = math.clamp(islandRadius01, 0f, 1f);
@@ -151,6 +223,23 @@ namespace Islands.PCG.Layout.Maps
             // ScalarSpline is validated at its own construction time.
             // default (null arrays) is a valid identity spline — no allocation needed.
             this.heightRemapSpline = heightRemapSpline;
+
+            // N4: noise settings stored as-is; clamping happens in the bridge.
+            // Default-struct check: if frequency is 0, use defaults.
+            this.terrainNoise = terrainNoise.frequency > 0
+                ? terrainNoise
+                : TerrainNoiseSettings.DefaultTerrain;
+            this.warpNoise = warpNoise.frequency > 0
+                ? warpNoise
+                : TerrainNoiseSettings.DefaultWarp;
+            this.heightQuantSteps = math.max(0, heightQuantSteps);
+
+            // F3b: hills thresholds. L2 must be >= L1.
+            float hl1 = math.clamp(hillsThresholdL1, 0f, 1f);
+            float hl2 = math.clamp(hillsThresholdL2, 0f, 1f);
+            if (hl2 < hl1) hl2 = hl1;
+            this.hillsThresholdL1 = hl1;
+            this.hillsThresholdL2 = hl2;
         }
     }
 }

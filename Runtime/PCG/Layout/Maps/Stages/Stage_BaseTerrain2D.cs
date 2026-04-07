@@ -10,7 +10,7 @@ using Islands.PCG.Operators;
 namespace Islands.PCG.Layout.Maps.Stages
 {
     /// <summary>
-    /// F2c / J2 / N2 — Base terrain stage: ellipse + domain-warp silhouette, with optional
+    /// N4 / F2c / J2 / N2 — Base terrain stage: ellipse + domain-warp silhouette, with optional
     /// external shape input, height redistribution, and spline remapping.
     ///
     /// Writes:
@@ -19,66 +19,41 @@ namespace Islands.PCG.Layout.Maps.Stages
     /// - Layer: DeepWater (MaskGrid2D)    = border-connected NOT Land (stable flood fill)
     ///
     /// Shape pipeline — no shape input (F2b path, default):
-    ///   1. Sample warpX / warpY from two low-frequency coarse noise grids (WarpCellSize).
+    ///   1. Sample warpX / warpY from coordinate-hashed noise via MapNoiseBridge2D.
     ///   2. Displace the pixel's sampling point by the warp vector * warpAmplitude.
     ///   3. Compute ellipse distance from the displaced point to map center,
     ///      with the x-axis scaled by 1/islandAspectRatio.
     ///   4. Apply smoothstep radial falloff on that ellipse distance.
-    ///   5. Add small high-frequency height perturbation noise (NoiseCellSize) inside the island.
+    ///   5. Add height perturbation noise (coordinate-hashed) inside the island.
     ///
     /// Shape pipeline — external shape input (F2c path, opt-in):
-    ///   1–3. All three RNG arrays (island noise, warpX, warpY) are still allocated and filled in
-    ///        the same order, so downstream stages see an identical RNG state regardless of path.
-    ///   4. mask01 = shape.GetUnchecked(x, y) ? 1f : 0f  (replaces ellipse+warp).
-    ///   5. Add small high-frequency height perturbation noise (same as F2b path).
+    ///   1. Noise arrays are still filled (same bridge calls), so seed-derived fields
+    ///      are always available for debugging / future use.
+    ///   2. mask01 = shape.GetUnchecked(x, y) ? 1f : 0f  (replaces ellipse+warp).
+    ///   3. Add height perturbation noise (same as F2b path).
     ///
-    /// Height redistribution (J2):
-    ///   After quantization, height is passed through pow(h01, exponent).
-    ///   Default exponent 1.0 = identity (no change). Exponents > 1.0 flatten lowlands
-    ///   and sharpen peaks. Applied before the Land threshold.
-    ///
-    /// Spline remapping (N2):
-    ///   After J2 redistribution, height is passed through a piecewise-linear spline.
-    ///   Identity spline (or default) = no change. Applied before the Land threshold.
-    ///   Application order: quantize → pow() → spline → Land threshold.
+    /// Height post-processing:
+    ///   quantize → pow() redistribution (J2) → spline remap (N2) → Land threshold.
     ///
     /// Determinism:
-    /// - Uses only ctx.Rng for all randomness (seed-driven, stage-order stable).
-    /// - RNG consumption order: island noise → warpX noise → warpY noise.
-    ///   This order is fixed regardless of tunable values or shape-input presence.
+    /// - All noise is generated via coordinate hashing (MapNoiseBridge2D.FillNoise01).
+    ///   ctx.Rng is NOT consumed — downstream stages see it at its initial position.
     /// - Row-major loops only; no HashSet/Dictionary traversal.
+    /// - Same seed + same settings => identical output regardless of execution environment.
     ///
-    /// OOB-safe:
-    /// - No neighbor reads on authoritative grids in the height loop.
-    /// - Warp displacement is applied only to the distance calculation (F2b path only).
-    /// - Shape mask reads use GetUnchecked (caller guarantees matching dimensions).
-    /// - DeepWater uses MaskFloodFillOps2D which is OOB-safe.
-    ///
-    /// Backward compatibility:
-    /// - MapInputs.ShapeInput defaults to HasShape = false => F2b path => F2b goldens unchanged.
-    /// - islandAspectRatio = 1.0 + warpAmplitude01 = 0.0 => geometrically identical circle
-    ///   to the pre-F2b implementation. Goldens differ because warp arrays are always allocated
-    ///   and filled from ctx.Rng even at zero amplitude.
-    /// - heightRedistributionExponent = 1.0 => pow(x, 1) == x => no height change =>
-    ///   all existing goldens preserved.
-    /// - heightRemapSpline = default (null arrays) => IsIdentity = true => spline skipped =>
-    ///   all existing goldens preserved. Identity AnimationCurve (linear 0→1) also preserves
-    ///   golden output values.
+    /// Phase N4: Replaced manual value noise (coarse grid of ctx.Rng.NextFloat() +
+    /// bilinear interpolation) with proper noise runtime via MapNoiseBridge2D.
+    /// Full golden break from pre-N4 output. Noise type, frequency, octaves, etc.
+    /// are configurable via TerrainNoiseSettings on MapTunables2D.
     /// </summary>
     public sealed class Stage_BaseTerrain2D : IMapStage2D
     {
         public string Name => "base_terrain";
 
-        // --- Island height perturbation noise (higher frequency) ---
-        private const int NoiseCellSize = 8;
-        private const float NoiseAmplitude = 0.18f;
-
-        // Deterministic quantization steps.
-        private const int QuantSteps = 1024;
-
-        // --- Domain warp noise (lower frequency) ---
-        // Fixed constant: RNG count is tunable-independent and shape-path-independent.
-        private const int WarpCellSize = 16;
+        // Stage salts for decorrelating noise fields via coordinate hashing.
+        private const uint TerrainNoiseSalt = 0xF2A10001u;
+        private const uint WarpXNoiseSalt = 0xF2A20002u;
+        private const uint WarpYNoiseSalt = 0xF2A30003u;
 
         public void Execute(ref MapContext2D ctx, in MapInputs inputs)
         {
@@ -112,6 +87,13 @@ namespace Islands.PCG.Layout.Maps.Stages
             var heightSpline = t.heightRemapSpline;
             bool applySpline = !heightSpline.IsIdentity;
 
+            // N4: noise settings from tunables.
+            var terrainNoise = t.terrainNoise;
+            var warpNoise = t.warpNoise;
+            int quantSteps = t.heightQuantSteps;
+            float terrainAmp = math.max(0f, terrainNoise.amplitude);
+            float invQuant = (quantSteps > 1) ? (1f / quantSteps) : 0f;
+
             // --- Shared geometry (F2b path; computed regardless so variables are in scope) ---
             float minDim = math.min((float)w, (float)h);
             float radius = math.max(1f, minDim * t.islandRadius01);
@@ -127,32 +109,20 @@ namespace Islands.PCG.Layout.Maps.Stages
 
             float warpAmp = t.warpAmplitude01 * minDim;
 
-            // --- Noise grid dimensions ---
-            int cs = NoiseCellSize;
-            int nw = (w / cs) + 2;
-            int nh = (h / cs) + 2;
-
-            int wcs = WarpCellSize;
-            int mw = (w / wcs) + 2;
-            int mh = (h / wcs) + 2;
-
-            float invQuant = (QuantSteps > 1) ? (1f / QuantSteps) : 0f;
-
+            // --- N4: fill noise arrays via coordinate hashing (no ctx.Rng consumption) ---
+            int cellCount = w * h;
             NativeArray<float> noise = default;
             NativeArray<float> warpX = default;
             NativeArray<float> warpY = default;
             try
             {
-                noise = new NativeArray<float>(nw * nh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                warpX = new NativeArray<float>(mw * mh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                warpY = new NativeArray<float>(mw * mh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                noise = new NativeArray<float>(cellCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                warpX = new NativeArray<float>(cellCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                warpY = new NativeArray<float>(cellCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
-                // Fill in row-major order.
-                // ALL THREE arrays are always filled regardless of useShape or tunable values,
-                // so downstream stages always see the same RNG state.
-                for (int i = 0; i < noise.Length; i++) noise[i] = ctx.Rng.NextFloat();
-                for (int i = 0; i < warpX.Length; i++) warpX[i] = ctx.Rng.NextFloat();
-                for (int i = 0; i < warpY.Length; i++) warpY[i] = ctx.Rng.NextFloat();
+                MapNoiseBridge2D.FillNoise01(in d, noise, inputs.Seed, TerrainNoiseSalt, in terrainNoise);
+                MapNoiseBridge2D.FillNoise01(in d, warpX, inputs.Seed, WarpXNoiseSalt, in warpNoise);
+                MapNoiseBridge2D.FillNoise01(in d, warpY, inputs.Seed, WarpYNoiseSalt, in warpNoise);
 
                 // Cache shape mask locally to avoid repeated struct copies in the hot loop.
                 var shapeMask = useShape ? inputs.ShapeInput.Mask : default;
@@ -164,22 +134,24 @@ namespace Islands.PCG.Layout.Maps.Stages
 
                     for (int x = 0; x < w; x++)
                     {
-                        // Island height perturbation noise (always sampled regardless of path).
-                        float n = BilinearSample(noise, x, y, cs, nw);
+                        int idx = baseRow + x;
+
+                        // Height perturbation noise (always read regardless of path).
+                        float n = noise[idx];
 
                         float mask01;
 
                         if (useShape)
                         {
                             // F2c path: external shape drives silhouette.
-                            // warpX / warpY arrays filled but not read here (RNG count preserved).
+                            // warpX / warpY arrays filled but not read here.
                             mask01 = shapeMask.GetUnchecked(x, y) ? 1f : 0f;
                         }
                         else
                         {
                             // F2b path: ellipse + domain warp.
-                            float wx = BilinearSample(warpX, x, y, wcs, mw) * 2f - 1f;
-                            float wy = BilinearSample(warpY, x, y, wcs, mw) * 2f - 1f;
+                            float wx = warpX[idx] * 2f - 1f;
+                            float wy = warpY[idx] * 2f - 1f;
 
                             float2 p = new float2(x + 0.5f, y + 0.5f);
                             float2 pw = p + new float2(wx, wy) * warpAmp;
@@ -193,14 +165,14 @@ namespace Islands.PCG.Layout.Maps.Stages
                         }
 
                         // Height = island mask + noise perturbation (inside island only).
-                        float h01 = mask01 + (n - 0.5f) * NoiseAmplitude * mask01;
+                        float h01 = mask01 + (n - 0.5f) * terrainAmp * mask01;
                         h01 = math.saturate(h01);
 
-                        if (QuantSteps > 1)
-                            h01 = math.floor(h01 * QuantSteps) * invQuant;
+                        if (quantSteps > 1)
+                            h01 = math.floor(h01 * quantSteps) * invQuant;
 
                         // J2: power redistribution — reshape height distribution.
-                        // pow(x, 1.0) == x, so default exponent preserves all existing goldens.
+                        // pow(x, 1.0) == x, so default exponent preserves existing goldens.
                         if (redistExp != 1.0f)
                             h01 = math.pow(h01, redistExp);
 
@@ -209,7 +181,7 @@ namespace Islands.PCG.Layout.Maps.Stages
                         if (applySpline)
                             h01 = heightSpline.Evaluate(h01);
 
-                        height.Values[baseRow + x] = h01;
+                        height.Values[idx] = h01;
                         land.SetUnchecked(x, y, h01 >= waterThreshold);
                     }
                 }
@@ -222,27 +194,6 @@ namespace Islands.PCG.Layout.Maps.Stages
                 if (warpX.IsCreated) warpX.Dispose();
                 if (warpY.IsCreated) warpY.Dispose();
             }
-        }
-
-        /// <summary>
-        /// Bilinear sample from a coarse noise grid at pixel position (px, py).
-        /// </summary>
-        private static float BilinearSample(
-            NativeArray<float> grid, int px, int py, int cellSize, int gridWidth)
-        {
-            int gx = px / cellSize;
-            float tx = ((px % cellSize) + 0.5f) / cellSize;
-
-            int gy = py / cellSize;
-            float ty = ((py % cellSize) + 0.5f) / cellSize;
-
-            float n00 = grid[gx + gy * gridWidth];
-            float n10 = grid[(gx + 1) + gy * gridWidth];
-            float n01 = grid[gx + (gy + 1) * gridWidth];
-            float n11 = grid[(gx + 1) + (gy + 1) * gridWidth];
-
-            return math.lerp(math.lerp(n00, n10, tx),
-                             math.lerp(n01, n11, tx), ty);
         }
     }
 }

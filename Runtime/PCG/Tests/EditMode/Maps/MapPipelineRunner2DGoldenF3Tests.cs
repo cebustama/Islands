@@ -12,10 +12,10 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const int H = 64;
         private const uint Seed = 12345u;
 
-        private const ulong ExpectedLandEdgeHash64 = 0x7D76B5E7C5A58F7BUL;
-        private const ulong ExpectedLandInteriorHash64 = 0x241E85B81597683FUL;
-        private const ulong ExpectedHillsL1Hash64 = 0xBB6041A743BD59CBUL;
-        private const ulong ExpectedHillsL2Hash64 = 0x1F7608A3B36C1443UL;
+        private const ulong ExpectedLandEdgeHash64 = 0x17D1FE919DCC3C33UL;
+        private const ulong ExpectedLandInteriorHash64 = 0x228E6C047D7792EFUL;
+        private const ulong ExpectedHillsL1Hash64 = 0xD8B3DCF4A4AC3BA0UL;
+        private const ulong ExpectedHillsL2Hash64 = 0x29F3B1EA4B818E4FUL;
 
         [Test]
         public void MapPipelineRunner2D_GoldenHash_F3Pipeline_IsLocked()

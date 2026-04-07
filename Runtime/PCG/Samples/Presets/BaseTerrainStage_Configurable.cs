@@ -12,10 +12,10 @@ namespace Islands.PCG.Samples
     /// <summary>
     /// Inspector-configurable base terrain stage for live preview tuning.
     /// Mirrors <see cref="Islands.PCG.Layout.Maps.Stages.Stage_BaseTerrain2D"/> exactly:
-    /// ellipse + domain warp + height perturbation + J2 height redistribution + N2 spline remap.
+    /// coordinate-hashed noise via MapNoiseBridge2D + ellipse + domain warp +
+    /// height perturbation + J2 height redistribution + N2 spline remap.
     ///
-    /// Three fields (<see cref="noiseCellSize"/>, <see cref="noiseAmplitude"/>,
-    /// <see cref="quantSteps"/>) override the constants baked into the governed stage,
+    /// Configurable fields override the defaults baked into the governed stage,
     /// enabling real-time tuning in the lantern / live visualization.
     ///
     /// Shape tunables (islandAspectRatio, warpAmplitude01, heightRedistributionExponent,
@@ -23,7 +23,11 @@ namespace Islands.PCG.Samples
     ///
     /// IMPORTANT: Keep this class in sync with Stage_BaseTerrain2D whenever the shape
     /// pipeline changes. The two implementations must produce identical outputs for the
-    /// same inputs, RNG state, and configurable field values matching the governed constants.
+    /// same inputs when configurable field values match the governed defaults.
+    ///
+    /// Phase N4: Replaced RNG arrays + BilinearSample with MapNoiseBridge2D.FillNoise01.
+    /// ctx.Rng is no longer consumed. Old noiseCellSize/noiseAmplitude/quantSteps fields
+    /// replaced by terrainNoise, warpNoise, heightQuantSteps.
     ///
     /// Consumers: PCGMapVisualization, PCGMapCompositeVisualization, PCGMapTilemapVisualization.
     /// Previously each consumer held a private nested copy; consolidated in J2.
@@ -35,13 +39,15 @@ namespace Islands.PCG.Samples
     {
         public string Name => "base_terrain_configurable";
 
-        // Overrides for the constants baked into Stage_BaseTerrain2D.
-        public int noiseCellSize;
-        public float noiseAmplitude;
-        public int quantSteps;
+        // N4: configurable noise settings (override governed defaults for live tuning).
+        public TerrainNoiseSettings terrainNoise = TerrainNoiseSettings.DefaultTerrain;
+        public TerrainNoiseSettings warpNoise = TerrainNoiseSettings.DefaultWarp;
+        public int heightQuantSteps = 1024;
 
-        // WarpCellSize matches Stage_BaseTerrain2D constant (must stay in sync).
-        private const int WarpCellSize = 16;
+        // Stage salts — must match Stage_BaseTerrain2D exactly.
+        private const uint TerrainNoiseSalt = 0xF2A10001u;
+        private const uint WarpXNoiseSalt = 0xF2A20002u;
+        private const uint WarpYNoiseSalt = 0xF2A30003u;
 
         public void Execute(ref MapContext2D ctx, in MapInputs inputs)
         {
@@ -63,6 +69,11 @@ namespace Islands.PCG.Samples
             var heightSpline = t.heightRemapSpline;
             bool applySpline = !heightSpline.IsIdentity;
 
+            // N4: use local configurable settings (not from tunables).
+            float terrainAmp = math.max(0f, terrainNoise.amplitude);
+            int qs = heightQuantSteps;
+            float invQuant = (qs > 1) ? (1f / qs) : 0f;
+
             float minDim = math.min((float)w, (float)h);
             float radius = math.max(1f, minDim * t.islandRadius01);
             float invRadiusSq = 1f / (radius * radius);
@@ -74,31 +85,20 @@ namespace Islands.PCG.Samples
             float invAspectSq = 1f / (aspect * aspect);
             float warpAmp = t.warpAmplitude01 * minDim;
 
-            int cs = noiseCellSize < 1 ? 1 : noiseCellSize;
-            float amp = math.max(0f, noiseAmplitude);
-            int qs = quantSteps;
-
-            int nw = (w / cs) + 2;
-            int nh = (h / cs) + 2;
-            int wcs = WarpCellSize;
-            int mw = (w / wcs) + 2;
-            int mh = (h / wcs) + 2;
-
-            float invQuant = (qs > 1) ? (1f / qs) : 0f;
-
+            int cellCount = w * h;
             NativeArray<float> noise = default;
             NativeArray<float> warpX = default;
             NativeArray<float> warpY = default;
             try
             {
-                noise = new NativeArray<float>(nw * nh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                warpX = new NativeArray<float>(mw * mh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                warpY = new NativeArray<float>(mw * mh, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                noise = new NativeArray<float>(cellCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                warpX = new NativeArray<float>(cellCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
+                warpY = new NativeArray<float>(cellCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
-                // Fill order matches Stage_BaseTerrain2D exactly (island noise, warpX, warpY).
-                for (int i = 0; i < noise.Length; i++) noise[i] = ctx.Rng.NextFloat();
-                for (int i = 0; i < warpX.Length; i++) warpX[i] = ctx.Rng.NextFloat();
-                for (int i = 0; i < warpY.Length; i++) warpY[i] = ctx.Rng.NextFloat();
+                // N4: coordinate-hashed noise — matches governed stage exactly.
+                MapNoiseBridge2D.FillNoise01(in d, noise, inputs.Seed, TerrainNoiseSalt, in terrainNoise);
+                MapNoiseBridge2D.FillNoise01(in d, warpX, inputs.Seed, WarpXNoiseSalt, in warpNoise);
+                MapNoiseBridge2D.FillNoise01(in d, warpY, inputs.Seed, WarpYNoiseSalt, in warpNoise);
 
                 for (int y = 0; y < h; y++)
                 {
@@ -106,9 +106,12 @@ namespace Islands.PCG.Samples
 
                     for (int x = 0; x < w; x++)
                     {
-                        float n = BilinearSample(noise, x, y, cs, nw);
-                        float wx = BilinearSample(warpX, x, y, wcs, mw) * 2f - 1f;
-                        float wy = BilinearSample(warpY, x, y, wcs, mw) * 2f - 1f;
+                        int idx = baseRow + x;
+                        float n = noise[idx];
+
+                        // F2b path only (configurable stage does not support F2c shape input).
+                        float wx = warpX[idx] * 2f - 1f;
+                        float wy = warpY[idx] * 2f - 1f;
 
                         float2 p = new float2(x + 0.5f, y + 0.5f);
                         float2 pw = p + new float2(wx, wy) * warpAmp;
@@ -120,23 +123,21 @@ namespace Islands.PCG.Samples
                         float s = math.smoothstep(fromSq, toSq, radial01Sq);
                         float mask01 = 1f - s;
 
-                        float h01 = mask01 + (n - 0.5f) * amp * mask01;
+                        float h01 = mask01 + (n - 0.5f) * terrainAmp * mask01;
                         h01 = math.saturate(h01);
 
                         if (qs > 1)
                             h01 = math.floor(h01 * qs) * invQuant;
 
-                        // J2: power redistribution — reshape height distribution.
-                        // pow(x, 1.0) == x, so default exponent preserves all existing goldens.
+                        // J2: power redistribution.
                         if (redistExp != 1.0f)
                             h01 = math.pow(h01, redistExp);
 
-                        // N2: spline remapping — arbitrary piecewise-linear curve reshaping.
-                        // Identity spline (or default with null arrays) preserves all goldens.
+                        // N2: spline remapping.
                         if (applySpline)
                             h01 = heightSpline.Evaluate(h01);
 
-                        height.Values[baseRow + x] = h01;
+                        height.Values[idx] = h01;
                         land.SetUnchecked(x, y, h01 >= waterThreshold);
                     }
                 }
@@ -149,24 +150,6 @@ namespace Islands.PCG.Samples
                 if (warpX.IsCreated) warpX.Dispose();
                 if (warpY.IsCreated) warpY.Dispose();
             }
-        }
-
-        // Matches Stage_BaseTerrain2D.BilinearSample exactly.
-        private static float BilinearSample(
-            NativeArray<float> grid, int px, int py, int cellSize, int gridWidth)
-        {
-            int gx = px / cellSize;
-            float tx = ((px % cellSize) + 0.5f) / cellSize;
-            int gy = py / cellSize;
-            float ty = ((py % cellSize) + 0.5f) / cellSize;
-
-            float n00 = grid[gx + gy * gridWidth];
-            float n10 = grid[(gx + 1) + gy * gridWidth];
-            float n01 = grid[gx + (gy + 1) * gridWidth];
-            float n11 = grid[(gx + 1) + (gy + 1) * gridWidth];
-
-            return math.lerp(math.lerp(n00, n10, tx),
-                             math.lerp(n01, n11, tx), ty);
         }
     }
 }

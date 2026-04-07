@@ -14,7 +14,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 12345u;
 
         // Set to value reported on first run.
-        private const ulong ExpectedVegetationHash64 = 0xF9ECFCDBC4AF36A7UL;
+        private const ulong ExpectedVegetationHash64 = 0xE7876A1519EC45D3UL;
 
         // -----------------------------------------------------------------------
         // Determinism

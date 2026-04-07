@@ -1,5 +1,6 @@
-using Unity.Collections;
+using Unity.Mathematics;
 using Islands.PCG.Core;
+using Islands.PCG.Fields;
 using Islands.PCG.Grids;
 using Islands.PCG.Layout.Maps;
 using Islands.PCG.Operators;
@@ -7,96 +8,76 @@ using Islands.PCG.Operators;
 namespace Islands.PCG.Layout.Maps.Stages
 {
     /// <summary>
-    /// F3 — Hills + topology.
+    /// F3b — Height-Coherent Hills + boundary topology.
     ///
     /// Reads:
-    /// - Land
-    /// - DeepWater
+    /// - Land      (MapLayerId 0)   — eligibility mask
+    /// - Height    (MapFieldId 0)   — elevation source for threshold classification
     ///
     /// Writes:
-    /// - LandEdge
-    /// - LandInterior
-    /// - HillsL1
-    /// - HillsL2
+    /// - HillsL1       (MapLayerId 7)  — passable slopes: Land AND Height >= thL1 AND NOT HillsL2
+    /// - HillsL2       (MapLayerId 8)  — impassable peaks: Land AND Height >= thL2
+    /// - LandEdge      (MapLayerId 9)  — Land cells 4-adjacent to any non-Land cell
+    /// - LandInterior  (MapLayerId 10) — Land AND NOT LandEdge
     ///
     /// Contracts:
-    /// - LandEdge U LandInterior == Land
+    /// - HillsL2 ⊆ Land
+    /// - HillsL1 ⊆ Land
+    /// - HillsL1 ∩ HillsL2 == ∅
+    /// - LandEdge ∪ LandInterior == Land
     /// - LandEdge ∩ LandInterior == ∅
-    /// - HillsL1 ⊆ LandInterior
-    /// - HillsL2 ⊆ HillsL1
-    /// - Does not mutate Land / DeepWater / Height
+    /// - Does not mutate Land, DeepWater, or Height.
+    /// - Does not consume ctx.Rng (no noise, no randomness).
+    ///
+    /// Phase F3b replaces the original topology-based hills (noise threshold on LandInterior)
+    /// with height-threshold classification. Hills now correlate spatially with the Height
+    /// field — peaks appear where terrain is highest. Thresholds are read from
+    /// <see cref="MapTunables2D.hillsThresholdL1"/> and <see cref="MapTunables2D.hillsThresholdL2"/>.
+    ///
+    /// LandEdge / LandInterior derivation is unchanged (delegated to
+    /// <see cref="MaskTopologyOps2D.ExtractEdgeAndInterior4"/>).
     /// </summary>
     public sealed class Stage_Hills2D : IMapStage2D
     {
         public string Name => "hills";
 
-        private const uint NoiseSeedSalt = 0xA511E9B3u;
-        private const int NoiseFrequency = 5;
-        private const int NoiseOctaves = 3;
-        private const int NoiseLacunarity = 2;
-        private const float NoisePersistence = 0.5f;
-        private const int QuantSteps = 1024;
-
-        private const float HillsL1Threshold = 0.58f;
-        private const float HillsL2Threshold = 0.72f;
-
         public void Execute(ref MapContext2D ctx, in MapInputs inputs)
         {
             GridDomain2D d = ctx.Domain;
+            int w = d.Width;
+            int h = d.Height;
 
             ref MaskGrid2D land = ref ctx.GetLayer(MapLayerId.Land);
-            ref MaskGrid2D deepWater = ref ctx.GetLayer(MapLayerId.DeepWater);
+            ref ScalarField2D height = ref ctx.GetField(MapFieldId.Height);
 
             ref MaskGrid2D landEdge = ref ctx.EnsureLayer(MapLayerId.LandEdge, clearToZero: true);
             ref MaskGrid2D landInterior = ref ctx.EnsureLayer(MapLayerId.LandInterior, clearToZero: true);
             ref MaskGrid2D hillsL1 = ref ctx.EnsureLayer(MapLayerId.HillsL1, clearToZero: true);
             ref MaskGrid2D hillsL2 = ref ctx.EnsureLayer(MapLayerId.HillsL2, clearToZero: true);
 
+            // LandEdge / LandInterior: unchanged 4-neighbor boundary detection.
             MaskTopologyOps2D.ExtractEdgeAndInterior4(in land, ref landEdge, ref landInterior);
 
-            NativeArray<float> noise01 = default;
-            try
+            // Height-threshold classification.
+            // Thresholds are constructor-validated in MapTunables2D (clamped, L2 >= L1).
+            float thL1 = inputs.Tunables.hillsThresholdL1;
+            float thL2 = inputs.Tunables.hillsThresholdL2;
+
+            for (int y = 0; y < h; y++)
             {
-                noise01 = new NativeArray<float>(d.Length, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
-                MapNoiseBridge2D.FillSimplexPerlin01(
-                    in d,
-                    noise01,
-                    seed: inputs.Seed,
-                    seedSalt: NoiseSeedSalt,
-                    frequency: NoiseFrequency,
-                    octaves: NoiseOctaves,
-                    lacunarity: NoiseLacunarity,
-                    persistence: NoisePersistence,
-                    quantSteps: QuantSteps);
-
-                int w = d.Width;
-                int h = d.Height;
-
-                for (int y = 0; y < h; y++)
+                int row = y * w;
+                for (int x = 0; x < w; x++)
                 {
-                    int row = y * w;
-                    for (int x = 0; x < w; x++)
-                    {
-                        if (!landInterior.GetUnchecked(x, y))
-                            continue;
+                    if (!land.GetUnchecked(x, y))
+                        continue;
 
-                        int i = row + x;
-                        float n = noise01[i];
+                    float hv = height.Values[row + x];
 
-                        bool l1 = n >= HillsL1Threshold;
-                        bool l2 = n >= HillsL2Threshold;
-
-                        if (l1 && !deepWater.GetUnchecked(x, y))
-                            hillsL1.SetUnchecked(x, y, true);
-
-                        if (l2 && !deepWater.GetUnchecked(x, y))
-                            hillsL2.SetUnchecked(x, y, true);
-                    }
+                    if (hv >= thL2)
+                        hillsL2.SetUnchecked(x, y, true);
+                    else if (hv >= thL1)
+                        hillsL1.SetUnchecked(x, y, true);
                 }
-            }
-            finally
-            {
-                if (noise01.IsCreated) noise01.Dispose();
             }
         }
     }

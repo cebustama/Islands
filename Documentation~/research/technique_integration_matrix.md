@@ -86,13 +86,16 @@ Detailed design in [`Noise_Composition_Improvements_Roadmap.md`](design/Noise_Co
 
 | Technique | Islands Status | Consuming Phase | Design Doc | Notes |
 |-----------|---------------|-----------------|------------|-------|
-| Priority-Flood depression filling | PLAN | L | Phase_L_Design.md | Barnes 2014 algorithm. Prerequisite for flow routing. |
-| D8 flow directions | PLAN | L | Phase_L_Design.md | Steepest-downslope neighbor. Intermediate data, not persisted. |
-| Flow accumulation | PLAN | L | Phase_L_Design.md | `MapFieldId.FlowAccumulation` scalar field. Consumed by Phase M for moisture. |
-| River mask extraction | PLAN | L | Phase_L_Design.md | `MapLayerId.Rivers` derived by thresholding FlowAccumulation. |
-| Lake detection | PLAN | L | Phase_L_Design.md | `MapLayerId.Lakes` via connected-component analysis on non-land, non-DeepWater cells. |
+| Priority-Flood depression filling | PLAN | L | Phase_L_Design.md | Barnes 2014 algorithm. Prerequisite for flow routing. Cross-check: no game uses formal Priority-Flood. DF achieves depression-free drainage via erosion agent terrain modification (different mechanism, same functional goal). 0/6 games use the GIS/academic standard; technique is well-validated in hydrology literature. |
+| D8 flow directions | PLAN | L | Phase_L_Design.md | Steepest-downslope neighbor. Intermediate data, not persisted. Cross-check: DF's erosion agents use equivalent per-cell steepest-descent lookup as an agent-local operation, not a grid-global computation. 0/6 games compute a standalone flow-direction grid. |
+| Flow accumulation | PLAN | L | Phase_L_Design.md | `MapFieldId.FlowAccumulation` scalar field. Consumed by Phase M for moisture. Cross-check: 0/6 games compute flow accumulation as an explicit scalar field. Islands' primary novel contribution in hydrology — no game precedent, strong technique-report and GIS support. Dual-purpose: river identification + moisture enrichment. |
+| River mask extraction | PLAN | L | Phase_L_Design.md | `MapLayerId.Rivers` derived by thresholding FlowAccumulation. Cross-check: 0/6 games derive rivers by thresholding flow accumulation. MC uses noise-biome classification, DF uses erosion-channel tracing, RW uses graph pathfinding. Islands' fractional threshold auto-scales with resolution (Phase L design §5.1.4). |
+| Lake detection | PLAN | L | Phase_L_Design.md | `MapLayerId.Lakes` via boolean mask (NOT-Land ∩ NOT-DeepWater ∩ NOT-ShallowWater). Cross-check: only DF generates lakes from drainage simulation (growth at accumulation points). MC has noise-based underground aquifers. Islands uses simpler noise-depression approach, not drainage-derived basins. |
+| Agent-based river carving | NONE | Future (pre-L erosion) | — | DF-only technique. Tightly coupled to DF's erosion simulation: spawn at mountain edges, steepest descent, lower terrain when stuck. Excluded for Phase L — requires terrain modification, violating Phase L's no-Height-mutate invariant. If erosion is ever added, it would be a separate pre-L phase. |
+| Pathfinding-based river placement | NONE | Phase W (potential) | — | RimWorld's approach: rivers as world-graph edges placed by pathfinding from mountains to coast. Designed for world-tile-scale connectivity. Excluded for within-island drainage (standard hydrology pipeline is more principled). Potentially relevant for Phase W world-tile river inheritance. |
+| Strahler stream ordering | NONE | L2 (potential) | — | Discrete river hierarchy (stream order 1, 2, 3...). 0/6 games use it; technique reports recommend it (mapgen4). FlowAccumulation serves as continuous proxy. Deferred — useful if gameplay needs river hierarchy classes. |
 
-**Open decisions:** None — river representation and lake modeling resolved (Roadmap Decisions 2, 3).
+**Open decisions:** None — river representation and lake modeling resolved (Roadmap Decisions 2, 3). Hydrology cross-check complete; no gaps requiring resolution.
 
 ---
 
@@ -160,17 +163,20 @@ Detailed design in [`Noise_Composition_Improvements_Roadmap.md`](design/Noise_Co
 | Noise Composition | 8 | 3 | 2 | 1 | 2 |
 | Terrain & Elevation | 7 | 2 | 1 | — | 4 |
 | Climate & Biomes | 8 | — | 6 | — | 2 |
-| Hydrology | 5 | — | 5 | — | — |
+| Hydrology | 8 | — | 5 | — | 3 |
 | Region Partitioning | 4 | 1 | 2 | — | 1 |
 | Placement & Traversal | 3 | 1 | 2 | — | — |
 | Pipeline Infrastructure | 7 | 2 | 4 | 1 | — |
-| **Total** | **47** | **14** | **22** | **2** | **9** |
+| **Total** | **50** | **14** | **22** | **2** | **12** |
 
-Of the 9 NONE items: 2 are Tier 1 and should be roadmapped before Phase M/M2
+Of the 12 NONE items: 2 are Tier 1 and should be roadmapped before Phase M/M2
 (**mountain shaping**, **biome transition blending**), 1 is the only top-12 priority
-not yet roadmapped (**erosion simulation**), 2 are Tier 2 deferred items (cliffs/terraces,
-elevation smoothing), 1 is not needed if Whittaker suffices (biome scoring), and 2 are
-deferred-but-possible noise techniques (full domain warping, noise competition).
+not yet roadmapped (**erosion simulation**), 3 are hydrology techniques excluded for
+Phase L (agent-based carving, pathfinding placement, Strahler ordering — the first two
+excluded by architecture, Strahler deferred to L2), 2 are Tier 2 deferred items
+(cliffs/terraces, elevation smoothing), 1 is not needed if Whittaker suffices (biome
+scoring), and 2 are deferred-but-possible noise techniques (full domain warping, noise
+competition).
 
 ---
 
@@ -186,7 +192,8 @@ deferred-but-possible noise techniques (full domain warping, noise competition).
 | `planning/active/design/Noise_Composition_Improvements_Roadmap.md` | N1/N2/N3 noise technique designs. |
 | `research/pcg_crosscheck_analysis.md` | Source analysis: 6 games × 30 techniques, priority list. |
 | `research/pcg_technique_library.md` | Technique reference: algorithmic detail for all PCG families. |
-| `research/terrain_biome_cross_reference.md` | **Terrain shaping + biome/region cross-check** (6 games × 14 techniques, gap-resolved). Source for this batch update. |
+| `research/terrain_biome_cross_reference.md` | **Terrain shaping + biome/region cross-check** (6 games × 14 techniques, gap-resolved). |
+| `research/hydrology_cross_reference.md` | **Hydrology cross-check** (6 games × 9 techniques). Source for hydrology batch update. |
 | `research/5a_gap_biome_blending_implementations.md` | Five concrete blending approaches from open-source implementations. |
 | `research/5a_gap_rainshadow_2d_grid.md` | Six rainshadow approaches for 2D grids; feasibility assessment. |
 | `research/DwarfFortress_Worldgen_gap_erosion.md` | DF erosion algorithm detail from Tarn Adams interviews. |
@@ -197,3 +204,4 @@ deferred-but-possible noise techniques (full domain warping, noise competition).
 ## Changelog
 
 - **2026-04-06:** Batch update from `terrain_biome_cross_reference.md` (post-gap-research). Added 5 rows (mountain shaping, cliffs/terraces, rainshadow, biome blending, thermal erosion exclusion + 2 more exclusions). Updated 7 existing rows with cross-check evidence and gap research findings. Promoted rainshadow from excluded to PLAN/Tier 1. Coverage: 44 → 47 techniques.
+- **2026-04-06:** Batch update from `hydrology_cross_reference.md`. Added 3 rows (agent-based carving, pathfinding placement, Strahler ordering). Annotated 5 existing hydrology rows with cross-check findings (0/6 games use standard hydrology pipeline; flow accumulation is Islands' novel contribution). Coverage: 47 → 50 techniques.

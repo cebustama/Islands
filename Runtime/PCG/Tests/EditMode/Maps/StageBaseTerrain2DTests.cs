@@ -25,8 +25,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // 3) Copy/paste those hashes here to lock behavior.
         //
         // We use includeDimensions:true (MaskGrid2D.SnapshotHash64 default).
-        private const ulong ExpectedLandHash64 = 0x56F997102CA872E7UL;
-        private const ulong ExpectedDeepWaterHash64 = 0x451D80227667D2A7UL;
+        private const ulong ExpectedLandHash64 = 0x3324CA0629C037B7UL;
+        private const ulong ExpectedDeepWaterHash64 = 0x0BB222C9B6B41947UL;
 
         [Test]
         public void Stage_BaseTerrain2D_IsDeterministic()
@@ -111,7 +111,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
             try
             {
                 // If goldens are not set yet, fail once with copy/paste values.
-                if (ExpectedLandHash64 == 0UL || ExpectedDeepWaterHash64 == 0UL)
+                if (ExpectedLandHash64 == 0x0000000000000000
+                    || ExpectedDeepWaterHash64 == 0x0000000000000000)
                 {
                     Assert.Fail(
                         "Goldens are not initialized.\n" +
@@ -232,7 +233,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
                 RunOnce(in inputs, out ulong landHash, out ulong deepHash, out MapContext2D ctx);
                 ctx.Dispose();
 
-                if (ExpectedShapeInputLandHash64 == 0UL || ExpectedShapeInputDeepWaterHash64 == 0UL)
+                if (ExpectedShapeInputLandHash64 == 0x0000000000000000
+                    || ExpectedShapeInputDeepWaterHash64 == 0x0000000000000000)
                 {
                     Assert.Fail(
                         "F2c shape-input goldens not initialized.\n" +

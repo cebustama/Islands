@@ -35,6 +35,8 @@ namespace Islands.PCG.Adapters.Tilemap
     /// Phase N2: heightRemapCurve + scalar field overlay + Inspector cleanup.
     /// Post-N2: overlay tint fix (Issue 1), scalar heatmap tilemap (Issue 2),
     ///          ShallowWater removed from collider partition (Issue 3).
+    /// Phase N4: TerrainNoiseSettings replaces noiseCellSize/noiseAmplitude/quantSteps.
+    ///           Separate warp noise settings. heightQuantSteps tunable.
     /// </summary>
     [ExecuteAlways]
     [AddComponentMenu("Islands/PCG/Map Tilemap Visualization")]
@@ -92,13 +94,33 @@ namespace Islands.PCG.Adapters.Tilemap
         [Range(0f, 0.5f)][SerializeField] private float shallowWaterDepth01 = 0f;
         [Range(0f, 0.5f)][SerializeField] private float midWaterDepth01 = 0f;
 
-        [Header("Terrain Noise")]
-        [Min(1)][SerializeField] private int noiseCellSize = 8;
-        [Range(0f, 1f)][SerializeField] private float noiseAmplitude = 0.18f;
-        [Min(0)][SerializeField] private int quantSteps = 1024;
+        // N4: terrain noise settings (replaces noiseCellSize, noiseAmplitude)
+        [Header("Terrain Noise (N4)")]
+        [SerializeField] private TerrainNoiseType terrainNoiseType = TerrainNoiseType.Perlin;
+        [Range(1, 32)][SerializeField] private int terrainFrequency = 8;
+        [Range(1, 6)][SerializeField] private int terrainOctaves = 4;
+        [Range(2, 4)][SerializeField] private int terrainLacunarity = 2;
+        [Range(0f, 1f)][SerializeField] private float terrainPersistence = 0.5f;
+        [Range(0f, 1f)][SerializeField] private float terrainAmplitude = 0.35f;
+
+        // N4: warp noise settings
+        [Header("Warp Noise (N4)")]
+        [SerializeField] private TerrainNoiseType warpNoiseType = TerrainNoiseType.Perlin;
+        [Range(1, 32)][SerializeField] private int warpFrequency = 4;
+        [Range(1, 6)][SerializeField] private int warpOctaves = 1;
+        [Range(2, 4)][SerializeField] private int warpLacunarity = 2;
+        [Range(0f, 1f)][SerializeField] private float warpPersistence = 0.5f;
+
+        // N4: height quantization (replaces quantSteps)
+        [Header("Height Quantization (N4)")]
+        [Min(0)][SerializeField] private int heightQuantSteps = 1024;
 
         [Header("Height Redistribution (J2)")]
         [Range(0.5f, 4f)][SerializeField] private float heightRedistributionExponent = 1.0f;
+
+        [Header("Hills (F3b)")]
+        [Range(0f, 1f)][SerializeField] private float hillsThresholdL1 = 0.65f;
+        [Range(0f, 1f)][SerializeField] private float hillsThresholdL2 = 0.80f;
 
         [Header("Height Remap (N2)")]
         [Tooltip("Height remap curve applied after power redistribution.\n" +
@@ -182,10 +204,17 @@ namespace Islands.PCG.Adapters.Tilemap
         private float lastIslandSmoothFrom01, lastIslandSmoothTo01;
         private float lastIslandAspectRatio, lastWarpAmplitude01;
         private float lastHeightRedistributionExponent;
+        // F3b hills dirty tracking
+        private float lastHillsThresholdL1;
+        private float lastHillsThresholdL2;
         private int lastHeightRemapCurveHash;
-        private int lastNoiseCellSize;
-        private float lastNoiseAmplitude;
-        private int lastQuantSteps;
+        // N4: noise dirty tracking
+        private TerrainNoiseType lastTerrainNoiseType, lastWarpNoiseType;
+        private int lastTerrainFrequency, lastTerrainOctaves, lastTerrainLacunarity;
+        private float lastTerrainPersistence, lastTerrainAmplitude;
+        private int lastWarpFrequency, lastWarpOctaves, lastWarpLacunarity;
+        private float lastWarpPersistence;
+        private int lastHeightQuantSteps;
         private bool lastFlipY, lastClearBeforeRun;
         private bool lastUseProceduralTiles;
         private ulong lastProceduralHash;
@@ -256,9 +285,6 @@ namespace Islands.PCG.Adapters.Tilemap
             bool eVeg = preset != null ? preset.enableVegetationStage : enableVegetationStage;
             bool eTrav = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             bool eMorph = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
-            int eCell = preset != null ? preset.noiseCellSize : noiseCellSize;
-            float eAmp = preset != null ? preset.noiseAmplitude : noiseAmplitude;
-            int eQuant = preset != null ? preset.quantSteps : quantSteps;
             bool eClear = preset != null ? preset.clearBeforeRun : clearBeforeRun;
             var eTun = preset != null
                 ? preset.ToTunables()
@@ -267,13 +293,35 @@ namespace Islands.PCG.Adapters.Tilemap
                       islandSmoothFrom01, islandSmoothTo01,
                       islandAspectRatio, warpAmplitude01,
                       heightRedistributionExponent,
-                      ScalarSpline.FromAnimationCurve(heightRemapCurve));
+                      ScalarSpline.FromAnimationCurve(heightRemapCurve),
+                      terrainNoise: new TerrainNoiseSettings
+                      {
+                          noiseType = terrainNoiseType,
+                          frequency = terrainFrequency,
+                          octaves = terrainOctaves,
+                          lacunarity = terrainLacunarity,
+                          persistence = terrainPersistence,
+                          amplitude = terrainAmplitude,
+                      },
+                      warpNoise: new TerrainNoiseSettings
+                      {
+                          noiseType = warpNoiseType,
+                          frequency = warpFrequency,
+                          octaves = warpOctaves,
+                          lacunarity = warpLacunarity,
+                          persistence = warpPersistence,
+                          amplitude = 1.0f,
+                      },
+                      heightQuantSteps: preset != null ? preset.heightQuantSteps : heightQuantSteps,
+                      hillsThresholdL1: preset != null ? preset.hillsThresholdL1 : hillsThresholdL1,
+                      hillsThresholdL2: preset != null ? preset.hillsThresholdL2 : hillsThresholdL2);
 
             EnsureContextAllocated(eRes);
 
-            baseStage.noiseCellSize = Mathf.Max(1, eCell);
-            baseStage.noiseAmplitude = Mathf.Max(0f, eAmp);
-            baseStage.quantSteps = Mathf.Max(0, eQuant);
+            // N4: feed noise settings to configurable stage.
+            baseStage.terrainNoise = eTun.terrainNoise;
+            baseStage.warpNoise = eTun.warpNoise;
+            baseStage.heightQuantSteps = eTun.heightQuantSteps;
 
             float eShallowDepth = preset != null ? preset.shallowWaterDepth01 : shallowWaterDepth01;
             float eMidDepth = preset != null ? preset.midWaterDepth01 : midWaterDepth01;
@@ -374,6 +422,10 @@ namespace Islands.PCG.Adapters.Tilemap
                 SetHeatmapRendererAlpha();
                 return;
             }
+
+            // Clear all tiles before stamping — removes stale tiles from previous
+            // generations at different resolutions (e.g. 256→64 would leave 256×256 ghosts).
+            scalarHeatmapTilemap.ClearAllTiles();
 
             ScalarField2D field = ctx.GetField(overlayField);
             float oRange = overlayMax - overlayMin;
@@ -535,10 +587,23 @@ namespace Islands.PCG.Adapters.Tilemap
             lastIslandAspectRatio = preset != null ? preset.islandAspectRatio : islandAspectRatio;
             lastWarpAmplitude01 = preset != null ? preset.warpAmplitude01 : warpAmplitude01;
             lastHeightRedistributionExponent = preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent;
+            // F3b hills params
+            lastHillsThresholdL1 = preset != null ? preset.hillsThresholdL1 : hillsThresholdL1;
+            lastHillsThresholdL2 = preset != null ? preset.hillsThresholdL2 : hillsThresholdL2;
             lastHeightRemapCurveHash = ComputeCurveHash(preset != null ? preset.heightRemapCurve : heightRemapCurve);
-            lastNoiseCellSize = preset != null ? preset.noiseCellSize : noiseCellSize;
-            lastNoiseAmplitude = preset != null ? preset.noiseAmplitude : noiseAmplitude;
-            lastQuantSteps = preset != null ? preset.quantSteps : quantSteps;
+            // N4 noise params
+            lastTerrainNoiseType = preset != null ? preset.terrainNoiseType : terrainNoiseType;
+            lastTerrainFrequency = preset != null ? preset.terrainFrequency : terrainFrequency;
+            lastTerrainOctaves = preset != null ? preset.terrainOctaves : terrainOctaves;
+            lastTerrainLacunarity = preset != null ? preset.terrainLacunarity : terrainLacunarity;
+            lastTerrainPersistence = preset != null ? preset.terrainPersistence : terrainPersistence;
+            lastTerrainAmplitude = preset != null ? preset.terrainAmplitude : terrainAmplitude;
+            lastWarpNoiseType = preset != null ? preset.warpNoiseType : warpNoiseType;
+            lastWarpFrequency = preset != null ? preset.warpFrequency : warpFrequency;
+            lastWarpOctaves = preset != null ? preset.warpOctaves : warpOctaves;
+            lastWarpLacunarity = preset != null ? preset.warpLacunarity : warpLacunarity;
+            lastWarpPersistence = preset != null ? preset.warpPersistence : warpPersistence;
+            lastHeightQuantSteps = preset != null ? preset.heightQuantSteps : heightQuantSteps;
             lastFlipY = flipY;
             lastClearBeforeRun = preset != null ? preset.clearBeforeRun : clearBeforeRun;
             lastUseProceduralTiles = useProceduralTiles;
@@ -579,10 +644,23 @@ namespace Islands.PCG.Adapters.Tilemap
                 || !Mathf.Approximately(preset != null ? preset.islandAspectRatio : islandAspectRatio, lastIslandAspectRatio)
                 || !Mathf.Approximately(preset != null ? preset.warpAmplitude01 : warpAmplitude01, lastWarpAmplitude01)
                 || !Mathf.Approximately(preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent, lastHeightRedistributionExponent)
+                // F3b hills params
+                || !Mathf.Approximately(preset != null ? preset.hillsThresholdL1 : hillsThresholdL1, lastHillsThresholdL1)
+                || !Mathf.Approximately(preset != null ? preset.hillsThresholdL2 : hillsThresholdL2, lastHillsThresholdL2)
                 || ComputeCurveHash(preset != null ? preset.heightRemapCurve : heightRemapCurve) != lastHeightRemapCurveHash
-                || (preset != null ? preset.noiseCellSize : noiseCellSize) != lastNoiseCellSize
-                || !Mathf.Approximately(preset != null ? preset.noiseAmplitude : noiseAmplitude, lastNoiseAmplitude)
-                || (preset != null ? preset.quantSteps : quantSteps) != lastQuantSteps
+                // N4 noise params
+                || (preset != null ? preset.terrainNoiseType : terrainNoiseType) != lastTerrainNoiseType
+                || (preset != null ? preset.terrainFrequency : terrainFrequency) != lastTerrainFrequency
+                || (preset != null ? preset.terrainOctaves : terrainOctaves) != lastTerrainOctaves
+                || (preset != null ? preset.terrainLacunarity : terrainLacunarity) != lastTerrainLacunarity
+                || !Mathf.Approximately(preset != null ? preset.terrainPersistence : terrainPersistence, lastTerrainPersistence)
+                || !Mathf.Approximately(preset != null ? preset.terrainAmplitude : terrainAmplitude, lastTerrainAmplitude)
+                || (preset != null ? preset.warpNoiseType : warpNoiseType) != lastWarpNoiseType
+                || (preset != null ? preset.warpFrequency : warpFrequency) != lastWarpFrequency
+                || (preset != null ? preset.warpOctaves : warpOctaves) != lastWarpOctaves
+                || (preset != null ? preset.warpLacunarity : warpLacunarity) != lastWarpLacunarity
+                || !Mathf.Approximately(preset != null ? preset.warpPersistence : warpPersistence, lastWarpPersistence)
+                || (preset != null ? preset.heightQuantSteps : heightQuantSteps) != lastHeightQuantSteps
                 || flipY != lastFlipY
                 || (preset != null ? preset.clearBeforeRun : clearBeforeRun) != lastClearBeforeRun
                 || useProceduralTiles != lastUseProceduralTiles
