@@ -2,6 +2,7 @@ using NUnit.Framework;
 using UnityEngine;
 using Islands.PCG.Samples;
 using Islands.PCG.Layout.Maps;
+using Islands;
 
 /// <summary>
 /// EditMode tests for <see cref="MapGenerationPreset"/>.
@@ -11,6 +12,8 @@ using Islands.PCG.Layout.Maps;
 ///
 /// Phase H3. Phase N4: noise field defaults updated. Phase F3b: hills threshold fields.
 /// Phase N5.a: shapeMode field.
+/// Phase N5.b: NoiseSettingsAsset slots. Refactored individual noise fields to
+///             embedded TerrainNoiseSettings structs. New field defaults.
 /// </summary>
 [TestFixture]
 public class MapGenerationPresetTests
@@ -64,22 +67,22 @@ public class MapGenerationPresetTests
     [Test]
     public void DefaultValues_TerrainNoise_MatchN4Defaults()
     {
-        Assert.AreEqual(TerrainNoiseType.Perlin, _preset.terrainNoiseType);
-        Assert.AreEqual(8, _preset.terrainFrequency);
-        Assert.AreEqual(4, _preset.terrainOctaves);
-        Assert.AreEqual(2, _preset.terrainLacunarity);
-        Assert.AreEqual(0.5f, _preset.terrainPersistence, 1e-6f);
-        Assert.AreEqual(0.35f, _preset.terrainAmplitude, 1e-6f);
+        Assert.AreEqual(TerrainNoiseType.Perlin, _preset.terrainNoiseSettings.noiseType);
+        Assert.AreEqual(8, _preset.terrainNoiseSettings.frequency);
+        Assert.AreEqual(4, _preset.terrainNoiseSettings.octaves);
+        Assert.AreEqual(2, _preset.terrainNoiseSettings.lacunarity);
+        Assert.AreEqual(0.5f, _preset.terrainNoiseSettings.persistence, 1e-6f);
+        Assert.AreEqual(0.35f, _preset.terrainNoiseSettings.amplitude, 1e-6f);
     }
 
     [Test]
     public void DefaultValues_WarpNoise_MatchN4Defaults()
     {
-        Assert.AreEqual(TerrainNoiseType.Perlin, _preset.warpNoiseType);
-        Assert.AreEqual(4, _preset.warpFrequency);
-        Assert.AreEqual(1, _preset.warpOctaves);
-        Assert.AreEqual(2, _preset.warpLacunarity);
-        Assert.AreEqual(0.5f, _preset.warpPersistence, 1e-6f);
+        Assert.AreEqual(TerrainNoiseType.Perlin, _preset.warpNoiseSettings.noiseType);
+        Assert.AreEqual(4, _preset.warpNoiseSettings.frequency);
+        Assert.AreEqual(1, _preset.warpNoiseSettings.octaves);
+        Assert.AreEqual(2, _preset.warpNoiseSettings.lacunarity);
+        Assert.AreEqual(0.5f, _preset.warpNoiseSettings.persistence, 1e-6f);
     }
 
     [Test]
@@ -92,6 +95,37 @@ public class MapGenerationPresetTests
     public void DefaultValues_RunBehavior_ClearBeforeRunTrue()
     {
         Assert.IsTrue(_preset.clearBeforeRun);
+    }
+
+    // ------------------------------------------------------------------
+    // N5.b: new field defaults
+    // ------------------------------------------------------------------
+
+    [Test]
+    public void DefaultValues_TerrainNoise_N5bFieldsHaveIdentityDefaults()
+    {
+        Assert.AreEqual(WorleyDistanceMetric.Euclidean, _preset.terrainNoiseSettings.worleyDistanceMetric);
+        Assert.AreEqual(WorleyFunction.F1, _preset.terrainNoiseSettings.worleyFunction);
+        Assert.AreEqual(FractalMode.Standard, _preset.terrainNoiseSettings.fractalMode);
+        Assert.AreEqual(1.0f, _preset.terrainNoiseSettings.ridgedOffset, 1e-6f);
+        Assert.AreEqual(2.0f, _preset.terrainNoiseSettings.ridgedGain, 1e-6f);
+    }
+
+    [Test]
+    public void DefaultValues_WarpNoise_N5bFieldsHaveIdentityDefaults()
+    {
+        Assert.AreEqual(WorleyDistanceMetric.Euclidean, _preset.warpNoiseSettings.worleyDistanceMetric);
+        Assert.AreEqual(WorleyFunction.F1, _preset.warpNoiseSettings.worleyFunction);
+        Assert.AreEqual(FractalMode.Standard, _preset.warpNoiseSettings.fractalMode);
+        Assert.AreEqual(1.0f, _preset.warpNoiseSettings.ridgedOffset, 1e-6f);
+        Assert.AreEqual(2.0f, _preset.warpNoiseSettings.ridgedGain, 1e-6f);
+    }
+
+    [Test]
+    public void DefaultValues_NoiseAssets_AreNull()
+    {
+        Assert.IsNull(_preset.terrainNoiseAsset);
+        Assert.IsNull(_preset.warpNoiseAsset);
     }
 
     // ------------------------------------------------------------------
@@ -158,12 +192,12 @@ public class MapGenerationPresetTests
     [Test]
     public void ToTunables_CustomNoiseFields_AreForwardedCorrectly()
     {
-        _preset.terrainNoiseType = TerrainNoiseType.Simplex;
-        _preset.terrainFrequency = 16;
-        _preset.terrainOctaves = 6;
-        _preset.terrainAmplitude = 0.50f;
-        _preset.warpNoiseType = TerrainNoiseType.Value;
-        _preset.warpFrequency = 2;
+        _preset.terrainNoiseSettings.noiseType = TerrainNoiseType.Simplex;
+        _preset.terrainNoiseSettings.frequency = 16;
+        _preset.terrainNoiseSettings.octaves = 6;
+        _preset.terrainNoiseSettings.amplitude = 0.50f;
+        _preset.warpNoiseSettings.noiseType = TerrainNoiseType.Value;
+        _preset.warpNoiseSettings.frequency = 2;
         _preset.heightQuantSteps = 32;
 
         MapTunables2D t = _preset.ToTunables();
@@ -278,5 +312,112 @@ public class MapGenerationPresetTests
 
         _preset.shapeMode = IslandShapeMode.Ellipse;
         Assert.AreEqual(IslandShapeMode.Ellipse, _preset.ToTunables().shapeMode);
+    }
+
+    // ------------------------------------------------------------------
+    // N5.b NoiseSettingsAsset resolution
+    // ------------------------------------------------------------------
+
+    [Test]
+    public void ToTunables_WithTerrainNoiseAsset_ReadsFromAsset()
+    {
+        var asset = ScriptableObject.CreateInstance<NoiseSettingsAsset>();
+        try
+        {
+            // The asset's settings field is private with a public getter.
+            // Use SerializedObject to set its values for testing.
+            var so = new UnityEditor.SerializedObject(asset);
+            var settingsProp = so.FindProperty("settings");
+            settingsProp.FindPropertyRelative("noiseType").enumValueIndex = (int)TerrainNoiseType.Value;
+            settingsProp.FindPropertyRelative("frequency").intValue = 16;
+            settingsProp.FindPropertyRelative("octaves").intValue = 2;
+            settingsProp.FindPropertyRelative("amplitude").floatValue = 0.75f;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            _preset.terrainNoiseAsset = asset;
+
+            MapTunables2D t = _preset.ToTunables();
+
+            Assert.AreEqual(TerrainNoiseType.Value, t.terrainNoise.noiseType);
+            Assert.AreEqual(16, t.terrainNoise.frequency);
+            Assert.AreEqual(2, t.terrainNoise.octaves);
+            Assert.AreEqual(0.75f, t.terrainNoise.amplitude, 1e-5f);
+        }
+        finally
+        {
+            Object.DestroyImmediate(asset);
+        }
+    }
+
+    [Test]
+    public void ToTunables_NullTerrainNoiseAsset_ReadsInlineSettings()
+    {
+        _preset.terrainNoiseAsset = null;
+        _preset.terrainNoiseSettings.noiseType = TerrainNoiseType.Worley;
+        _preset.terrainNoiseSettings.frequency = 12;
+
+        MapTunables2D t = _preset.ToTunables();
+
+        Assert.AreEqual(TerrainNoiseType.Worley, t.terrainNoise.noiseType);
+        Assert.AreEqual(12, t.terrainNoise.frequency);
+    }
+
+    [Test]
+    public void ToTunables_WithWarpNoiseAsset_ReadsFromAsset()
+    {
+        var asset = ScriptableObject.CreateInstance<NoiseSettingsAsset>();
+        try
+        {
+            var so = new UnityEditor.SerializedObject(asset);
+            var settingsProp = so.FindProperty("settings");
+            settingsProp.FindPropertyRelative("noiseType").enumValueIndex = (int)TerrainNoiseType.Simplex;
+            settingsProp.FindPropertyRelative("frequency").intValue = 6;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            _preset.warpNoiseAsset = asset;
+
+            MapTunables2D t = _preset.ToTunables();
+
+            Assert.AreEqual(TerrainNoiseType.Simplex, t.warpNoise.noiseType);
+            Assert.AreEqual(6, t.warpNoise.frequency);
+        }
+        finally
+        {
+            Object.DestroyImmediate(asset);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // N5.b TerrainNoiseSettings.Equals
+    // ------------------------------------------------------------------
+
+    [Test]
+    public void TerrainNoiseSettings_Equals_DefaultsAreEqual()
+    {
+        var a = TerrainNoiseSettings.DefaultTerrain;
+        var b = TerrainNoiseSettings.DefaultTerrain;
+        Assert.IsTrue(a.Equals(b));
+    }
+
+    [Test]
+    public void TerrainNoiseSettings_Equals_DifferentFieldsAreNotEqual()
+    {
+        var a = TerrainNoiseSettings.DefaultTerrain;
+        var b = TerrainNoiseSettings.DefaultTerrain;
+        b.frequency = 16;
+        Assert.IsFalse(a.Equals(b));
+    }
+
+    [Test]
+    public void TerrainNoiseSettings_Equals_DifferentN5bFieldsAreNotEqual()
+    {
+        var a = TerrainNoiseSettings.DefaultTerrain;
+        var b = TerrainNoiseSettings.DefaultTerrain;
+        b.fractalMode = FractalMode.Ridged;
+        Assert.IsFalse(a.Equals(b));
+
+        var c = TerrainNoiseSettings.DefaultTerrain;
+        c.worleyDistanceMetric = WorleyDistanceMetric.Chebyshev;
+        Assert.IsFalse(a.Equals(c));
     }
 }

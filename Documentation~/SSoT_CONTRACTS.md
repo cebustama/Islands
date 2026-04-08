@@ -20,6 +20,15 @@ Purpose: Cross-cutting package contracts and governance-relevant technical rules
 - Core PCG runtime follows a grid-first, adapters-last architecture.
 - Legacy map-generation documents do not define the new PCG runtime unless explicitly re-promoted.
 
+## PCG configuration override contracts (N5.b)
+- ScriptableObject configuration assets (`MapGenerationPreset`, `NoiseSettingsAsset`) follow
+  the override-at-resolve pattern: when an asset is assigned to a slot, the asset's values
+  replace inline Inspector values. When the slot is null, inline values are used unchanged.
+- Resolution is deterministic and happens at the point of use (ToTunables, BuildTunables),
+  never lazily or asynchronously.
+- Serialization format changes on governed configuration types must be documented in the
+  changelog with explicit "serialization break" notice.
+
 ## Notes
 This file is intentionally small at the start of migration.
 It should grow only when a rule clearly spans multiple subsystem authorities.

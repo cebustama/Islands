@@ -24,6 +24,10 @@ namespace Islands.PCG.Samples
     ///           Separate warp noise settings. heightQuantSteps tunable.
     /// Phase F3b: hillsThresholdL1 / hillsThresholdL2 for height-coherent hills.
     /// Phase N5.a: shapeMode (IslandShapeMode enum) for base shape selection.
+    /// Phase N5.b: NoiseSettingsAsset slots (terrainNoiseAsset, warpNoiseAsset).
+    ///             Refactored individual noise fields to embedded TerrainNoiseSettings structs.
+    ///             Serialization break: field names changed from terrainNoiseType/terrainFrequency/...
+    ///             to terrainNoiseSettings.noiseType/terrainNoiseSettings.frequency/...
     /// </summary>
     [CreateAssetMenu(
         fileName = "MapGenerationPreset",
@@ -162,66 +166,39 @@ namespace Islands.PCG.Samples
         public float midWaterDepth01 = 0f;
 
         // ==================================================================
-        // Terrain Noise (N4)
+        // Noise Settings Assets (N5.b — optional override)
         // ==================================================================
 
-        [Header("Terrain Noise (N4)")]
-        [Tooltip("Noise algorithm for terrain height perturbation.\n" +
-                 "Perlin (default) = smooth, low artifacts.\n" +
-                 "Simplex = slightly different gradient character.\n" +
-                 "Value = blobby grid artifacts (for comparison).\n" +
-                 "Worley = cell-based (experimental for terrain).")]
-        public TerrainNoiseType terrainNoiseType = TerrainNoiseType.Perlin;
+        [Header("Noise Settings Assets (N5.b)")]
+        [Tooltip("Optional reusable noise asset for terrain height perturbation.\n" +
+                 "When assigned, overrides the inline Terrain Noise settings below.\n" +
+                 "When null, inline settings are used.")]
+        public NoiseSettingsAsset terrainNoiseAsset;
 
-        [Range(1, 32)]
-        [Tooltip("Noise frequency — features across the map. Resolution-independent.\n" +
-                 "Higher = finer features. 8 ≈ medium detail (matches old noiseCellSize=8 at 64×64).")]
-        public int terrainFrequency = 8;
-
-        [Range(1, 6)]
-        [Tooltip("fBm octaves. More = finer detail layered on top of base features.\n" +
-                 "1 = smooth single-scale. 4 = good natural variation. 6 = maximum detail.")]
-        public int terrainOctaves = 4;
-
-        [Range(2, 4)]
-        [Tooltip("Frequency multiplier per octave. 2 = each octave doubles frequency.")]
-        public int terrainLacunarity = 2;
-
-        [Range(0f, 1f)]
-        [Tooltip("Amplitude decay per octave. 0.5 = each octave halves amplitude.\n" +
-                 "Lower = less fine detail relative to base. Higher = more fine detail.")]
-        public float terrainPersistence = 0.5f;
-
-        [Range(0f, 1f)]
-        [Tooltip("How much height variation noise adds to the island silhouette.\n" +
-                 "0 = perfectly smooth dome. 0.35 = natural variation (default).\n" +
-                 "Higher values produce more varied terrain with potential inland lakes.\n" +
-                 "In NoShape mode: noise IS the height field, so amplitude is not used for perturbation.")]
-        public float terrainAmplitude = 0.35f;
+        [Tooltip("Optional reusable noise asset for domain warp.\n" +
+                 "When assigned, overrides the inline Warp Noise settings below.\n" +
+                 "When null, inline settings are used.")]
+        public NoiseSettingsAsset warpNoiseAsset;
 
         // ==================================================================
-        // Warp Noise (N4)
+        // Terrain Noise (N4 → N5.b struct embed)
         // ==================================================================
 
-        [Header("Warp Noise (N4)")]
-        [Tooltip("Noise algorithm for domain warp (coastline shape distortion).\n" +
-                 "Same options as terrain noise; lower frequency produces broader warp.")]
-        public TerrainNoiseType warpNoiseType = TerrainNoiseType.Perlin;
+        [Header("Terrain Noise")]
+        [Tooltip("Noise algorithm, frequency, octaves, and fractal settings for\n" +
+                 "terrain height perturbation. Overridden by Terrain Noise Asset when assigned.")]
+        public TerrainNoiseSettings terrainNoiseSettings = TerrainNoiseSettings.DefaultTerrain;
 
-        [Range(1, 32)]
-        [Tooltip("Warp noise frequency. Lower = broader distortion features.\n" +
-                 "4 ≈ old WarpCellSize=16 at 64×64 resolution.")]
-        public int warpFrequency = 4;
+        // ==================================================================
+        // Warp Noise (N4 → N5.b struct embed)
+        // ==================================================================
 
-        [Range(1, 6)]
-        [Tooltip("Warp noise octaves. 1 = simple smooth warping (default).")]
-        public int warpOctaves = 1;
-
-        [Range(2, 4)]
-        public int warpLacunarity = 2;
-
-        [Range(0f, 1f)]
-        public float warpPersistence = 0.5f;
+        [Header("Warp Noise")]
+        [Tooltip("Noise algorithm, frequency, octaves, and fractal settings for\n" +
+                 "domain warp (coastline shape distortion). Overridden by Warp Noise Asset when assigned.\n" +
+                 "Amplitude on this struct is typically 1.0 — actual warp displacement\n" +
+                 "is scaled by Warp Amplitude 01 above.")]
+        public TerrainNoiseSettings warpNoiseSettings = TerrainNoiseSettings.DefaultWarp;
 
         // ==================================================================
         // Hills (F3b)
@@ -297,9 +274,11 @@ namespace Islands.PCG.Samples
         /// Produces a <see cref="MapTunables2D"/> from this preset's fields.
         /// MapTunables2D clamps and orders all values deterministically.
         /// The AnimationCurve is sampled into a piecewise-linear ScalarSpline (N2).
+        ///
         /// Phase N4: includes terrain noise, warp noise, and height quant settings.
         /// Phase F3b: includes hills threshold settings.
         /// Phase N5.a: includes shapeMode.
+        /// Phase N5.b: resolves NoiseSettingsAsset slots (asset → inline fallback).
         /// </summary>
         public MapTunables2D ToTunables() => new MapTunables2D(
             islandRadius01: islandRadius01,
@@ -310,24 +289,12 @@ namespace Islands.PCG.Samples
             warpAmplitude01: warpAmplitude01,
             heightRedistributionExponent: heightRedistributionExponent,
             heightRemapSpline: ScalarSpline.FromAnimationCurve(heightRemapCurve),
-            terrainNoise: new TerrainNoiseSettings
-            {
-                noiseType = terrainNoiseType,
-                frequency = terrainFrequency,
-                octaves = terrainOctaves,
-                lacunarity = terrainLacunarity,
-                persistence = terrainPersistence,
-                amplitude = terrainAmplitude,
-            },
-            warpNoise: new TerrainNoiseSettings
-            {
-                noiseType = warpNoiseType,
-                frequency = warpFrequency,
-                octaves = warpOctaves,
-                lacunarity = warpLacunarity,
-                persistence = warpPersistence,
-                amplitude = 1.0f, // warp scaling comes from warpAmplitude01
-            },
+            terrainNoise: terrainNoiseAsset != null
+                ? terrainNoiseAsset.Settings
+                : terrainNoiseSettings,
+            warpNoise: warpNoiseAsset != null
+                ? warpNoiseAsset.Settings
+                : warpNoiseSettings,
             heightQuantSteps: heightQuantSteps,
             hillsThresholdL1: hillsThresholdL1,
             hillsThresholdL2: hillsThresholdL2,

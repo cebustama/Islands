@@ -2,6 +2,7 @@
     "name": "Islands.PCG.Tests.EditMode",
     "rootNamespace": "",
     "references": [
+        "Islands.Runtime",
         "Islands.PCG.Runtime",
         "Islands.PCG.Adapters.Tilemap",
         "Islands.PCG.Samples.Shared",

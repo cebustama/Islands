@@ -48,8 +48,8 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase F3b: done
 - Phase N5: in progress
   - N5.a: done
-  - N5.b: later (planning only)
-  - N5.c: later (planning only)
+  - N5.b: done
+  - N5.c: done
   - N5.d: later (planning only)
 - Phase I: later
 - Phase I2: later (planning only)
@@ -474,7 +474,7 @@ heatmap visualization.
 - No new `MapLayerId` or `MapFieldId`.
 
 ### Phase N5 — Noise & Shape Configuration
-**In progress. N5.a done. Sequenced after Phase F3b (done), before Phase H8.**
+**In progress. N5.a, N5.b, N5.c done. Sequenced after Phase F3b (done), before Phase H8.**
 
 Consolidates four related configuration improvements into one phase. N5.a–c are
 independently implementable; N5.b and N5.c have natural synergy (asset format includes
@@ -506,6 +506,7 @@ replacing the current implicit "always ellipse unless F2c shape input is provide
 - Depends on: Phase N4 (NoShape mode requires the richer noise field to produce interesting terrain).
 
 #### N5.b — Noise Settings Assets (ScriptableObject)
+**Done.**
 
 Adds a `NoiseSettingsAsset` ScriptableObject that wraps `TerrainNoiseSettings`, following the
 same override-at-resolve pattern as `MapGenerationPreset`: when assigned, the asset's settings
@@ -537,34 +538,38 @@ are used; when null, inline Inspector fields are the fallback.
 - Medium complexity. No new `MapLayerId` or `MapFieldId`.
 
 #### N5.c — Extended Noise Palette + Ridged Multifractal (N3)
+**Done.**
 
-Populates the extended `TerrainNoiseType` enum and implements the N3 ridged multifractal
-algorithm in the noise runtime.
+Makes the N5.b `TerrainNoiseSettings` struct fields functional in the noise runtime.
+Implements the N3 ridged multifractal algorithm.
 
-- **Extended `TerrainNoiseType` enum** (additions beyond the N4 set):
-  - `SmoothWorley` → `Voronoi2D<LatticeNormal, SmoothWorley, F1>` (blended cell boundaries)
-  - `Chebyshev` → `Voronoi2D<LatticeNormal, Chebyshev, F1>` (diamond/square cells)
-  - `WorleyF2` → `Voronoi2D<..., F2>` (second-nearest distance)
-  - `WorleyF2MinusF1` → `Voronoi2D<..., F2MinusF1>` (edge ridges — "cracked earth")
-  - `CellAsIslands` → `Voronoi2D<SmoothWorley, CellAsIslands>` (each cell = island plateau)
-  Each is one enum entry + one `case` in `MapNoiseBridge2D.FillNoise01`. The Worley sub-options
-  from N5.b provide finer control (distance metric × function) for the Worley family.
-- **N3 — Ridged Multifractal implementation.** Resolves the long-standing Option A vs C decision
-  from the Noise Composition Improvements Roadmap.
-  **Decision: Option A — new fractal mode in the noise runtime.**
-  `Noise.GetFractalNoise<N>()` gains a `FractalMode` parameter. When `Standard`, behavior is
-  unchanged (existing fBm). When `Ridged`, the accumulation loop uses the Musgrave algorithm:
-  `signal = (offset - abs(noise))^2`, inter-octave feedback via `weight = clamp(signal * gain, 0, 1)`.
-  Canonical defaults: offset=1.0, gain=2.0.
+- **Parameterized Worley dispatch** (design decision: parameterized family, not separate enum
+  entries). The existing `TerrainNoiseType.Worley` enum entry is driven by
+  `WorleyDistanceMetric` (Euclidean, SmoothEuclidean, Chebyshev) × `WorleyFunction`
+  (F1, F2, F2MinusF1, CellAsIslands) = 12 generic `Voronoi2D<>` instantiations dispatched
+  via `MapNoiseBridge2D.FillWorleyNoise01` (flat switch on `metric * 4 + function`).
+  No new `TerrainNoiseType` enum entries. All 12 combinations accessible from Inspector via
+  the two Worley dropdowns added in N5.b. Default (Euclidean + F1) = pre-N5.c Worley case.
+- **N3 — Ridged Multifractal implementation.** Resolves the Option A vs C decision from the
+  Noise Composition Improvements Roadmap (now archived — all items resolved).
+  **Decision: Option A1 — extend `Noise.Settings`, new accumulation method in noise runtime.**
+  `FractalMode` enum migrated from `Islands.PCG.Layout.Maps` to `Islands` namespace (Noise.cs).
   `Noise.Settings` extended with `FractalMode fractalMode`, `float ridgedOffset`, `float ridgedGain`.
-  Standard mode with any noise type produces identical output to pre-N5 (golden safe at defaults).
-  `MapNoiseBridge2D.FillNoise01` passes fractalMode through to the runtime.
-  ~30 lines of algorithm code in the accumulation loop. SIMD-compatible (mode is per-evaluation,
-  not per-lane).
-- **CellAsIslands for archipelago generation:** Particularly interesting for Phase J — each Voronoi
-  cell becomes a distinct rounded island. Combined with NoShape mode (N5.a), this creates
-  natural archipelagos from noise alone without needing explicit multi-island logic.
-- Medium complexity. Noise runtime is modified (governed reference surface); changes are additive
+  `Noise.GetFractalNoise<N>()` branches on `fractalMode`: Standard = unchanged fBm (early return);
+  Ridged = private `GetRidgedFractalNoise<N>()` implementing Musgrave algorithm:
+  `signal = (offset - abs(noise))^2`, inter-octave feedback via `weight = clamp(signal * gain, 0, 1)`.
+  Canonical defaults: offset=1.0, gain=2.0. ~35 lines. Applies to all `INoise` types.
+  Standard mode with any noise type produces identical output to pre-N5.c (golden safe at defaults).
+- **Voronoi-aware normalization.** `FillNoise01Core` takes a `remapBipolar` parameter. Gradient
+  noise (Perlin, Simplex, Value) uses `n * 0.5 + 0.5` (bipolar [-1,1] → [0,1]). Voronoi noise
+  uses direct `saturate(n)` since distances are non-negative. Fixes the bright-bias where Worley
+  output was compressed into [0.5, 1.0].
+- **CellAsIslands for archipelago generation:** Each Voronoi cell becomes a distinct rounded
+  island. Combined with NoShape mode (N5.a), creates natural archipelagos from noise alone.
+- **Assembly references:** `Islands.PCG.Editor` and `Islands.PCG.Tests.EditMode` asmdefs updated
+  to reference `Islands.Runtime` directly for `FractalMode` resolution.
+- 22 new tests in `MapNoiseBridge2DTests.cs`.
+- Medium complexity. Noise runtime modified (governed reference surface); changes are additive
   and backward-compatible at default settings.
 - Depends on: Phase N4 (bridge infrastructure), N5.b (settings struct carries the new fields).
 

@@ -2,8 +2,8 @@
 
 Status: Active (implemented slice only)
 Authority: Primary subsystem authority for implemented Map Pipeline by Layers behavior.
-Scope: Implemented F0–Phase H2b runtime truth and active contracts for Map Pipeline by Layers.
-Out of scope: Phase H2c+ roadmap work, legacy tilemap map generation, sample-only inspector convenience.
+Scope: Implemented F0–Phase N5.b runtime truth and active contracts for Map Pipeline by Layers.
+Out of scope: Phase N5.c+ roadmap work, legacy tilemap map generation, sample-only inspector convenience.
 
 ## Purpose
 This document governs the implemented and test-gated truth of the Map Pipeline by Layers subsystem.
@@ -23,8 +23,16 @@ This SSoT covers only the currently implemented vertical slice:
 - Phase H2 Data Export (MapDataExport; MapExporter2D)
 - Phase H2b Tilemap Adapter (TilemapAdapter2D; TilemapLayerEntry; PCGMapTilemapSample;
   Islands.PCG.Adapters.Tilemap separate asmdef)
+- Phase H2c–H7 Tilemap Visualization, Procedural Tiles, MapGenerationPreset, TilesetConfig,
+  Multi-layer Tilemaps, Rule Tiles, Map Navigation Sample
+- Phase J2 Height Redistribution
+- Phase N2 Spline Remapping + Post-N2 Fixes
+- Phase N4 Noise Settings Infrastructure + F2 Noise Upgrade
+- Phase F3b Height-Coherent Hills
+- Phase N5.a Base Shape Selector
+- Phase N5.b Noise Settings Assets (NoiseSettingsAsset; TerrainNoiseSettings extensions;
+  PropertyDrawer; configuration override pattern)
 
-Anything from Phase H2c onward is planning only and belongs in `planning/active/PCG_Roadmap.md`.
 `MapLayerId.Paths` is registered but not yet written; its authoritative write belongs in Phase O.
 
 ## Subsystem intent
@@ -81,8 +89,41 @@ Current `MapFieldId`:
 - `warpAmplitude01` — domain warp amplitude as fraction of min(w,h); 0.0 = no warp; clamped [0, 1] *(F2b)*
   Applied to Ellipse and Rectangle modes. NoShape ignores warp geometrically.
   Warp noise arrays always filled regardless of mode (stable downstream state).
+- `terrainNoise` — `TerrainNoiseSettings` struct for height perturbation noise. *(N4)*
+- `warpNoise` — `TerrainNoiseSettings` struct for domain warp noise. *(N4)*
+- `heightQuantSteps` — height quantization steps (0 = none, 1024 = smooth). *(N4)*
+- `hillsThresholdL1` — Height threshold for HillsL1 slopes; [0..1], default 0.65. *(F3b)*
+- `hillsThresholdL2` — Height threshold for HillsL2 peaks; [0..1], default 0.80. Clamped >= hillsThresholdL1. *(F3b)*
+- `heightRedistributionExponent` — power-curve exponent; 1.0 = identity. *(J2)*
+- `heightRemapSpline` — piecewise-linear height remap; default = identity. *(N2)*
 - deterministic clamp/order rules apply to all fields
 - stage-specific tunables stay on the stage unless they clearly become map-wide contracts
+
+### Configuration Assets (N5.b)
+
+`NoiseSettingsAsset` (`Runtime/Layout/Maps/NoiseSettingsAsset.cs`)
+- ScriptableObject wrapping a single `TerrainNoiseSettings` struct.
+- `[CreateAssetMenu]` (Islands/PCG/Noise Settings, order 110).
+- Override-at-resolve pattern: when assigned to a `MapGenerationPreset` or visualization
+  component noise slot, the asset's settings replace inline values. When null, inline
+  values are used unchanged.
+- Resolution chain (terrain noise example):
+  1. `MapGenerationPreset.terrainNoiseAsset` assigned → use asset's `Settings`.
+  2. `terrainNoiseAsset` null → use `MapGenerationPreset.terrainNoiseSettings` inline struct.
+  3. No preset assigned on component → check component's own `terrainNoiseAsset` → component's inline struct.
+- Same pattern for warp noise (`warpNoiseAsset` / `warpNoiseSettings`).
+- Final resolved `TerrainNoiseSettings` is passed to `MapTunables2D` and consumed by
+  `MapNoiseBridge2D.FillNoise01`.
+
+`TerrainNoiseSettings` extensions (N5.b — carried, not yet functional until N5.c):
+- `WorleyDistanceMetric` enum (Euclidean, SmoothEuclidean, Chebyshev) — default Euclidean.
+- `WorleyFunction` enum (F1, F2, F2MinusF1, CellAsIslands) — default F1.
+- `FractalMode` enum (Standard, Ridged) — default Standard.
+- `ridgedOffset` (float, 1.0) — ridged multifractal offset.
+- `ridgedGain` (float, 2.0) — ridged multifractal gain.
+
+All defaults produce identity behavior (no change to noise output). Fields become
+functional when N5.c adds corresponding `case` branches in `MapNoiseBridge2D.FillNoise01`.
 
 ### Run context
 `MapContext2D`
@@ -405,6 +446,18 @@ for F3+ hashes.
 - scene: `Runtime/PCG/Samples/PCG Map Tilemap/PCG Map Tilemap.unity`
 - adapters-last invariant preserved; no new MapLayerId, MapFieldId, or runtime stage contracts
 
+### Phase N5.b
+- `NoiseSettingsAsset` — ScriptableObject noise configuration asset (`Runtime/Layout/Maps/NoiseSettingsAsset.cs`)
+- `TerrainNoiseSettings` extended with `WorleyDistanceMetric`, `WorleyFunction`, `FractalMode`,
+  `ridgedOffset`, `ridgedGain` (carried, not functional until N5.c)
+- `IEquatable<TerrainNoiseSettings>` — struct equality for dirty-tracking
+- `TerrainNoiseSettingsDrawer` — Editor-only PropertyDrawer with conditional visibility
+- `MapGenerationPreset` extended with `terrainNoiseAsset` and `warpNoiseAsset` slots;
+  refactored to embedded `TerrainNoiseSettings` structs (serialization break)
+- All three visualization components refactored to embedded noise structs + asset slots
+- `PCGMapTilemapVisualizationEditor` updated for noise asset slot drawing
+- no new MapLayerId, MapFieldId, or runtime stage contracts
+
 ## Determinism rules
 - stable seed sanitation
 - stable registry ordering
@@ -466,16 +519,20 @@ for F3+ hashes.
   empty table + fallback fills all cells; priority resolution (LandCore over Land);
   missing layer silently skipped; clearFirst=false preserves existing tiles;
   flipY mirrors Y coordinate; determinism gate
+- Phase N5.b: NoiseSettingsAsset override resolution (asset → inline); IEquatable identity
+  and inequality; new field defaults
 
 ## Known limitations
 - Scalar field normalization range (scalarMin/scalarMax) is inspector-settable but not auto-ranged; CoastDist max distance varies by map size and CoastDistMax tunable
 - Composite per-layer color styling is sample-side convenience, not subsystem truth
-- F2/F3 keep some internal constants fixed for golden stability (NoiseCellSize, WarpCellSize, NoiseAmplitude, QuantSteps)
+- F2/F3 noise parameters are now configurable via `TerrainNoiseSettings` (N4) and
+  `NoiseSettingsAsset` (N5.b). Extended Worley/ridged fields are carried but not
+  functional until N5.c adds runtime branches.
 - `MapFieldId.Moisture` is registered but not yet written; ownership deferred to Phase M
 - `MapLayerId.Paths` is registered but not yet written; ownership deferred to Phase O
 - `PCGMapTilemapSample` regenerates only on Start or ContextMenu; live editor regeneration deferred to Phase H2c
 
 ## Not governed here
-- Phase H2c+ roadmap work (Live Tilemap Visualization and beyond)
+- Phase N5.c+ roadmap work (Extended Noise Palette + Ridged Multifractal and beyond)
 - `Paths` layer write (deferred to Phase O — requires Phase N POI placement as prerequisite)
 - Legacy tilemap generation documents

@@ -10,11 +10,13 @@
 |   |   \---README.md
 |   +---planning
 |   |   +---active
+|   |   |   +---crosscheck_roadmap.md
 |   |   |   +---Noise_Composition_Improvements_Roadmap.md
 |   |   |   +---PCG_Roadmap.md
 |   |   |   +---Phase_L_Design.md
 |   |   |   +---Phase_M_Design.md
 |   |   |   +---Phase_M2_Design.md
+|   |   |   +---Phase_T1_Design.md
 |   |   |   \---Phase_W_Design.md
 |   |   \---archive
 |   |       +---Islands_Governance_Migration_Roadmap.md
@@ -30,6 +32,7 @@
 |   |   +---noise.md
 |   |   +---overview.md
 |   |   +---pcg-layout-strategies-reference.md
+|   |   +---scalar-heatmap-scene-setup.md
 |   |   +---shaders.md
 |   |   +---surfaces.md
 |   |   \---tileset-import-guide.md
@@ -72,8 +75,13 @@
 |   |   |   |   +---5a Region partitioning and biome systems.md
 |   |   |   |   +---5b object placement, scattering, and road generation.md
 |   |   |   |   +---6a Multi-scale generation and graph-based world structure.md
+|   |   |   |   +---Extra - Biome transition blending in 2D grid systems.md
+|   |   |   |   +---Extra - Dwarf Fortress's erosion algorithm.md
+|   |   |   |   +---Extra - How RimWorld treats biome boundaries.md
+|   |   |   |   +---Extra - Rainshadow on a grid.md
 |   |   |   |   +---pass_6b_composition_patterns_and_synthesis.md
 |   |   |   |   \---pcg_synthesis.md
+|   |   |   +---hydrology_cross_reference.md
 |   |   |   +---pcg_noise_reference.md
 |   |   |   +---pcg_technique_library.md
 |   |   |   \---terrain_biome_cross_reference.md
@@ -85,6 +93,7 @@
 |   +---changelog-ssot.md
 |   +---coverage-matrix.md
 |   +---CURRENT_STATE.md
+|   +---make-tree-unity.bat
 |   +---migration-log.md
 |   +---README.md
 |   +---SSoT_CONTRACTS.md
@@ -92,6 +101,9 @@
 |   \---supersession-map.md
 +---Editor
 |   \---Inspectors
+|       +---Islands.PCG.Editor.asmdef
+|       +---PCGMapTilemapVisualizationEditor.cs
+|       \---TerrainNoiseSettingsDrawer.cs
 +---Runtime
 |   +---Graphs
 |   |   \---GraphLibrary
@@ -180,6 +192,7 @@
 |   |   |   |   |   +---Stage_Traversal2D.cs
 |   |   |   |   |   \---Stage_Vegetation2D.cs
 |   |   |   |   +---IMapStage2D.cs
+|   |   |   |   +---IslandShapeMode.cs
 |   |   |   |   +---MapContext2D.cs
 |   |   |   |   +---MapDataExport.cs
 |   |   |   |   +---MapExporter2D.cs
@@ -188,7 +201,9 @@
 |   |   |   |   +---MapNoiseBridge2D.cs
 |   |   |   |   +---MapPipelineRunner2D.cs
 |   |   |   |   +---MapShapeInput.cs
-|   |   |   |   \---MapTunables2D.cs
+|   |   |   |   +---MapTunables2D.cs
+|   |   |   |   +---NoiseSettingsAsset.cs
+|   |   |   |   \---TerrainNoiseSettings.cs
 |   |   |   +---CorridorFirstDungeon2D.cs
 |   |   |   +---Direction2D.cs
 |   |   |   +---IteratedRandomWalk2D.cs

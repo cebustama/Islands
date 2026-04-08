@@ -47,6 +47,8 @@ namespace Islands.PCG.Samples
     /// Phase H3: added optional MapGenerationPreset slot (override-at-resolve pattern).
     /// Phase N4: TerrainNoiseSettings replaces noiseCellSize/noiseAmplitude/quantSteps.
     /// Phase N5.a: IslandShapeMode selector (Ellipse, Rectangle, NoShape, Custom).
+    /// Phase N5.b: NoiseSettingsAsset slots. Refactored individual noise fields to embedded
+    ///             TerrainNoiseSettings structs with IEquatable dirty-tracking.
     /// </summary>
     public sealed class PCGMapVisualization : Visualization
     {
@@ -131,22 +133,21 @@ namespace Islands.PCG.Samples
         [Range(0f, 1f)][SerializeField] private float hillsThresholdL1 = 0.65f;
         [Range(0f, 1f)][SerializeField] private float hillsThresholdL2 = 0.80f;
 
-        // N4: terrain noise settings (replaces noiseCellSize, noiseAmplitude)
-        [Header("Terrain Noise (N4)")]
-        [SerializeField] private TerrainNoiseType terrainNoiseType = TerrainNoiseType.Perlin;
-        [Range(1, 32)][SerializeField] private int terrainFrequency = 8;
-        [Range(1, 6)][SerializeField] private int terrainOctaves = 4;
-        [Range(2, 4)][SerializeField] private int terrainLacunarity = 2;
-        [Range(0f, 1f)][SerializeField] private float terrainPersistence = 0.5f;
-        [Range(0f, 1f)][SerializeField] private float terrainAmplitude = 0.35f;
+        // N5.b: noise settings assets (optional override)
+        [Header("Noise Settings Assets (N5.b)")]
+        [Tooltip("Optional reusable noise asset for terrain height perturbation.\n" +
+                 "When assigned, overrides inline Terrain Noise settings.")]
+        [SerializeField] private NoiseSettingsAsset terrainNoiseAsset;
+        [Tooltip("Optional reusable noise asset for domain warp.\n" +
+                 "When assigned, overrides inline Warp Noise settings.")]
+        [SerializeField] private NoiseSettingsAsset warpNoiseAsset;
 
-        // N4: warp noise settings
-        [Header("Warp Noise (N4)")]
-        [SerializeField] private TerrainNoiseType warpNoiseType = TerrainNoiseType.Perlin;
-        [Range(1, 32)][SerializeField] private int warpFrequency = 4;
-        [Range(1, 6)][SerializeField] private int warpOctaves = 1;
-        [Range(2, 4)][SerializeField] private int warpLacunarity = 2;
-        [Range(0f, 1f)][SerializeField] private float warpPersistence = 0.5f;
+        // N5.b: embedded noise structs (replace individual N4 fields)
+        [Header("Terrain Noise")]
+        [SerializeField] private TerrainNoiseSettings terrainNoiseSettings = TerrainNoiseSettings.DefaultTerrain;
+
+        [Header("Warp Noise")]
+        [SerializeField] private TerrainNoiseSettings warpNoiseSettings = TerrainNoiseSettings.DefaultWarp;
 
         // N4: height quantization (replaces quantSteps)
         [Header("Height Quantization (N4)")]
@@ -190,12 +191,9 @@ namespace Islands.PCG.Samples
         // F3b hills dirty tracking
         private float lastHillsThresholdL1;
         private float lastHillsThresholdL2;
-        // N4 noise dirty tracking
-        private TerrainNoiseType lastTerrainNoiseType, lastWarpNoiseType;
-        private int lastTerrainFrequency, lastTerrainOctaves, lastTerrainLacunarity;
-        private float lastTerrainPersistence, lastTerrainAmplitude;
-        private int lastWarpFrequency, lastWarpOctaves, lastWarpLacunarity;
-        private float lastWarpPersistence;
+        // N5.b: noise dirty tracking (replaces 11 individual fields)
+        private NoiseSettingsAsset lastTerrainNoiseAsset, lastWarpNoiseAsset;
+        private TerrainNoiseSettings lastTerrainNoise, lastWarpNoise;
         private int lastHeightQuantSteps;
         private bool lastClearBeforeRun;
 
@@ -294,7 +292,8 @@ namespace Islands.PCG.Samples
             bool eMorph = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
             bool eClear = preset != null ? preset.clearBeforeRun : clearBeforeRun;
 
-            // N4: build tunables with noise settings
+            // N5.b: build tunables — preset handles its own asset resolution via ToTunables().
+            // When no preset: component resolves asset → inline struct.
             var eTun = preset != null
                 ? preset.ToTunables()
                 : new MapTunables2D(
@@ -303,24 +302,12 @@ namespace Islands.PCG.Samples
                       islandAspectRatio, warpAmplitude01,
                       heightRedistributionExponent,
                       default, // heightRemapSpline
-                      terrainNoise: new TerrainNoiseSettings
-                      {
-                          noiseType = terrainNoiseType,
-                          frequency = terrainFrequency,
-                          octaves = terrainOctaves,
-                          lacunarity = terrainLacunarity,
-                          persistence = terrainPersistence,
-                          amplitude = terrainAmplitude,
-                      },
-                      warpNoise: new TerrainNoiseSettings
-                      {
-                          noiseType = warpNoiseType,
-                          frequency = warpFrequency,
-                          octaves = warpOctaves,
-                          lacunarity = warpLacunarity,
-                          persistence = warpPersistence,
-                          amplitude = 1.0f,
-                      },
+                      terrainNoise: terrainNoiseAsset != null
+                          ? terrainNoiseAsset.Settings
+                          : terrainNoiseSettings,
+                      warpNoise: warpNoiseAsset != null
+                          ? warpNoiseAsset.Settings
+                          : warpNoiseSettings,
                       heightQuantSteps: heightQuantSteps,
                       hillsThresholdL1: hillsThresholdL1,
                       hillsThresholdL2: hillsThresholdL2,
@@ -493,6 +480,21 @@ namespace Islands.PCG.Samples
             mpb.SetColor(MaskOnColorId, maskOnColor);
         }
 
+        // N5.b: resolve effective noise for dirty-tracking (asset → inline, preset → component)
+        private TerrainNoiseSettings ResolveTerrainNoise()
+        {
+            if (preset != null)
+                return preset.terrainNoiseAsset != null ? preset.terrainNoiseAsset.Settings : preset.terrainNoiseSettings;
+            return terrainNoiseAsset != null ? terrainNoiseAsset.Settings : terrainNoiseSettings;
+        }
+
+        private TerrainNoiseSettings ResolveWarpNoise()
+        {
+            if (preset != null)
+                return preset.warpNoiseAsset != null ? preset.warpNoiseAsset.Settings : preset.warpNoiseSettings;
+            return warpNoiseAsset != null ? warpNoiseAsset.Settings : warpNoiseSettings;
+        }
+
         private void CacheParams()
         {
             _lastPreset = preset;
@@ -521,18 +523,11 @@ namespace Islands.PCG.Samples
             // F3b hills params
             lastHillsThresholdL1 = preset != null ? preset.hillsThresholdL1 : hillsThresholdL1;
             lastHillsThresholdL2 = preset != null ? preset.hillsThresholdL2 : hillsThresholdL2;
-            // N4 noise params
-            lastTerrainNoiseType = preset != null ? preset.terrainNoiseType : terrainNoiseType;
-            lastTerrainFrequency = preset != null ? preset.terrainFrequency : terrainFrequency;
-            lastTerrainOctaves = preset != null ? preset.terrainOctaves : terrainOctaves;
-            lastTerrainLacunarity = preset != null ? preset.terrainLacunarity : terrainLacunarity;
-            lastTerrainPersistence = preset != null ? preset.terrainPersistence : terrainPersistence;
-            lastTerrainAmplitude = preset != null ? preset.terrainAmplitude : terrainAmplitude;
-            lastWarpNoiseType = preset != null ? preset.warpNoiseType : warpNoiseType;
-            lastWarpFrequency = preset != null ? preset.warpFrequency : warpFrequency;
-            lastWarpOctaves = preset != null ? preset.warpOctaves : warpOctaves;
-            lastWarpLacunarity = preset != null ? preset.warpLacunarity : warpLacunarity;
-            lastWarpPersistence = preset != null ? preset.warpPersistence : warpPersistence;
+            // N5.b: noise (asset + struct, replaces 11 individual fields)
+            lastTerrainNoiseAsset = preset != null ? preset.terrainNoiseAsset : terrainNoiseAsset;
+            lastWarpNoiseAsset = preset != null ? preset.warpNoiseAsset : warpNoiseAsset;
+            lastTerrainNoise = ResolveTerrainNoise();
+            lastWarpNoise = ResolveWarpNoise();
             lastHeightQuantSteps = preset != null ? preset.heightQuantSteps : heightQuantSteps;
             lastClearBeforeRun = preset != null ? preset.clearBeforeRun : clearBeforeRun;
         }
@@ -565,18 +560,11 @@ namespace Islands.PCG.Samples
                 // F3b hills params
                 || !Mathf.Approximately(preset != null ? preset.hillsThresholdL1 : hillsThresholdL1, lastHillsThresholdL1)
                 || !Mathf.Approximately(preset != null ? preset.hillsThresholdL2 : hillsThresholdL2, lastHillsThresholdL2)
-                // N4 noise params
-                || (preset != null ? preset.terrainNoiseType : terrainNoiseType) != lastTerrainNoiseType
-                || (preset != null ? preset.terrainFrequency : terrainFrequency) != lastTerrainFrequency
-                || (preset != null ? preset.terrainOctaves : terrainOctaves) != lastTerrainOctaves
-                || (preset != null ? preset.terrainLacunarity : terrainLacunarity) != lastTerrainLacunarity
-                || !Mathf.Approximately(preset != null ? preset.terrainPersistence : terrainPersistence, lastTerrainPersistence)
-                || !Mathf.Approximately(preset != null ? preset.terrainAmplitude : terrainAmplitude, lastTerrainAmplitude)
-                || (preset != null ? preset.warpNoiseType : warpNoiseType) != lastWarpNoiseType
-                || (preset != null ? preset.warpFrequency : warpFrequency) != lastWarpFrequency
-                || (preset != null ? preset.warpOctaves : warpOctaves) != lastWarpOctaves
-                || (preset != null ? preset.warpLacunarity : warpLacunarity) != lastWarpLacunarity
-                || !Mathf.Approximately(preset != null ? preset.warpPersistence : warpPersistence, lastWarpPersistence)
+                // N5.b: noise (asset ref + resolved struct comparison)
+                || (preset != null ? preset.terrainNoiseAsset : terrainNoiseAsset) != lastTerrainNoiseAsset
+                || (preset != null ? preset.warpNoiseAsset : warpNoiseAsset) != lastWarpNoiseAsset
+                || !ResolveTerrainNoise().Equals(lastTerrainNoise)
+                || !ResolveWarpNoise().Equals(lastWarpNoise)
                 || (preset != null ? preset.heightQuantSteps : heightQuantSteps) != lastHeightQuantSteps
                 || (preset != null ? preset.clearBeforeRun : clearBeforeRun) != lastClearBeforeRun;
         }

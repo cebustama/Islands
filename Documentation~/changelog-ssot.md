@@ -1,5 +1,159 @@
 # Changelog — SSoT
 
+## Phase N5.c — Extended Noise Palette + Ridged Multifractal
+Date: 2026-04-08
+
+### What changed
+- **Worley noise parameterized dispatch.** The `TerrainNoiseType.Worley` enum entry is now
+  a parameterized family. `WorleyDistanceMetric` (Euclidean, SmoothEuclidean, Chebyshev) ×
+  `WorleyFunction` (F1, F2, F2MinusF1, CellAsIslands) = 12 generic `Voronoi2D<>` instantiations
+  dispatched via `MapNoiseBridge2D.FillWorleyNoise01` (flat switch on `metric * 4 + function`).
+  No new `TerrainNoiseType` enum entries were added. Default (Euclidean + F1) produces
+  bit-identical output to the pre-N5.c hardcoded Worley case.
+- **`FractalMode` enum migrated** from `Islands.PCG.Layout.Maps` (TerrainNoiseSettings.cs) to
+  the `Islands` namespace (Noise.cs). This is a noise-runtime concept consumed by
+  `Noise.Settings`. All consumers updated with `using Islands;`.
+- **`Noise.Settings` extended** with 3 new fields:
+  - `FractalMode fractalMode` (default Standard = 0, zero-init safe).
+  - `float ridgedOffset` (default 1.0, Musgrave canonical).
+  - `float ridgedGain` (default 2.0, Musgrave canonical).
+  `Settings.Default` updated with explicit defaults.
+- **`Noise.GetFractalNoise<N>()` modified.** Early-return branch when `fractalMode == Ridged`
+  delegates to new private `GetRidgedFractalNoise<N>()`. Standard path is unchanged —
+  no code difference for `FractalMode.Standard`.
+- **`GetRidgedFractalNoise<N>()` implemented** (~35 lines). Musgrave ridged multifractal:
+  `signal = (offset - |noise|)^2` with inter-octave feedback `weight = clamp(signal * gain, 0, 1)`.
+  Returns `Sample4` with `.v` only (derivatives zero — abs() breaks continuity).
+  Applies to all `INoise` types (Perlin, Simplex, Value, all Worley variants).
+- **`MapNoiseBridge2D.FillNoise01`** populates the 3 new `Noise.Settings` fields from
+  `TerrainNoiseSettings`. Worley case delegates to `FillWorleyNoise01`. `FillNoise01Core`
+  is unchanged (ridged branching happens inside `Noise.GetFractalNoise`).
+  `FillSimplexPerlin01` (F3 legacy path) is unchanged.
+- **Assembly references updated:** `Islands.PCG.Editor.asmdef` and
+  `Islands.PCG.Tests.EditMode.asmdef` now reference `Islands.Runtime` directly for
+  `FractalMode` resolution after namespace migration.
+- **`TerrainNoiseSettings.cs`** updated: `FractalMode` enum declaration removed (migrated).
+  Doc comments updated from "not functional until N5.c" to "functional as of N5.c".
+  `Worley` enum entry doc updated to describe parameterized family.
+  All field declarations, defaults, `IEquatable`, `GetHashCode` unchanged.
+- **`TerrainNoiseSettingsDrawer.cs`** updated: added `using Islands;` for `FractalMode`.
+  Functional code unchanged.
+
+### New files
+- `Runtime/PCG/Tests/EditMode/Maps/MapNoiseBridge2DTests.cs` — 22 tests covering
+  Worley parameterized dispatch (parity, differentiation, all 12 combos via `[Values]`),
+  ridged multifractal (differs from standard, determinism, valid range, applies to all
+  types), Standard mode isolation (ridged/Worley fields don't affect non-relevant paths),
+  ridged edge cases (offset=0, gain=0, single octave), seed variation, and
+  `FillSimplexPerlin01` legacy path stability.
+
+### Golden impact
+No golden break at defaults. `FractalMode.Standard` (zero-init) + `Euclidean` + `F1`
+(zero-init) produce bit-identical output to pre-N5.c. `FillSimplexPerlin01` constructs
+`Noise.Settings` without the new fields (zero-init = Standard), unchanged codepath.
+All existing F3–F6/G pipeline golden tests pass.
+
+### Serialization note
+`Noise.Settings` layout changed (3 new fields). Existing scene-serialized `Noise.Settings`
+instances in sample/visualization code (`NoiseVisualization`, `ProceduralSurface`) will
+reset new fields to zero on deserialization. Since `FractalMode.Standard = 0` is the
+default and the Standard path ignores `ridgedOffset`/`ridgedGain`, this is harmless.
+Samples only need re-entering values if switching to Ridged mode.
+
+### Known observation
+Worley-family noise biases toward bright values (0.5–1.0 range) in the scalar heatmap
+visualization. Cause: the `n * 0.5 + 0.5` remap in `FillNoise01Core` assumes [-1,1]
+centered output, but Voronoi distances are non-negative [0,1]. Not a bug — a normalization
+mismatch tracked as a potential post-N5.c follow-up (Worley-aware remap mode).
+
+### Test additions
+- `Worley_EuclideanF1_MatchesPreN5cWorleyCase`: determinism + golden parity
+- `Worley_SmoothEuclideanF1_DiffersFromEuclideanF1`: metric dispatch confirmed
+- `Worley_ChebyshevF1_DiffersFromEuclideanF1`: metric dispatch confirmed
+- `Worley_EuclideanF2_DiffersFromEuclideanF1`: function dispatch confirmed
+- `Worley_F2MinusF1_DiffersFromF1`: function dispatch confirmed
+- `Worley_CellAsIslands_DiffersFromF1`: function dispatch confirmed
+- `Worley_AllCombinations_ProduceValidRange` (×12): range [0,1] + non-flat for all combos
+- `Ridged_Perlin_DiffersFromStandard`: ridged ≠ standard
+- `Ridged_Perlin_IsDeterministic`: same seed → identical
+- `Ridged_Perlin_ProducesValidRange`: [0,1] + non-flat
+- `Ridged_Simplex_DiffersFromStandard`: ridged applies cross-type
+- `Ridged_Worley_DiffersFromStandard`: ridged applies to Voronoi
+- `Ridged_WorleyCellAsIslands_ProducesValidRange`: exotic combo validation
+- `Standard_RidgedFieldValues_DoNotAffectOutput`: isolation guarantee
+- `Standard_WorleyFieldValues_DoNotAffectNonWorleyOutput`: isolation guarantee
+- `Ridged_OffsetZero_ProducesValidRange`: degenerate edge case
+- `Ridged_GainZero_ProducesValidRange`: no-feedback edge case
+- `Ridged_SingleOctave_ProducesValidRange`: no-loop edge case
+- `Ridged_DifferentSeeds_ProduceDifferentOutput`: seed variation
+- `FillSimplexPerlin01_UnchangedByN5c`: legacy path stability
+
+
+## Phase N5.b — Noise Settings Assets
+Date: 2026-04-08
+
+### What changed
+- New `NoiseSettingsAsset` ScriptableObject at `Runtime/Layout/Maps/NoiseSettingsAsset.cs`.
+  `[CreateAssetMenu]` (Islands/PCG/Noise Settings). Wraps a single `TerrainNoiseSettings`
+  struct. Reusable across multiple presets and visualization components.
+- `MapGenerationPreset` extended with two optional `NoiseSettingsAsset` slots:
+  `terrainNoiseAsset` and `warpNoiseAsset`. Override-at-resolve pattern: when assigned,
+  `ToTunables()` reads from the asset; when null, reads from inline struct (backward
+  compatible).
+- **Serialization break:** `MapGenerationPreset` and all three visualization components
+  refactored from 11 individual noise fields (`terrainNoiseType`, `terrainFrequency`, ...)
+  to 2 embedded `TerrainNoiseSettings` structs (`terrainNoiseSettings`, `warpNoiseSettings`).
+  Serialized field names changed — existing preset assets and scene-serialized components
+  must re-enter noise values.
+- `TerrainNoiseSettings` extended with 5 new fields (Phase N5.b, carried but not
+  functional in noise runtime until N5.c):
+  - `WorleyDistanceMetric` enum (Euclidean, SmoothEuclidean, Chebyshev) — default Euclidean.
+  - `WorleyFunction` enum (F1, F2, F2MinusF1, CellAsIslands) — default F1.
+  - `FractalMode` enum (Standard, Ridged) — default Standard.
+  - `ridgedOffset` (float, default 1.0) — ridged multifractal offset parameter.
+  - `ridgedGain` (float, default 2.0) — ridged multifractal gain parameter.
+- `IEquatable<TerrainNoiseSettings>` implemented on the struct for dirty-tracking.
+  Replaces 11+ individual `Mathf.Approximately` / enum comparisons per consumer with
+  a single `Equals()` call.
+- New `TerrainNoiseSettingsDrawer` custom PropertyDrawer at `Editor/TerrainNoiseSettingsDrawer.cs`.
+  Conditional field visibility: Worley fields hidden when noiseType != Worley; ridged fields
+  hidden when fractalMode == Standard. Applies automatically wherever the struct is serialized.
+- All three visualization components (PCGMapVisualization, PCGMapCompositeVisualization,
+  PCGMapTilemapVisualization) updated: NoiseSettingsAsset slots, embedded noise structs,
+  simplified dirty-tracking. Resolution chain: preset → asset → inline struct.
+- `PCGMapTilemapVisualizationEditor` updated: draws noise asset slots with info boxes
+  when asset overrides are active; uses PropertyDrawer for struct fields.
+
+### Golden impact
+No golden break at defaults. All new enum/float fields have identity defaults that produce
+bit-identical output to pre-N5.b. New fields are carried in the struct but ignored by
+`MapNoiseBridge2D.FillNoise01` until N5.c adds the corresponding case branches.
+
+### Test additions
+- `DefaultValues_TerrainNoise_N5bFieldsHaveIdentityDefaults`: verifies new field defaults.
+- `DefaultValues_WarpNoise_N5bFieldsHaveIdentityDefaults`: same for warp.
+- `DefaultValues_NoiseAssets_AreNull`: verifies null-by-default asset slots.
+- `ToTunables_WithTerrainNoiseAsset_ReadsFromAsset`: asset override resolution.
+- `ToTunables_NullTerrainNoiseAsset_ReadsInlineSettings`: inline fallback.
+- `ToTunables_WithWarpNoiseAsset_ReadsFromAsset`: warp asset override.
+- `TerrainNoiseSettings_Equals_DefaultsAreEqual`: IEquatable identity.
+- `TerrainNoiseSettings_Equals_DifferentFieldsAreNotEqual`: base field inequality.
+- `TerrainNoiseSettings_Equals_DifferentN5bFieldsAreNotEqual`: new field inequality.
+
+### Modified files
+- `TerrainNoiseSettings.cs` — extended struct + 3 new enums + IEquatable.
+- `NoiseSettingsAsset.cs` — **new** ScriptableObject.
+- `MapGenerationPreset.cs` — asset slots + struct embed + ToTunables update.
+- `PCGMapVisualization.cs` — struct embed + asset slots + dirty tracking.
+- `PCGMapCompositeVisualization.cs` — same.
+- `PCGMapTilemapVisualization.cs` — same.
+- `PCGMapTilemapVisualizationEditor.cs` — asset slot drawing + PropertyDrawer.
+- `TerrainNoiseSettingsDrawer.cs` — **new** Editor-only PropertyDrawer.
+- `MapGenerationPresetTests.cs` — extended test coverage.
+
+### No new MapLayerId or MapFieldId.
+
+
 ## Phase N5.a — Base Shape Selector
 Date: 2026-04-08
 

@@ -2,6 +2,7 @@
     "name": "Islands.PCG.Editor",
     "rootNamespace": "Islands.PCG.Editor",
     "references": [
+        "Islands.Runtime",
         "Islands.PCG.Adapters.Tilemap",
         "Islands.PCG.Samples.Shared",
         "Islands.PCG.Runtime"

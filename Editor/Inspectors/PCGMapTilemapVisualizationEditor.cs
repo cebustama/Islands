@@ -12,6 +12,8 @@ namespace Islands.PCG.Editor
     /// Phase N4: TerrainNoiseSettings + WarpNoiseSettings + heightQuantSteps.
     /// Phase F3b: hillsThresholdL1 / hillsThresholdL2.
     /// Phase N5.a: shapeMode (IslandShapeMode).
+    /// Phase N5.b: NoiseSettingsAsset slots. Refactored individual noise fields to
+    ///             embedded TerrainNoiseSettings structs drawn via PropertyDrawer.
     /// </summary>
     [CustomEditor(typeof(PCGMapTilemapVisualization))]
     public sealed class PCGMapTilemapVisualizationEditor : UnityEditor.Editor
@@ -31,10 +33,10 @@ namespace Islands.PCG.Editor
         private SerializedProperty shapeMode;
         private SerializedProperty islandRadius01, islandAspectRatio, warpAmplitude01, islandSmoothFrom01, islandSmoothTo01;
         private SerializedProperty waterThreshold01, shallowWaterDepth01, midWaterDepth01;
-        // N4: terrain noise
-        private SerializedProperty terrainNoiseType, terrainFrequency, terrainOctaves, terrainLacunarity, terrainPersistence, terrainAmplitude;
-        // N4: warp noise
-        private SerializedProperty warpNoiseType, warpFrequency, warpOctaves, warpLacunarity, warpPersistence;
+        // N5.b: noise settings assets
+        private SerializedProperty terrainNoiseAsset, warpNoiseAsset;
+        // N5.b: embedded noise structs (drawn via TerrainNoiseSettingsDrawer)
+        private SerializedProperty terrainNoiseSettings, warpNoiseSettings;
         // N4: height quantization
         private SerializedProperty heightQuantSteps;
         private SerializedProperty heightRedistributionExponent, heightRemapCurve;
@@ -64,19 +66,12 @@ namespace Islands.PCG.Editor
             waterThreshold01 = serializedObject.FindProperty("waterThreshold01");
             shallowWaterDepth01 = serializedObject.FindProperty("shallowWaterDepth01");
             midWaterDepth01 = serializedObject.FindProperty("midWaterDepth01");
-            // N4: terrain noise
-            terrainNoiseType = serializedObject.FindProperty("terrainNoiseType");
-            terrainFrequency = serializedObject.FindProperty("terrainFrequency");
-            terrainOctaves = serializedObject.FindProperty("terrainOctaves");
-            terrainLacunarity = serializedObject.FindProperty("terrainLacunarity");
-            terrainPersistence = serializedObject.FindProperty("terrainPersistence");
-            terrainAmplitude = serializedObject.FindProperty("terrainAmplitude");
-            // N4: warp noise
-            warpNoiseType = serializedObject.FindProperty("warpNoiseType");
-            warpFrequency = serializedObject.FindProperty("warpFrequency");
-            warpOctaves = serializedObject.FindProperty("warpOctaves");
-            warpLacunarity = serializedObject.FindProperty("warpLacunarity");
-            warpPersistence = serializedObject.FindProperty("warpPersistence");
+            // N5.b: noise settings assets
+            terrainNoiseAsset = serializedObject.FindProperty("terrainNoiseAsset");
+            warpNoiseAsset = serializedObject.FindProperty("warpNoiseAsset");
+            // N5.b: embedded noise structs
+            terrainNoiseSettings = serializedObject.FindProperty("terrainNoiseSettings");
+            warpNoiseSettings = serializedObject.FindProperty("warpNoiseSettings");
             // N4: height quantization
             heightQuantSteps = serializedObject.FindProperty("heightQuantSteps");
             heightRedistributionExponent = serializedObject.FindProperty("heightRedistributionExponent");
@@ -133,7 +128,7 @@ namespace Islands.PCG.Editor
                 EditorGUILayout.PropertyField(enableTraversalStage);
                 EditorGUILayout.PropertyField(enableMorphologyStage);
 
-                EditorGUILayout.PropertyField(shapeMode);          // N5.a — draws in [Header("Island Shape")]
+                EditorGUILayout.PropertyField(shapeMode);          // N5.a
                 EditorGUILayout.PropertyField(islandRadius01);     // draws [Header("Island Shape")]
                 EditorGUILayout.PropertyField(islandAspectRatio);
                 EditorGUILayout.PropertyField(warpAmplitude01);
@@ -144,20 +139,27 @@ namespace Islands.PCG.Editor
                 EditorGUILayout.PropertyField(shallowWaterDepth01);
                 EditorGUILayout.PropertyField(midWaterDepth01);
 
-                // N4: terrain noise
-                EditorGUILayout.PropertyField(terrainNoiseType);  // draws [Header("Terrain Noise (N4)")]
-                EditorGUILayout.PropertyField(terrainFrequency);
-                EditorGUILayout.PropertyField(terrainOctaves);
-                EditorGUILayout.PropertyField(terrainLacunarity);
-                EditorGUILayout.PropertyField(terrainPersistence);
-                EditorGUILayout.PropertyField(terrainAmplitude);
+                // N5.b: noise settings assets
+                EditorGUILayout.PropertyField(terrainNoiseAsset); // draws [Header("Noise Settings Assets (N5.b)")]
+                EditorGUILayout.PropertyField(warpNoiseAsset);
 
-                // N4: warp noise
-                EditorGUILayout.PropertyField(warpNoiseType);  // draws [Header("Warp Noise (N4)")]
-                EditorGUILayout.PropertyField(warpFrequency);
-                EditorGUILayout.PropertyField(warpOctaves);
-                EditorGUILayout.PropertyField(warpLacunarity);
-                EditorGUILayout.PropertyField(warpPersistence);
+                // N5.b: terrain noise struct (PropertyDrawer handles conditional visibility)
+                bool hasTerrainAsset = terrainNoiseAsset.objectReferenceValue != null;
+                if (hasTerrainAsset)
+                    EditorGUILayout.HelpBox(
+                        "Terrain noise asset assigned \u2014 inline settings below are ignored.",
+                        MessageType.Info);
+                using (new EditorGUI.DisabledScope(hasTerrainAsset))
+                    EditorGUILayout.PropertyField(terrainNoiseSettings); // draws [Header("Terrain Noise")]
+
+                // N5.b: warp noise struct (PropertyDrawer handles conditional visibility)
+                bool hasWarpAsset = warpNoiseAsset.objectReferenceValue != null;
+                if (hasWarpAsset)
+                    EditorGUILayout.HelpBox(
+                        "Warp noise asset assigned \u2014 inline settings below are ignored.",
+                        MessageType.Info);
+                using (new EditorGUI.DisabledScope(hasWarpAsset))
+                    EditorGUILayout.PropertyField(warpNoiseSettings); // draws [Header("Warp Noise")]
 
                 // N4: height quantization
                 EditorGUILayout.PropertyField(heightQuantSteps);  // draws [Header("Height Quantization (N4)")]

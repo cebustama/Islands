@@ -10,7 +10,7 @@ Status date: 2026-04-08
 
 ## What is implemented now (confirmed for documentation authority purposes)
 - New PCG runtime direction: grid-first, deterministic, adapters-last.
-- Map Pipeline by Layers implemented slice: **F0–F6 + F3b + F4b + F4c + Phase G + Phase H + Phase H1 + Phase H2 + Phase H2b + Phase H2c + Phase H2d + Phase H3 + Phase H4 + Phase H5 + Phase H6 + Phase H7 + Phase J2 + Phase N2 + Post-N2 Fixes + Phase N4**.
+- Map Pipeline by Layers implemented slice: **F0–F6 + F3b + F4b + F4c + Phase G + Phase H + Phase H1 + Phase H2 + Phase H2b + Phase H2c + Phase H2d + Phase H3 + Phase H4 + Phase H5 + Phase H6 + Phase H7 + Phase J2 + Phase N2 + Post-N2 Fixes + Phase N4 + Phase N5.a + Phase N5.b + Phase N5.c**.
 - Layout strategies are an implemented, test-gated support surface under PCG.
 - GraphLibrary runtime is a real implemented surface, but it is **not** promoted subsystem authority.
 - Noise runtime is real and coherent, but it is currently a governed reference / staged support surface, not a promoted subsystem SSoT.
@@ -19,7 +19,50 @@ Status date: 2026-04-08
 - Shader assets and HLSL helpers are active support artifacts, but not a promoted subsystem SSoT.
 
 ## What current package development just resolved
-- Phase F3b — Height-Coherent Hills (Clean Break).
+- Phase N5.c — Extended Noise Palette + Ridged Multifractal.
+  Worley noise type (`TerrainNoiseType.Worley`) is now a parameterized family driven by
+  `WorleyDistanceMetric` (Euclidean, SmoothEuclidean, Chebyshev) × `WorleyFunction`
+  (F1, F2, F2MinusF1, CellAsIslands) = 12 generic instantiations dispatched via a flat
+  switch in `MapNoiseBridge2D.FillWorleyNoise01`. No new `TerrainNoiseType` enum entries
+  were added; the existing `Worley` entry is parameterized by the N5.b struct fields.
+  `FractalMode` enum migrated from `Islands.PCG.Layout.Maps` to `Islands` namespace
+  (declared in `Noise.cs`). `Noise.Settings` extended with `fractalMode`, `ridgedOffset`,
+  `ridgedGain`. `Noise.GetFractalNoise<N>()` branches on `fractalMode`: Standard path is
+  unchanged (zero golden break); Ridged path calls new private `GetRidgedFractalNoise<N>()`
+  implementing the Musgrave ridged multifractal algorithm (offset–abs–square with
+  inter-octave gain feedback). Applies to all `INoise` types (Perlin, Simplex, Value,
+  all Worley variants).
+  Assembly references updated: `Islands.PCG.Editor` and `Islands.PCG.Tests.EditMode`
+  now reference `Islands.Runtime` directly for `FractalMode` resolution.
+  New `MapNoiseBridge2DTests.cs` with 22 tests covering Worley dispatch, ridged behavior,
+  determinism, range invariants, edge cases, and legacy path stability.
+  Zero golden break at defaults. Zero RNG consumption. No new MapLayerId or MapFieldId.
+  Known visual observation: Worley-family noise biases toward bright values due to the
+  `n * 0.5 + 0.5` remap assuming [-1,1] centered output. Worley outputs non-negative
+  distances, mapping to [0.5,1.0]. Tracked as potential post-N5.c follow-up
+  (Worley-aware normalization in FillNoise01Core).
+- Prior resolution: Phase N5.b — Noise Settings Assets.
+  Added `NoiseSettingsAsset` ScriptableObject wrapping `TerrainNoiseSettings`, following
+  the override-at-resolve pattern: when assigned to a preset or component noise slot, the
+  asset's settings replace inline values; when null, inline values are used.
+  `MapGenerationPreset` extended with `terrainNoiseAsset` and `warpNoiseAsset` slots.
+  `ToTunables()` resolves asset → inline struct.
+  All three visualization Inspectors updated with noise asset slots + embedded struct fields.
+  Refactored 11 individual noise fields per consumer to 2 embedded `TerrainNoiseSettings`
+  structs (serialization break for existing preset assets and scene-serialized components).
+  `TerrainNoiseSettings` extended with 5 new fields: `WorleyDistanceMetric` enum
+  (Euclidean, SmoothEuclidean, Chebyshev), `WorleyFunction` enum (F1, F2, F2MinusF1,
+  CellAsIslands), `FractalMode` enum (Standard, Ridged), `ridgedOffset` (float, 1.0),
+  `ridgedGain` (float, 2.0). All new fields carried but not functional until N5.c.
+  `IEquatable<TerrainNoiseSettings>` added for dirty-tracking.
+  Custom `TerrainNoiseSettingsDrawer` PropertyDrawer provides conditional visibility:
+  Worley fields hidden when noiseType != Worley; ridged fields hidden when
+  fractalMode == Standard.
+- Prior resolution: Phase N5.a — Base Shape Selector.
+  `IslandShapeMode` enum (Ellipse/Rectangle/NoShape/Custom) + `shapeMode` field on
+  `MapTunables2D`. Ellipse default = bit-identical to pre-N5.a. All visualization
+  Inspectors + Editor updated. Zero golden break at defaults. Zero RNG consumption.
+- Prior resolution: Phase F3b — Height-Coherent Hills (Clean Break).
   Replaced topology-based Stage_Hills2D (independent noise on LandInterior) with
   height-threshold classification. HillsL1 and HillsL2 are now derived from
   Height field thresholds via `MapTunables2D.hillsThresholdL1` / `hillsThresholdL2`.
@@ -72,35 +115,31 @@ Status date: 2026-04-08
 - Open design questions recorded in the roadmap: river representation, lake modeling, biome output format — now all resolved as design decisions in the roadmap.
 - `MapFieldId.Moisture` write ownership confirmed: Phase M.
 - `MapLayerId.Paths` write ownership confirmed: Phase O.
-- N3 (Ridged Multifractal) design decision A/B/C still open — deferred to Phase K or Phase W.
 - Unity version target for `TilemapCollider2D.usedByComposite` deprecation: upgrade to
   `compositeOperation` if targeting Unity 2022.2+ exclusively (currently suppressed with `#pragma warning disable CS0618`).
 - **Hills noise modulation:** Roadmapped as Phase N5.d. A `hillsNoiseBlend` parameter
   (0–1) will mix per-cell noise offsets into the height thresholds for additional variation.
   No contract changes. See N5 section in roadmap.
+- **Worley normalization bias:** Voronoi-family noise biases toward [0.5,1.0] after the
+  standard `n * 0.5 + 0.5` remap because Worley outputs non-negative distances rather
+  than [-1,1] centered values. A Worley-aware normalization mode in FillNoise01Core
+  would improve visual contrast. Small follow-up, no contract impact.
 
 ## Noted desired features (not yet roadmapped as phases)
-- **Configurable base shape selector (post-N4 observation):** Currently the island silhouette
-  is always an ellipse (F2b path) or an external binary mask (F2c path). A shape enum on
-  MapGenerationPreset/Inspector (Ellipse, Rectangle, NoShape/RawNoise, polar shapes, custom
-  sprite mask) would expand creative control. The F2c MapShapeInput infrastructure already
-  exists — what is missing is built-in shape generators and an Inspector-facing selector.
-  The "NoShape" option (mask01 = 1.0 everywhere, coastline determined solely by noise +
-  water threshold) is the simplest addition and produces continent-like shapes from noise
-  alone. Schedule after F3b when the height field is more expressive.
-- **Extended noise type palette (post-N4 observation):** The noise runtime supports several
-  additional types not yet exposed in TerrainNoiseType: SmoothWorley, Chebyshev, F2, F2-F1,
-  CellAsIslands, Turbulence wrapper, Smoothstep wrapper. These should be incorporated
-  selectively over time. CellAsIslands is particularly interesting for archipelago generation
-  (Phase J). Each addition is a one-line enum entry + one case in the bridge switch.
+- **Extended noise type palette (post-N4 observation):** ~~The noise runtime supports several
+  additional types not yet exposed in TerrainNoiseType.~~ **Resolved by N5.c.** All
+  Worley metric × function combinations (12 total) are accessible via the parameterized
+  `Worley` enum entry + `WorleyDistanceMetric` / `WorleyFunction` struct fields.
+  CellAsIslands + SmoothEuclidean is available for archipelago generation (Phase J).
+  Ridged multifractal is implemented in the noise runtime for all noise types.
 
 ## Immediate next focus
-Phase F3b (Height-Coherent Hills) done and smoke-tested.
+Phase N5.c (Extended Noise Palette + Ridged Multifractal) done and smoke-tested.
 
 Next implementation sequence (confirmed):
-1. **Phase N5** — Noise & Shape Configuration.
-   Base shape selector, noise settings assets (ScriptableObject), extended noise palette
-   + N3 ridged multifractal.
+1. **Phase N5.d** — Hills Noise Modulation.
+   Adds optional per-cell noise offset to the height-threshold hills classification (F3b).
+   `hillsNoiseBlend` (0–1), default 0.0 = pure height-threshold (golden-safe).
 2. **Phase H8** — Mega-Tiles (2x2 large terrain sprites).
    Adapter-side. Depends on art assets with 2x2 sprite variants.
 
