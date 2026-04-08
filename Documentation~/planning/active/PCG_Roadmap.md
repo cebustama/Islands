@@ -46,7 +46,11 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase N2: done
 - Phase N4: done
 - Phase F3b: done
-- Phase N5: later (planning only — new)
+- Phase N5: in progress
+  - N5.a: done
+  - N5.b: later (planning only)
+  - N5.c: later (planning only)
+  - N5.d: later (planning only)
 - Phase I: later
 - Phase I2: later (planning only)
 - Phase J: later (planning only)
@@ -470,13 +474,14 @@ heatmap visualization.
 - No new `MapLayerId` or `MapFieldId`.
 
 ### Phase N5 — Noise & Shape Configuration
-**Next. Sequenced after Phase F3b (done), before Phase H8.**
+**In progress. N5.a done. Sequenced after Phase F3b (done), before Phase H8.**
 
 Consolidates four related configuration improvements into one phase. N5.a–c are
 independently implementable; N5.b and N5.c have natural synergy (asset format includes
 N3 fields, N3 implementation makes them functional). N5.d is independent of a–c.
 
 #### N5.a — Base Shape Selector
+**Done.**
 
 Adds an Inspector-facing shape mode enum to `Stage_BaseTerrain2D` / `MapGenerationPreset`,
 replacing the current implicit "always ellipse unless F2c shape input is provided" behavior.

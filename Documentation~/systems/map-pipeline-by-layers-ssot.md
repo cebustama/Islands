@@ -67,13 +67,20 @@ Current `MapFieldId`:
 
 ### Tunables
 `MapTunables2D`
+- `shapeMode` — `IslandShapeMode` enum: Ellipse (default), Rectangle, NoShape, Custom.
+  Selects built-in base shape generator. Overridden when `MapShapeInput.HasShape` is true.
+  Ellipse = pre-N5.a behavior (bit-identical). Rectangle = axis-aligned with Chebyshev
+  distance + smoothstep. NoShape = height IS pure noise, water threshold carves coastlines.
+  Custom = Ellipse fallback (sprite-to-mask bridge is visualization-side). *(N5.a)*
 - `islandRadius01`
 - `waterThreshold01`
 - `islandSmoothFrom01`
 - `islandSmoothTo01`
-- `islandAspectRatio` — ellipse aspect ratio; 1.0 = circle, >1 = wide, <1 = tall; clamped [0.25, 4.0] *(F2b)*
+- `islandAspectRatio` — ellipse/rectangle aspect ratio; 1.0 = circle/square, >1 = wide, <1 = tall; clamped [0.25, 4.0] *(F2b)*
+  For Rectangle mode: controls width/height ratio (halfExtentX = radius * aspect, halfExtentY = radius).
 - `warpAmplitude01` — domain warp amplitude as fraction of min(w,h); 0.0 = no warp; clamped [0, 1] *(F2b)*
-  Warp noise arrays always consumed from ctx.Rng regardless of value (stable RNG consumption count).
+  Applied to Ellipse and Rectangle modes. NoShape ignores warp geometrically.
+  Warp noise arrays always filled regardless of mode (stable downstream state).
 - deterministic clamp/order rules apply to all fields
 - stage-specific tunables stay on the stage unless they clearly become map-wide contracts
 
@@ -113,6 +120,24 @@ Current `MapFieldId`:
 - Noise perturbation still applied: `h01 = mask01 + (n - 0.5) * NoiseAmplitude * mask01`.
 - `Land ⊆ shape mask`: no Land cell exists outside the provided shape (guaranteed by construction).
 - F2b goldens unchanged. F2c goldens locked for center-circle test shape (64×64, seed=12345, radius=20).
+
+`Stage_BaseTerrain2D` (N5.a shape mode selection)
+- `shapeMode` from `MapTunables2D.shapeMode` selects built-in shape generator.
+  Priority: `MapShapeInput.HasShape == true` takes unconditional precedence over shapeMode.
+- **Ellipse** (default): F2b path unchanged. Radial smoothstep + domain warp. Bit-identical
+  to pre-N5.a output.
+- **Rectangle**: Chebyshev-normalized edge distance to axis-aligned rectangle.
+  `halfExtentX = radius * aspect`, `halfExtentY = radius`.
+  `rectDist01 = max(|v.x| / halfExtentX, |v.y| / halfExtentY)`.
+  `smoothstep(fromSq, toSq, rectDist01^2)`. Domain warp displaces before evaluation.
+  Reuses existing tunables (radius, aspect, smoothFrom/To, warp).
+- **NoShape**: `h01 = n` (noise sample IS the height). No mask, no perturbation formula.
+  Water threshold alone carves coastlines. Produces continent-like shapes from noise.
+  Warp arrays filled but not read (downstream state unchanged).
+- **Custom**: Falls back to Ellipse when no external shape is provided. Signals
+  Inspector/visualization consumers to show a Texture2D slot for sprite-to-mask rasterization.
+- No new `MapLayerId` or `MapFieldId`.
+- No golden break at defaults (Ellipse). New goldens locked for Rectangle and NoShape modes.
 
 ### F3 / F3b — Hills + Topology (Stage_Hills2D)
 

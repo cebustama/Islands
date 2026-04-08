@@ -23,6 +23,7 @@ namespace Islands.PCG.Samples
     /// Phase N4: TerrainNoiseSettings replaces noiseCellSize/noiseAmplitude/quantSteps.
     ///           Separate warp noise settings. heightQuantSteps tunable.
     /// Phase F3b: hillsThresholdL1 / hillsThresholdL2 for height-coherent hills.
+    /// Phase N5.a: shapeMode (IslandShapeMode enum) for base shape selection.
     /// </summary>
     [CreateAssetMenu(
         fileName = "MapGenerationPreset",
@@ -78,39 +79,49 @@ namespace Islands.PCG.Samples
         public bool enableMorphologyStage = true;
 
         // ==================================================================
-        // Island Shape
+        // Island Shape (N5.a)
         // ==================================================================
 
         [Header("Island Shape")]
+        [Tooltip("Base shape generator for the island silhouette.\n" +
+                 "Ellipse (default): radial smoothstep falloff + domain warp.\n" +
+                 "Rectangle: axis-aligned rectangle with soft edges + domain warp.\n" +
+                 "NoShape: pure noise — water threshold carves coastlines (continent-like).\n" +
+                 "Custom: use an external shape mask (Texture2D on visualization component).\n\n" +
+                 "External shape input (F2c MapShapeInput) always overrides this setting.")]
+        public IslandShapeMode shapeMode = IslandShapeMode.Ellipse;
+
         [Range(0f, 1f)]
         [Tooltip("Island size as a fraction of the smaller map dimension.\n" +
                  "0.45 = island fills ~90% of the map width. Smaller values\n" +
-                 "produce a smaller island with more surrounding ocean.")]
+                 "produce a smaller island with more surrounding ocean.\n" +
+                 "For Rectangle mode: controls the half-extent scale.")]
         public float islandRadius01 = 0.45f;
 
         [Range(0.25f, 4f)]
-        [Tooltip("Ellipse aspect ratio applied to the island silhouette.\n" +
-                 "1.0 = circular island. > 1 = wider (east-west stretched).\n" +
+        [Tooltip("Ellipse/Rectangle aspect ratio applied to the island silhouette.\n" +
+                 "1.0 = circular/square island. > 1 = wider (east-west stretched).\n" +
                  "< 1 = taller (north-south stretched). Range [0.25 .. 4.0].")]
         public float islandAspectRatio = 1.00f;
 
         [Range(0f, 1f)]
         [Tooltip("Domain warp amplitude as a fraction of the map size.\n" +
-                 "0 = no warp (clean ellipse/circle outline).\n" +
+                 "0 = no warp (clean ellipse/circle/rectangle outline).\n" +
                  "~0.15 = subtle organic coastline with natural bays.\n" +
                  "~0.30 = strong coastline variation with deep bays and peninsulas.\n" +
-                 "Higher values produce increasingly irregular shapes.")]
+                 "Higher values produce increasingly irregular shapes.\n" +
+                 "Applied to Ellipse and Rectangle modes. NoShape ignores warp geometrically.")]
         public float warpAmplitude01 = 0.00f;
 
         [Range(0f, 1f)]
-        [Tooltip("Smoothstep inner edge of the radial falloff.\n" +
+        [Tooltip("Smoothstep inner edge of the radial/edge falloff.\n" +
                  "Controls how abruptly terrain transitions from full height to ocean.\n" +
                  "Lower values = sharper cliff-like coasts.\n" +
                  "Must be <= Smooth To (clamped internally if reversed).")]
         public float islandSmoothFrom01 = 0.30f;
 
         [Range(0f, 1f)]
-        [Tooltip("Smoothstep outer edge of the radial falloff.\n" +
+        [Tooltip("Smoothstep outer edge of the radial/edge falloff.\n" +
                  "Controls how far the terrain gradient extends toward the map edge.\n" +
                  "Higher values = more gradual coastal slopes.\n" +
                  "Must be >= Smooth From (clamped internally if reversed).")]
@@ -125,7 +136,8 @@ namespace Islands.PCG.Samples
         [Tooltip("Height threshold that separates Land from water.\n" +
                  "Cells with Height >= this value become Land; cells below become water.\n" +
                  "Higher values = smaller island (more ocean). Lower = larger island.\n" +
-                 "Default 0.50 gives balanced land/water ratio at default radius.")]
+                 "Default 0.50 gives balanced land/water ratio at default radius.\n" +
+                 "For NoShape mode: this is the primary control for land/water balance.")]
         public float waterThreshold01 = 0.50f;
 
         [Range(0f, 0.5f)]
@@ -183,7 +195,8 @@ namespace Islands.PCG.Samples
         [Range(0f, 1f)]
         [Tooltip("How much height variation noise adds to the island silhouette.\n" +
                  "0 = perfectly smooth dome. 0.35 = natural variation (default).\n" +
-                 "Higher values produce more varied terrain with potential inland lakes.")]
+                 "Higher values produce more varied terrain with potential inland lakes.\n" +
+                 "In NoShape mode: noise IS the height field, so amplitude is not used for perturbation.")]
         public float terrainAmplitude = 0.35f;
 
         // ==================================================================
@@ -286,6 +299,7 @@ namespace Islands.PCG.Samples
         /// The AnimationCurve is sampled into a piecewise-linear ScalarSpline (N2).
         /// Phase N4: includes terrain noise, warp noise, and height quant settings.
         /// Phase F3b: includes hills threshold settings.
+        /// Phase N5.a: includes shapeMode.
         /// </summary>
         public MapTunables2D ToTunables() => new MapTunables2D(
             islandRadius01: islandRadius01,
@@ -316,6 +330,7 @@ namespace Islands.PCG.Samples
             },
             heightQuantSteps: heightQuantSteps,
             hillsThresholdL1: hillsThresholdL1,
-            hillsThresholdL2: hillsThresholdL2);
+            hillsThresholdL2: hillsThresholdL2,
+            shapeMode: shapeMode);
     }
 }

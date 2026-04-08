@@ -1,5 +1,51 @@
 # Changelog — SSoT
 
+## Phase N5.a — Base Shape Selector
+Date: 2026-04-08
+
+### What changed
+- New `IslandShapeMode` enum at `Runtime/PCG/Layout/Maps/IslandShapeMode.cs`:
+  Ellipse (default), Rectangle, NoShape, Custom. Future: PolarCoords.
+- `MapTunables2D` extended with `shapeMode` field (default Ellipse).
+  Constructor parameter is last with default, so all existing call sites are
+  backward compatible with no code changes.
+- `Stage_BaseTerrain2D` extended with shape mode switch in the hot loop:
+  - Ellipse: unchanged F2b radial smoothstep + domain warp (bit-identical).
+  - Rectangle: Chebyshev-normalized distance (max(|v.x|/halfX, |v.y|/halfY)),
+    same smoothstep(fromSq, toSq, distSq) semantics as Ellipse. Domain warp
+    displaces before edge evaluation. Half-extents from radius * aspect.
+  - NoShape: h01 = noise sample directly. No mask, no perturbation formula.
+    Water threshold alone carves coastlines.
+  - Custom: falls back to Ellipse when no MapShapeInput is provided.
+  - F2c `MapShapeInput.HasShape` takes unconditional priority over shapeMode.
+- `BaseTerrainStage_Configurable` updated with identical shape mode switch
+  (lantern twin kept in sync).
+- `MapGenerationPreset` extended with `shapeMode` field + `ToTunables()` updated.
+- All three visualization Inspectors (PCGMapVisualization, PCGMapCompositeVisualization,
+  PCGMapTilemapVisualization) updated with shapeMode field, dirty tracking, tunables wiring.
+- `PCGMapTilemapVisualizationEditor` updated to draw shapeMode when no preset assigned.
+- Console log lines updated to include `shape=` in debug output.
+
+### Golden impact
+No golden break at defaults. `IslandShapeMode.Ellipse` (default) produces bit-identical
+output to pre-N5.a. Rectangle and NoShape modes produce new distinct output (expected).
+New Rectangle and NoShape goldens locked.
+
+### Test additions
+- `N5a_Ellipse_Default_MatchesPreN5aGoldens`: proves backward compatibility.
+- Rectangle: determinism, differs-from-Ellipse, invariants, golden lock, seed variation.
+- NoShape: determinism, differs-from-Ellipse, produces-land-and-water, invariants,
+  golden lock, seed variation.
+- `N5a_Custom_WithoutShapeInput_MatchesEllipse`: Custom fallback verified.
+- `N5a_ShapeInput_TakesPriorityOverShapeMode`: F2c priority contract verified.
+- `MapGenerationPresetTests`: shapeMode default, forwarding for all four enum values.
+
+### No new MapLayerId or MapFieldId.
+
+## Phase F3b — Height-Coherent Hills (Clean Break)
+Date: 2026-04-08
+
+
 ## Phase F3b — Height-Coherent Hills (Clean Break)
 Date: 2026-04-08
 

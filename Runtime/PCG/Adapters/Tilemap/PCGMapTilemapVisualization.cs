@@ -86,6 +86,7 @@ namespace Islands.PCG.Adapters.Tilemap
         [Range(0f, 1f)][SerializeField] private float islandRadius01 = 0.45f;
         [Range(0.25f, 4f)][SerializeField] private float islandAspectRatio = 1.00f;
         [Range(0f, 1f)][SerializeField] private float warpAmplitude01 = 0.00f;
+        [SerializeField] private IslandShapeMode shapeMode = IslandShapeMode.Ellipse;
         [Range(0f, 1f)][SerializeField] private float islandSmoothFrom01 = 0.30f;
         [Range(0f, 1f)][SerializeField] private float islandSmoothTo01 = 0.70f;
 
@@ -203,6 +204,7 @@ namespace Islands.PCG.Adapters.Tilemap
         private float lastIslandRadius01, lastWaterThreshold01;
         private float lastIslandSmoothFrom01, lastIslandSmoothTo01;
         private float lastIslandAspectRatio, lastWarpAmplitude01;
+        private IslandShapeMode lastShapeMode;
         private float lastHeightRedistributionExponent;
         // F3b hills dirty tracking
         private float lastHillsThresholdL1;
@@ -314,7 +316,8 @@ namespace Islands.PCG.Adapters.Tilemap
                       },
                       heightQuantSteps: preset != null ? preset.heightQuantSteps : heightQuantSteps,
                       hillsThresholdL1: preset != null ? preset.hillsThresholdL1 : hillsThresholdL1,
-                      hillsThresholdL2: preset != null ? preset.hillsThresholdL2 : hillsThresholdL2);
+                      hillsThresholdL2: preset != null ? preset.hillsThresholdL2 : hillsThresholdL2,
+                      shapeMode: preset != null ? preset.shapeMode : shapeMode);
 
             EnsureContextAllocated(eRes);
 
@@ -372,6 +375,7 @@ namespace Islands.PCG.Adapters.Tilemap
 
             Debug.Log(
                 $"[PCGMapTilemapVisualization] #{updateCalls} res={eRes} seed={eSeed} " +
+                $"shape={eTun.shapeMode} " +
                 $"hills={eHills} shore={eShore} veg={eVeg} trav={eTrav} morph={eMorph} " +
                 $"flipY={flipY} proc={useProceduralTiles} multi={enableMultiLayer} " +
                 $"overlay={enableScalarOverlay}({overlayField}) heatmap={scalarHeatmapTilemap != null} tiles={stamped}/{eRes * eRes}");
@@ -586,6 +590,7 @@ namespace Islands.PCG.Adapters.Tilemap
             lastIslandSmoothTo01 = preset != null ? preset.islandSmoothTo01 : islandSmoothTo01;
             lastIslandAspectRatio = preset != null ? preset.islandAspectRatio : islandAspectRatio;
             lastWarpAmplitude01 = preset != null ? preset.warpAmplitude01 : warpAmplitude01;
+            lastShapeMode = preset != null ? preset.shapeMode : shapeMode;
             lastHeightRedistributionExponent = preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent;
             // F3b hills params
             lastHillsThresholdL1 = preset != null ? preset.hillsThresholdL1 : hillsThresholdL1;
@@ -643,6 +648,7 @@ namespace Islands.PCG.Adapters.Tilemap
                 || !Mathf.Approximately(preset != null ? preset.islandSmoothTo01 : islandSmoothTo01, lastIslandSmoothTo01)
                 || !Mathf.Approximately(preset != null ? preset.islandAspectRatio : islandAspectRatio, lastIslandAspectRatio)
                 || !Mathf.Approximately(preset != null ? preset.warpAmplitude01 : warpAmplitude01, lastWarpAmplitude01)
+                || (preset != null ? preset.shapeMode : shapeMode) != lastShapeMode
                 || !Mathf.Approximately(preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent, lastHeightRedistributionExponent)
                 // F3b hills params
                 || !Mathf.Approximately(preset != null ? preset.hillsThresholdL1 : hillsThresholdL1, lastHillsThresholdL1)

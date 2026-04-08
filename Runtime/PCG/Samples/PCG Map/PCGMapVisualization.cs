@@ -1,14 +1,13 @@
-﻿using Unity.Collections;
-using Unity.Jobs;
-using Unity.Mathematics;
-using UnityEngine;
-
-using Islands.PCG.Core;
+﻿using Islands.PCG.Core;
 using Islands.PCG.Fields;
 using Islands.PCG.Grids;
 using Islands.PCG.Layout.Maps;
 using Islands.PCG.Layout.Maps.Stages;
 using Islands.PCG.Operators;
+using Unity.Collections;
+using Unity.Jobs;
+using Unity.Mathematics;
+using UnityEngine;
 
 namespace Islands.PCG.Samples
 {
@@ -47,6 +46,7 @@ namespace Islands.PCG.Samples
     ///          (useLayerPresetColors toggle + layerPresetOnColors array).
     /// Phase H3: added optional MapGenerationPreset slot (override-at-resolve pattern).
     /// Phase N4: TerrainNoiseSettings replaces noiseCellSize/noiseAmplitude/quantSteps.
+    /// Phase N5.a: IslandShapeMode selector (Ellipse, Rectangle, NoShape, Custom).
     /// </summary>
     public sealed class PCGMapVisualization : Visualization
     {
@@ -109,6 +109,10 @@ namespace Islands.PCG.Samples
             new Color(0.00f, 0.65f, 0.40f, 1f),  // 11 LandCore
             new Color(0.10f, 0.30f, 0.75f, 1f),  // 12 MidWater
         };
+
+        // N5.a: shape mode
+        [Header("Island Shape (N5.a)")]
+        [SerializeField] private IslandShapeMode shapeMode = IslandShapeMode.Ellipse;
 
         [Header("F2 Tunables (Shape + Threshold)")]
         [Range(0f, 1f)][SerializeField] private float islandRadius01 = 0.45f;
@@ -175,6 +179,7 @@ namespace Islands.PCG.Samples
         private bool lastUseLayerPresetColors;
         private Color lastMaskOffColor;
         private Color lastMaskOnColor;
+        private IslandShapeMode lastShapeMode;
         private float lastIslandRadius01;
         private float lastWaterThreshold01;
         private float lastIslandSmoothFrom01;
@@ -318,7 +323,8 @@ namespace Islands.PCG.Samples
                       },
                       heightQuantSteps: heightQuantSteps,
                       hillsThresholdL1: hillsThresholdL1,
-                      hillsThresholdL2: hillsThresholdL2);
+                      hillsThresholdL2: hillsThresholdL2,
+                      shapeMode: shapeMode);
 
             ApplyPaletteToMpb();
             EnsureContextAllocated(resolution);
@@ -394,6 +400,7 @@ namespace Islands.PCG.Samples
 
                 Debug.Log(
                     $"[PCGMapVisualization] Update #{updateCalls} res={resolution} seed={eSeed} " +
+                    $"shape={eTun.shapeMode} " +
                     $"aspect={eTun.islandAspectRatio:F2} warp={eTun.warpAmplitude01:F2} " +
                     $"hills={eHills} shore={eShore} " +
                     $"veg={eVeg} traversal={eTrav} " +
@@ -503,6 +510,7 @@ namespace Islands.PCG.Samples
             lastUseLayerPresetColors = useLayerPresetColors;
             lastMaskOffColor = maskOffColor;
             lastMaskOnColor = maskOnColor;
+            lastShapeMode = preset != null ? preset.shapeMode : shapeMode;
             lastIslandRadius01 = preset != null ? preset.islandRadius01 : islandRadius01;
             lastWaterThreshold01 = preset != null ? preset.waterThreshold01 : waterThreshold01;
             lastIslandSmoothFrom01 = preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01;
@@ -546,6 +554,7 @@ namespace Islands.PCG.Samples
                 || useLayerPresetColors != lastUseLayerPresetColors
                 || maskOffColor != lastMaskOffColor
                 || maskOnColor != lastMaskOnColor
+                || (preset != null ? preset.shapeMode : shapeMode) != lastShapeMode
                 || !Mathf.Approximately(preset != null ? preset.islandRadius01 : islandRadius01, lastIslandRadius01)
                 || !Mathf.Approximately(preset != null ? preset.waterThreshold01 : waterThreshold01, lastWaterThreshold01)
                 || !Mathf.Approximately(preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01, lastIslandSmoothFrom01)

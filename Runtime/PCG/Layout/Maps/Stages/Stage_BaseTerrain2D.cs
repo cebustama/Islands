@@ -10,27 +10,44 @@ using Islands.PCG.Operators;
 namespace Islands.PCG.Layout.Maps.Stages
 {
     /// <summary>
-    /// N4 / F2c / J2 / N2 — Base terrain stage: ellipse + domain-warp silhouette, with optional
-    /// external shape input, height redistribution, and spline remapping.
+    /// N5.a / N4 / F2c / J2 / N2 — Base terrain stage: configurable base shape + domain-warp
+    /// silhouette, with optional external shape input, height redistribution, and spline remapping.
     ///
     /// Writes:
     /// - Field: Height    (ScalarField2D) in [0..1]
     /// - Layer: Land      (MaskGrid2D)    where Height >= waterThreshold01
     /// - Layer: DeepWater (MaskGrid2D)    = border-connected NOT Land (stable flood fill)
     ///
-    /// Shape pipeline — no shape input (F2b path, default):
+    /// Shape mode selection (N5.a — IslandShapeMode enum on MapTunables2D):
+    ///   Priority: F2c external shape (HasShape) > shapeMode enum.
+    ///
+    ///   Ellipse (default, pre-N5.a behavior):
+    ///     Radial smoothstep falloff + domain warp. Bit-identical to pre-N5.a output.
+    ///
+    ///   Rectangle:
+    ///     Axis-aligned rectangle with Chebyshev-normalized edge distance + smoothstep.
+    ///     Reuses existing tunables (radius, aspect, smooth, warp).
+    ///
+    ///   NoShape (raw noise + threshold):
+    ///     Height IS pure noise (h01 = n). No mask, no perturbation. The water threshold
+    ///     alone carves coastlines. Produces continent-like shapes from noise.
+    ///
+    ///   Custom:
+    ///     Falls back to Ellipse when no external shape is provided.
+    ///     Signals Inspector consumers to show a Texture2D slot for sprite→mask rasterization.
+    ///
+    /// Shape pipeline — no shape input (F2b/N5.a path, default):
     ///   1. Sample warpX / warpY from coordinate-hashed noise via MapNoiseBridge2D.
     ///   2. Displace the pixel's sampling point by the warp vector * warpAmplitude.
-    ///   3. Compute ellipse distance from the displaced point to map center,
-    ///      with the x-axis scaled by 1/islandAspectRatio.
-    ///   4. Apply smoothstep radial falloff on that ellipse distance.
-    ///   5. Add height perturbation noise (coordinate-hashed) inside the island.
+    ///   3. Compute shape distance (ellipse or rectangle) from the displaced point.
+    ///   4. Apply smoothstep radial/edge falloff.
+    ///   5. Add height perturbation noise (coordinate-hashed) inside the shape.
     ///
     /// Shape pipeline — external shape input (F2c path, opt-in):
     ///   1. Noise arrays are still filled (same bridge calls), so seed-derived fields
     ///      are always available for debugging / future use.
-    ///   2. mask01 = shape.GetUnchecked(x, y) ? 1f : 0f  (replaces ellipse+warp).
-    ///   3. Add height perturbation noise (same as F2b path).
+    ///   2. mask01 = shape.GetUnchecked(x, y) ? 1f : 0f  (replaces built-in shape).
+    ///   3. Add height perturbation noise (same as built-in path).
     ///
     /// Height post-processing:
     ///   quantize → pow() redistribution (J2) → spline remap (N2) → Land threshold.
@@ -45,6 +62,9 @@ namespace Islands.PCG.Layout.Maps.Stages
     /// bilinear interpolation) with proper noise runtime via MapNoiseBridge2D.
     /// Full golden break from pre-N4 output. Noise type, frequency, octaves, etc.
     /// are configurable via TerrainNoiseSettings on MapTunables2D.
+    ///
+    /// Phase N5.a: Added IslandShapeMode switch (Ellipse, Rectangle, NoShape, Custom).
+    /// Ellipse default preserves all pre-N5.a goldens (bit-identical).
     /// </summary>
     public sealed class Stage_BaseTerrain2D : IMapStage2D
     {
@@ -80,6 +100,9 @@ namespace Islands.PCG.Layout.Maps.Stages
             var t = inputs.Tunables;
             float waterThreshold = t.waterThreshold01;
 
+            // N5.a: shape mode (F2c HasShape takes unconditional priority).
+            IslandShapeMode shapeMode = t.shapeMode;
+
             // J2: height redistribution exponent.
             float redistExp = t.heightRedistributionExponent;
 
@@ -94,7 +117,7 @@ namespace Islands.PCG.Layout.Maps.Stages
             float terrainAmp = math.max(0f, terrainNoise.amplitude);
             float invQuant = (quantSteps > 1) ? (1f / quantSteps) : 0f;
 
-            // --- Shared geometry (F2b path; computed regardless so variables are in scope) ---
+            // --- Shared geometry (Ellipse/Rectangle paths; computed regardless so variables are in scope) ---
             float minDim = math.min((float)w, (float)h);
             float radius = math.max(1f, minDim * t.islandRadius01);
             float invRadiusSq = 1f / (radius * radius);
@@ -108,6 +131,13 @@ namespace Islands.PCG.Layout.Maps.Stages
             float invAspectSq = 1f / (aspect * aspect);
 
             float warpAmp = t.warpAmplitude01 * minDim;
+
+            // N5.a Rectangle: half-extents for axis-aligned rectangle.
+            float rectHalfX = radius * aspect;
+            float rectHalfY = radius;
+            // Guard against division by zero (degenerate rectangle).
+            float invRectHalfX = rectHalfX > 0f ? 1f / rectHalfX : 0f;
+            float invRectHalfY = rectHalfY > 0f ? 1f / rectHalfY : 0f;
 
             // --- N4: fill noise arrays via coordinate hashing (no ctx.Rng consumption) ---
             int cellCount = w * h;
@@ -139,33 +169,65 @@ namespace Islands.PCG.Layout.Maps.Stages
                         // Height perturbation noise (always read regardless of path).
                         float n = noise[idx];
 
-                        float mask01;
+                        float h01;
 
-                        if (useShape)
+                        // N5.a: NoShape — height IS pure noise. Skip mask entirely.
+                        if (!useShape && shapeMode == IslandShapeMode.NoShape)
                         {
-                            // F2c path: external shape drives silhouette.
-                            // warpX / warpY arrays filled but not read here.
-                            mask01 = shapeMask.GetUnchecked(x, y) ? 1f : 0f;
+                            h01 = n;
                         }
                         else
                         {
-                            // F2b path: ellipse + domain warp.
-                            float wx = warpX[idx] * 2f - 1f;
-                            float wy = warpY[idx] * 2f - 1f;
+                            float mask01;
 
-                            float2 p = new float2(x + 0.5f, y + 0.5f);
-                            float2 pw = p + new float2(wx, wy) * warpAmp;
+                            if (useShape)
+                            {
+                                // F2c path: external shape drives silhouette.
+                                // warpX / warpY arrays filled but not read here.
+                                mask01 = shapeMask.GetUnchecked(x, y) ? 1f : 0f;
+                            }
+                            else if (shapeMode == IslandShapeMode.Rectangle)
+                            {
+                                // N5.a Rectangle path: axis-aligned rectangle + domain warp.
+                                float wx = warpX[idx] * 2f - 1f;
+                                float wy = warpY[idx] * 2f - 1f;
 
-                            float2 v = pw - center;
-                            float distSq = v.x * v.x * invAspectSq + v.y * v.y;
+                                float2 p = new float2(x + 0.5f, y + 0.5f);
+                                float2 pw = p + new float2(wx, wy) * warpAmp;
 
-                            float radial01Sq = math.saturate(distSq * invRadiusSq);
-                            float s = math.smoothstep(fromSq, toSq, radial01Sq);
-                            mask01 = 1f - s;
+                                float2 v = pw - center;
+
+                                // Chebyshev-normalized distance: 0 at center, 1 at rectangle edge.
+                                float fracX = math.abs(v.x) * invRectHalfX;
+                                float fracY = math.abs(v.y) * invRectHalfY;
+                                float rectDist01 = math.max(fracX, fracY);
+
+                                // Same smoothstep semantics as ellipse (squared distance space).
+                                float rectDistSq = rectDist01 * rectDist01;
+                                float s = math.smoothstep(fromSq, toSq, rectDistSq);
+                                mask01 = 1f - s;
+                            }
+                            else
+                            {
+                                // Ellipse path (default): also used as Custom fallback.
+                                float wx = warpX[idx] * 2f - 1f;
+                                float wy = warpY[idx] * 2f - 1f;
+
+                                float2 p = new float2(x + 0.5f, y + 0.5f);
+                                float2 pw = p + new float2(wx, wy) * warpAmp;
+
+                                float2 v = pw - center;
+                                float distSq = v.x * v.x * invAspectSq + v.y * v.y;
+
+                                float radial01Sq = math.saturate(distSq * invRadiusSq);
+                                float s = math.smoothstep(fromSq, toSq, radial01Sq);
+                                mask01 = 1f - s;
+                            }
+
+                            // Height = island mask + noise perturbation (inside island only).
+                            h01 = mask01 + (n - 0.5f) * terrainAmp * mask01;
                         }
 
-                        // Height = island mask + noise perturbation (inside island only).
-                        float h01 = mask01 + (n - 0.5f) * terrainAmp * mask01;
                         h01 = math.saturate(h01);
 
                         if (quantSteps > 1)

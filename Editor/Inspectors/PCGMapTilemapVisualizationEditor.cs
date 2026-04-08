@@ -11,6 +11,7 @@ namespace Islands.PCG.Editor
     /// Phase N2. Post-N2: scalar heatmap tilemap fields.
     /// Phase N4: TerrainNoiseSettings + WarpNoiseSettings + heightQuantSteps.
     /// Phase F3b: hillsThresholdL1 / hillsThresholdL2.
+    /// Phase N5.a: shapeMode (IslandShapeMode).
     /// </summary>
     [CustomEditor(typeof(PCGMapTilemapVisualization))]
     public sealed class PCGMapTilemapVisualizationEditor : UnityEditor.Editor
@@ -26,6 +27,8 @@ namespace Islands.PCG.Editor
         // Preset-controlled (hidden when preset assigned)
         private SerializedProperty seed, resolution;
         private SerializedProperty enableHillsStage, enableShoreStage, enableVegetationStage, enableTraversalStage, enableMorphologyStage;
+        // N5.a: shape mode
+        private SerializedProperty shapeMode;
         private SerializedProperty islandRadius01, islandAspectRatio, warpAmplitude01, islandSmoothFrom01, islandSmoothTo01;
         private SerializedProperty waterThreshold01, shallowWaterDepth01, midWaterDepth01;
         // N4: terrain noise
@@ -51,6 +54,8 @@ namespace Islands.PCG.Editor
             enableVegetationStage = serializedObject.FindProperty("enableVegetationStage");
             enableTraversalStage = serializedObject.FindProperty("enableTraversalStage");
             enableMorphologyStage = serializedObject.FindProperty("enableMorphologyStage");
+            // N5.a
+            shapeMode = serializedObject.FindProperty("shapeMode");
             islandRadius01 = serializedObject.FindProperty("islandRadius01");
             islandAspectRatio = serializedObject.FindProperty("islandAspectRatio");
             warpAmplitude01 = serializedObject.FindProperty("warpAmplitude01");
@@ -128,7 +133,8 @@ namespace Islands.PCG.Editor
                 EditorGUILayout.PropertyField(enableTraversalStage);
                 EditorGUILayout.PropertyField(enableMorphologyStage);
 
-                EditorGUILayout.PropertyField(islandRadius01);  // draws [Header("Island Shape")]
+                EditorGUILayout.PropertyField(shapeMode);          // N5.a — draws in [Header("Island Shape")]
+                EditorGUILayout.PropertyField(islandRadius01);     // draws [Header("Island Shape")]
                 EditorGUILayout.PropertyField(islandAspectRatio);
                 EditorGUILayout.PropertyField(warpAmplitude01);
                 EditorGUILayout.PropertyField(islandSmoothFrom01);

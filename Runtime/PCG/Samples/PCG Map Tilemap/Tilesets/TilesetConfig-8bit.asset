@@ -21,7 +21,7 @@ MonoBehaviour:
     enabled: 1
   - label: MidWater
     layerId: 12
-    tile: {fileID: 11400000, guid: f5214fecceaf7554f9fa01d77fc2fc73, type: 2}
+    tile: {fileID: 11400000, guid: 48efa363f7477264d94e14daf96293d9, type: 2}
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 0}
     enabled: 1

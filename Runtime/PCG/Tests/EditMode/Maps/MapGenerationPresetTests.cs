@@ -10,6 +10,7 @@ using Islands.PCG.Layout.Maps;
 /// and MapTunables2D clamping/ordering behavior triggered through the preset.
 ///
 /// Phase H3. Phase N4: noise field defaults updated. Phase F3b: hills threshold fields.
+/// Phase N5.a: shapeMode field.
 /// </summary>
 [TestFixture]
 public class MapGenerationPresetTests
@@ -242,5 +243,40 @@ public class MapGenerationPresetTests
 
         Assert.AreEqual(expected.hillsThresholdL1, fromPreset.hillsThresholdL1, 1e-5f);
         Assert.AreEqual(expected.hillsThresholdL2, fromPreset.hillsThresholdL2, 1e-5f);
+    }
+
+    // ------------------------------------------------------------------
+    // N5.a Shape Mode
+    // ------------------------------------------------------------------
+
+    [Test]
+    public void DefaultValues_ShapeMode_IsEllipse()
+    {
+        Assert.AreEqual(IslandShapeMode.Ellipse, _preset.shapeMode);
+    }
+
+    [Test]
+    public void ToTunables_DefaultPreset_ShapeModeMatchesDefault()
+    {
+        MapTunables2D fromPreset = _preset.ToTunables();
+        MapTunables2D expected = MapTunables2D.Default;
+
+        Assert.AreEqual(expected.shapeMode, fromPreset.shapeMode);
+    }
+
+    [Test]
+    public void ToTunables_ShapeMode_IsForwardedCorrectly()
+    {
+        _preset.shapeMode = IslandShapeMode.Rectangle;
+        Assert.AreEqual(IslandShapeMode.Rectangle, _preset.ToTunables().shapeMode);
+
+        _preset.shapeMode = IslandShapeMode.NoShape;
+        Assert.AreEqual(IslandShapeMode.NoShape, _preset.ToTunables().shapeMode);
+
+        _preset.shapeMode = IslandShapeMode.Custom;
+        Assert.AreEqual(IslandShapeMode.Custom, _preset.ToTunables().shapeMode);
+
+        _preset.shapeMode = IslandShapeMode.Ellipse;
+        Assert.AreEqual(IslandShapeMode.Ellipse, _preset.ToTunables().shapeMode);
     }
 }

@@ -1,0 +1,100 @@
+﻿Documentation~
++---archive
+|   +---Islands_PCG_Pipeline_SSoT_v0_1_16.md
+|   +---Islands_SSoT_Technical_Bible.md
+|   +---PCG_Pipeline_Technical_Snapshot.md
+|   +---README.md
+|   \---snapshot-curation-register.md
++---governance
+|   \---README.md
++---planning
+|   +---active
+|   |   +---crosscheck_roadmap.md
+|   |   +---Noise_Composition_Improvements_Roadmap.md
+|   |   +---PCG_Roadmap.md
+|   |   +---Phase_L_Design.md
+|   |   +---Phase_M_Design.md
+|   |   +---Phase_M2_Design.md
+|   |   +---Phase_T1_Design.md
+|   |   \---Phase_W_Design.md
+|   \---archive
+|       +---Islands_Governance_Migration_Roadmap.md
+|       +---Islands_PCG_MapPipelineByLayers_Roadmap_v0.1.0_2026-01-29.md
+|       +---Islands_PCG_Roadmap_Integrated_With_MapLayers_v0.2.4_2026-02-03.md
+|       \---PhaseF_Planning_Report_MapPipeline_F3_F6_NoiseJobs_2026-02-03_v2.md
++---reference
+|   +---GraphLibrary_Pipeline_Technical_Doc.md
+|   +---graphs.md
+|   +---legacy-map-generation-reference.md
+|   +---map-tilemap-scene-setup.md
+|   +---mesh.md
+|   +---noise.md
+|   +---overview.md
+|   +---pcg-layout-strategies-reference.md
+|   +---scalar-heatmap-scene-setup.md
+|   +---shaders.md
+|   +---surfaces.md
+|   \---tileset-import-guide.md
++---research
+|   +---archive
+|   |   +---noise_cross_reference.md
+|   |   +---Pass 1 Claude Sonnet.md
+|   |   \---pcg_crosscheck_analysis.md
+|   +---Games Worldgen
+|   |   +---Cataclysm Worldgen and Z Levels.md
+|   |   +---DwarfFortress Worldgen.md
+|   |   +---Minecraft Worldgen.md
+|   |   +---NMS_World_Generation_Pipeline.md
+|   |   +---RimWorld Worldgen.md
+|   |   \---Tangledeep and Rogues.md
+|   +---PCG Techniques
+|   |   +---Prompts (TEMP)
+|   |   |   +---pass1a_randomness_and_fundamental_noise.md
+|   |   |   +---pass1b_fractal_composition_and_fields.md
+|   |   |   +---pass2a_heightmap_shaping_and_erosion.md
+|   |   |   +---pass2b_rivers_caves_and_volumetric.md
+|   |   |   +---pass3a_space_first_dungeon_generation.md
+|   |   |   +---pass3b_structure_first_dungeon_generation.md
+|   |   |   +---pass4a_local_rule_based_tile_placement.md
+|   |   |   +---pass4b_constraint_propagation_wfc_grammars.md
+|   |   |   +---pass5a_region_partitioning_and_biomes.md
+|   |   |   +---pass5b_placement_scattering_and_roads.md
+|   |   |   +---pass6a_multiscale_and_world_structure.md
+|   |   |   +---pass6b_composition_patterns_and_synthesis.md
+|   |   |   \---README_strategy.md
+|   |   +---Reports
+|   |   |   +---1a Randomness Primitives and Noise.md
+|   |   |   +---1b Procedural noise composition and field operations.md
+|   |   |   +---2a Heightmap construction, shaping, and erosion.md
+|   |   |   +---2b Procedural terrain rivers, caves, voxels, and mesh extraction.md
+|   |   |   +---3a Space-first dungeon generation a technical reference.md
+|   |   |   +---3b Structure-first dungeon generation.md
+|   |   |   +---4a Local rule-based tile and module placement.md
+|   |   |   +---4b Propagation and grammar techniques.md
+|   |   |   +---5a Region partitioning and biome systems.md
+|   |   |   +---5b object placement, scattering, and road generation.md
+|   |   |   +---6a Multi-scale generation and graph-based world structure.md
+|   |   |   +---Extra - Biome transition blending in 2D grid systems.md
+|   |   |   +---Extra - Dwarf Fortress's erosion algorithm.md
+|   |   |   +---Extra - How RimWorld treats biome boundaries.md
+|   |   |   +---Extra - Rainshadow on a grid.md
+|   |   |   +---pass_6b_composition_patterns_and_synthesis.md
+|   |   |   \---pcg_synthesis.md
+|   |   +---hydrology_cross_reference.md
+|   |   +---pcg_noise_reference.md
+|   |   +---pcg_technique_library.md
+|   |   \---terrain_biome_cross_reference.md
+|   +---README.md
+|   \---technique_integration_matrix.md
++---systems
+|   +---map-pipeline-by-layers-ssot.md
+|   \---pcg-core-ssot.md
++---changelog-ssot.md
++---coverage-matrix.md
++---CURRENT_STATE.md
++---make-tree-unity.bat
++---migration-log.md
++---README.md
++---SSoT_CONTRACTS.md
++---SSoT_INDEX.md
+\---supersession-map.md

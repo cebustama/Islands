@@ -17,7 +17,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 12345u;
 
         // ---------------------------------------------------------------------
-        // GOLDENS (F2.1)
+        // GOLDENS (F2.1) — Ellipse mode (default)
         // ---------------------------------------------------------------------
         // IMPORTANT:
         // 1) Run tests once.
@@ -267,6 +267,363 @@ namespace Islands.PCG.Tests.EditMode.Maps
                     mask.SetUnchecked(x, y, dx * dx + dy * dy <= r2);
                 }
             return mask;
+        }
+
+        // =====================================================================
+        // N5.a — Shape Mode tests
+        // =====================================================================
+
+        // --- Ellipse default backward compatibility ---
+        [Test]
+        public void N5a_Ellipse_Default_MatchesPreN5aGoldens()
+        {
+            // Ellipse mode is the default. The goldens must match the pre-N5.a
+            // hashes exactly, proving zero behavioral change at defaults.
+            var domain = new GridDomain2D(W, H);
+            var tunables = MapTunables2D.Default;
+
+            Assert.AreEqual(IslandShapeMode.Ellipse, tunables.shapeMode,
+                "MapTunables2D.Default should use Ellipse shape mode.");
+
+            var inputs = new MapInputs(Seed, domain, tunables);
+            RunOnce(in inputs, out ulong landHash, out ulong deepHash, out MapContext2D ctx);
+            ctx.Dispose();
+
+            Assert.AreEqual(ExpectedLandHash64, landHash,
+                $"Ellipse mode should produce pre-N5.a Land golden. Got=0x{landHash:X16}");
+            Assert.AreEqual(ExpectedDeepWaterHash64, deepHash,
+                $"Ellipse mode should produce pre-N5.a DeepWater golden. Got=0x{deepHash:X16}");
+        }
+
+        // --- Rectangle mode ---
+        // Golden strategy: placeholder 0x0; first run prints actual hashes.
+        private const ulong ExpectedRectangleLandHash64 = 0xAABAAF5DAE1FDA06UL;
+        private const ulong ExpectedRectangleDeepWaterHash64 = 0x616E6EF677B501EAUL;
+
+        private static MapTunables2D RectangleTunables() => new MapTunables2D(
+            islandRadius01: 0.45f,
+            waterThreshold01: 0.50f,
+            islandSmoothFrom01: 0.30f,
+            islandSmoothTo01: 0.70f,
+            islandAspectRatio: 1.00f,
+            warpAmplitude01: 0.00f,
+            heightRedistributionExponent: 1.00f,
+            heightRemapSpline: default,
+            terrainNoise: TerrainNoiseSettings.DefaultTerrain,
+            warpNoise: TerrainNoiseSettings.DefaultWarp,
+            heightQuantSteps: 1024,
+            hillsThresholdL1: 0.65f,
+            hillsThresholdL2: 0.80f,
+            shapeMode: IslandShapeMode.Rectangle);
+
+        [Test]
+        public void N5a_Rectangle_IsDeterministic()
+        {
+            var domain = new GridDomain2D(W, H);
+            var inputs = new MapInputs(Seed, domain, RectangleTunables());
+
+            RunOnce(in inputs, out ulong landA, out ulong deepA, out _);
+            RunOnce(in inputs, out ulong landB, out ulong deepB, out _);
+
+            Assert.AreEqual(landA, landB, "Rectangle: Land hash drifted.");
+            Assert.AreEqual(deepA, deepB, "Rectangle: DeepWater hash drifted.");
+        }
+
+        [Test]
+        public void N5a_Rectangle_DiffersFromEllipse()
+        {
+            var domain = new GridDomain2D(W, H);
+            var ellipseInputs = new MapInputs(Seed, domain, MapTunables2D.Default);
+            var rectInputs = new MapInputs(Seed, domain, RectangleTunables());
+
+            RunOnce(in ellipseInputs, out ulong ellipseLand, out _, out _);
+            RunOnce(in rectInputs, out ulong rectLand, out _, out _);
+
+            Assert.AreNotEqual(ellipseLand, rectLand,
+                "Rectangle mode should produce different output from Ellipse at same seed/tunables.");
+        }
+
+        [Test]
+        public void N5a_Rectangle_Invariants_Hold()
+        {
+            var domain = new GridDomain2D(W, H);
+            var inputs = new MapInputs(Seed, domain, RectangleTunables());
+
+            RunOnce(in inputs, out _, out _, out MapContext2D ctx);
+            try
+            {
+                ref MaskGrid2D land = ref ctx.GetLayer(MapLayerId.Land);
+                ref MaskGrid2D deep = ref ctx.GetLayer(MapLayerId.DeepWater);
+
+                Assert.Greater(land.CountOnes(), 0, "Rectangle: Land has 0 ON cells.");
+                Assert.Greater(deep.CountOnes(), 0, "Rectangle: DeepWater has 0 ON cells.");
+
+                // DeepWater ∩ Land == ∅
+                var intersection = new MaskGrid2D(domain, Allocator.Persistent, clearToZero: true);
+                try
+                {
+                    intersection.CopyFrom(deep);
+                    intersection.And(land);
+                    Assert.AreEqual(0, intersection.CountOnes(),
+                        "Rectangle: DeepWater intersects Land.");
+                }
+                finally { intersection.Dispose(); }
+            }
+            finally { ctx.Dispose(); }
+        }
+
+        [Test]
+        public void N5a_Rectangle_GoldenHashes_Locked()
+        {
+            var domain = new GridDomain2D(W, H);
+            var inputs = new MapInputs(Seed, domain, RectangleTunables());
+
+            RunOnce(in inputs, out ulong landHash, out ulong deepHash, out MapContext2D ctx);
+            ctx.Dispose();
+
+            if (ExpectedRectangleLandHash64 == 0x0000000000000000
+                || ExpectedRectangleDeepWaterHash64 == 0x0000000000000000)
+            {
+                Assert.Fail(
+                    "N5.a Rectangle goldens not initialized.\n" +
+                    $"Set ExpectedRectangleLandHash64      = 0x{landHash:X16}UL;\n" +
+                    $"Set ExpectedRectangleDeepWaterHash64 = 0x{deepHash:X16}UL;");
+            }
+
+            Assert.AreEqual(ExpectedRectangleLandHash64, landHash,
+                $"Rectangle Land golden changed. Got=0x{landHash:X16}");
+            Assert.AreEqual(ExpectedRectangleDeepWaterHash64, deepHash,
+                $"Rectangle DeepWater golden changed. Got=0x{deepHash:X16}");
+        }
+
+        // --- NoShape mode ---
+        // Golden strategy: placeholder 0x0; first run prints actual hashes.
+        private const ulong ExpectedNoShapeLandHash64 = 0xB9148007D4091B9EUL;
+        private const ulong ExpectedNoShapeDeepWaterHash64 = 0xF99432113C8AAE6AUL;
+
+        private static MapTunables2D NoShapeTunables() => new MapTunables2D(
+            islandRadius01: 0.45f,
+            waterThreshold01: 0.50f,
+            islandSmoothFrom01: 0.30f,
+            islandSmoothTo01: 0.70f,
+            islandAspectRatio: 1.00f,
+            warpAmplitude01: 0.00f,
+            heightRedistributionExponent: 1.00f,
+            heightRemapSpline: default,
+            terrainNoise: TerrainNoiseSettings.DefaultTerrain,
+            warpNoise: TerrainNoiseSettings.DefaultWarp,
+            heightQuantSteps: 1024,
+            hillsThresholdL1: 0.65f,
+            hillsThresholdL2: 0.80f,
+            shapeMode: IslandShapeMode.NoShape);
+
+        [Test]
+        public void N5a_NoShape_IsDeterministic()
+        {
+            var domain = new GridDomain2D(W, H);
+            var inputs = new MapInputs(Seed, domain, NoShapeTunables());
+
+            RunOnce(in inputs, out ulong landA, out ulong deepA, out _);
+            RunOnce(in inputs, out ulong landB, out ulong deepB, out _);
+
+            Assert.AreEqual(landA, landB, "NoShape: Land hash drifted.");
+            Assert.AreEqual(deepA, deepB, "NoShape: DeepWater hash drifted.");
+        }
+
+        [Test]
+        public void N5a_NoShape_DiffersFromEllipse()
+        {
+            var domain = new GridDomain2D(W, H);
+            var ellipseInputs = new MapInputs(Seed, domain, MapTunables2D.Default);
+            var noShapeInputs = new MapInputs(Seed, domain, NoShapeTunables());
+
+            RunOnce(in ellipseInputs, out ulong ellipseLand, out _, out _);
+            RunOnce(in noShapeInputs, out ulong noShapeLand, out _, out _);
+
+            Assert.AreNotEqual(ellipseLand, noShapeLand,
+                "NoShape mode should produce different output from Ellipse at same seed/tunables.");
+        }
+
+        [Test]
+        public void N5a_NoShape_ProducesLandAndWater()
+        {
+            // NoShape with default noise + waterThreshold=0.5 should produce both
+            // land and water (continent-like). Degenerate all-land or all-water is a bug.
+            var domain = new GridDomain2D(W, H);
+            var inputs = new MapInputs(Seed, domain, NoShapeTunables());
+
+            RunOnce(in inputs, out _, out _, out MapContext2D ctx);
+            try
+            {
+                ref MaskGrid2D land = ref ctx.GetLayer(MapLayerId.Land);
+                int totalCells = W * H;
+                int landCount = land.CountOnes();
+
+                Assert.Greater(landCount, 0,
+                    "NoShape: Land has 0 ON cells — noise should produce some land at threshold 0.5.");
+                Assert.Less(landCount, totalCells,
+                    "NoShape: All cells are Land — noise should produce some water at threshold 0.5.");
+            }
+            finally { ctx.Dispose(); }
+        }
+
+        [Test]
+        public void N5a_NoShape_Invariants_Hold()
+        {
+            var domain = new GridDomain2D(W, H);
+            var inputs = new MapInputs(Seed, domain, NoShapeTunables());
+
+            RunOnce(in inputs, out _, out _, out MapContext2D ctx);
+            try
+            {
+                ref MaskGrid2D land = ref ctx.GetLayer(MapLayerId.Land);
+                ref MaskGrid2D deep = ref ctx.GetLayer(MapLayerId.DeepWater);
+
+                // DeepWater ∩ Land == ∅
+                var intersection = new MaskGrid2D(domain, Allocator.Persistent, clearToZero: true);
+                try
+                {
+                    intersection.CopyFrom(deep);
+                    intersection.And(land);
+                    Assert.AreEqual(0, intersection.CountOnes(),
+                        "NoShape: DeepWater intersects Land.");
+                }
+                finally { intersection.Dispose(); }
+            }
+            finally { ctx.Dispose(); }
+        }
+
+        [Test]
+        public void N5a_NoShape_GoldenHashes_Locked()
+        {
+            var domain = new GridDomain2D(W, H);
+            var inputs = new MapInputs(Seed, domain, NoShapeTunables());
+
+            RunOnce(in inputs, out ulong landHash, out ulong deepHash, out MapContext2D ctx);
+            ctx.Dispose();
+
+            if (ExpectedNoShapeLandHash64 == 0x0000000000000000
+                || ExpectedNoShapeDeepWaterHash64 == 0x0000000000000000)
+            {
+                Assert.Fail(
+                    "N5.a NoShape goldens not initialized.\n" +
+                    $"Set ExpectedNoShapeLandHash64      = 0x{landHash:X16}UL;\n" +
+                    $"Set ExpectedNoShapeDeepWaterHash64 = 0x{deepHash:X16}UL;");
+            }
+
+            Assert.AreEqual(ExpectedNoShapeLandHash64, landHash,
+                $"NoShape Land golden changed. Got=0x{landHash:X16}");
+            Assert.AreEqual(ExpectedNoShapeDeepWaterHash64, deepHash,
+                $"NoShape DeepWater golden changed. Got=0x{deepHash:X16}");
+        }
+
+        // --- Custom mode (falls back to Ellipse without shape input) ---
+        [Test]
+        public void N5a_Custom_WithoutShapeInput_MatchesEllipse()
+        {
+            // Custom without a MapShapeInput should fall back to Ellipse behavior.
+            var domain = new GridDomain2D(W, H);
+            var customTunables = new MapTunables2D(
+                islandRadius01: 0.45f,
+                waterThreshold01: 0.50f,
+                islandSmoothFrom01: 0.30f,
+                islandSmoothTo01: 0.70f,
+                islandAspectRatio: 1.00f,
+                warpAmplitude01: 0.00f,
+                heightRedistributionExponent: 1.00f,
+                heightRemapSpline: default,
+                terrainNoise: TerrainNoiseSettings.DefaultTerrain,
+                warpNoise: TerrainNoiseSettings.DefaultWarp,
+                heightQuantSteps: 1024,
+                hillsThresholdL1: 0.65f,
+                hillsThresholdL2: 0.80f,
+                shapeMode: IslandShapeMode.Custom);
+
+            var ellipseInputs = new MapInputs(Seed, domain, MapTunables2D.Default);
+            var customInputs = new MapInputs(Seed, domain, customTunables);
+
+            RunOnce(in ellipseInputs, out ulong ellipseLand, out ulong ellipseDeep, out _);
+            RunOnce(in customInputs, out ulong customLand, out ulong customDeep, out _);
+
+            Assert.AreEqual(ellipseLand, customLand,
+                "Custom mode without shape input should produce identical Land to Ellipse.");
+            Assert.AreEqual(ellipseDeep, customDeep,
+                "Custom mode without shape input should produce identical DeepWater to Ellipse.");
+        }
+
+        // --- F2c HasShape takes priority over shapeMode ---
+        [Test]
+        public void N5a_ShapeInput_TakesPriorityOverShapeMode()
+        {
+            // Even with shapeMode=NoShape, providing a MapShapeInput should use the
+            // external shape, not the NoShape path.
+            var domain = new GridDomain2D(W, H);
+            var shape = BuildCenterCircleMask(domain, radius: 20);
+            try
+            {
+                var noShapeWithExternalShape = new MapTunables2D(
+                    islandRadius01: 0.45f,
+                    waterThreshold01: 0.50f,
+                    islandSmoothFrom01: 0.30f,
+                    islandSmoothTo01: 0.70f,
+                    shapeMode: IslandShapeMode.NoShape);
+
+                var inputs = new MapInputs(Seed, domain, noShapeWithExternalShape,
+                    new MapShapeInput(shape));
+
+                RunOnce(in inputs, out _, out _, out MapContext2D ctx);
+                try
+                {
+                    ref MaskGrid2D land = ref ctx.GetLayer(MapLayerId.Land);
+
+                    // Land ⊆ shape must hold (F2c contract).
+                    var overflow = new MaskGrid2D(domain, Allocator.Persistent, clearToZero: true);
+                    try
+                    {
+                        overflow.CopyFrom(land);
+                        overflow.AndNot(shape);
+                        Assert.AreEqual(0, overflow.CountOnes(),
+                            "With HasShape=true and shapeMode=NoShape, F2c should take priority. " +
+                            "Land cells exist outside the shape mask.");
+                    }
+                    finally { overflow.Dispose(); }
+                }
+                finally { ctx.Dispose(); }
+            }
+            finally { shape.Dispose(); }
+        }
+
+        // --- Seed variation ---
+        [Test]
+        public void N5a_Rectangle_DifferentSeedsProduceDifferentOutput()
+        {
+            var domain = new GridDomain2D(W, H);
+            var tunables = RectangleTunables();
+
+            var inputs1 = new MapInputs(Seed, domain, tunables);
+            var inputs2 = new MapInputs(Seed + 1, domain, tunables);
+
+            RunOnce(in inputs1, out ulong land1, out _, out _);
+            RunOnce(in inputs2, out ulong land2, out _, out _);
+
+            Assert.AreNotEqual(land1, land2,
+                "Rectangle: Different seeds should produce different Land hashes.");
+        }
+
+        [Test]
+        public void N5a_NoShape_DifferentSeedsProduceDifferentOutput()
+        {
+            var domain = new GridDomain2D(W, H);
+            var tunables = NoShapeTunables();
+
+            var inputs1 = new MapInputs(Seed, domain, tunables);
+            var inputs2 = new MapInputs(Seed + 1, domain, tunables);
+
+            RunOnce(in inputs1, out ulong land1, out _, out _);
+            RunOnce(in inputs2, out ulong land2, out _, out _);
+
+            Assert.AreNotEqual(land1, land2,
+                "NoShape: Different seeds should produce different Land hashes.");
         }
     }
 }

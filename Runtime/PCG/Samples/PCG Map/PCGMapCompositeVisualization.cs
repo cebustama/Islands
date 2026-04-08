@@ -22,6 +22,7 @@ namespace Islands.PCG.Samples
     /// Phase H1: initial implementation.
     /// Phase H3: optional MapGenerationPreset slot.
     /// Phase N4: TerrainNoiseSettings replaces noiseCellSize/noiseAmplitude/quantSteps.
+    /// Phase N5.a: IslandShapeMode selector.
     /// </summary>
     [ExecuteAlways]
     public sealed class PCGMapCompositeVisualization : MonoBehaviour
@@ -112,6 +113,10 @@ namespace Islands.PCG.Samples
         // =====================================================================
         // Inspector — F2 Tunables
         // =====================================================================
+        // N5.a: shape mode
+        [Header("Island Shape (N5.a)")]
+        [SerializeField] private IslandShapeMode shapeMode = IslandShapeMode.Ellipse;
+
         [Header("F2 Tunables (Shape + Threshold)")]
         [Range(0f, 1f)][SerializeField] private float islandRadius01 = 0.45f;
         [Range(0f, 1f)][SerializeField] private float waterThreshold01 = 0.50f;
@@ -192,6 +197,7 @@ namespace Islands.PCG.Samples
         private bool lastEnableVegetationStage;
         private bool lastEnableTraversalStage;
         private bool lastEnableMorphologyStage;
+        private IslandShapeMode lastShapeMode;
         private float lastIslandRadius01;
         private float lastWaterThreshold01;
         private float lastIslandSmoothFrom01;
@@ -321,7 +327,8 @@ namespace Islands.PCG.Samples
                       },
                       heightQuantSteps: heightQuantSteps,
                       hillsThresholdL1: hillsThresholdL1,
-                      hillsThresholdL2: hillsThresholdL2);
+                      hillsThresholdL2: hillsThresholdL2,
+                      shapeMode: shapeMode);
 
             EnsureContextAllocated(eRes);
             EnsureTextureAllocated(eRes);
@@ -354,6 +361,7 @@ namespace Islands.PCG.Samples
 
             Debug.Log(
                 $"[PCGMapCompositeVisualization] Update #{updateCalls} res={eRes} seed={eSeed} " +
+                $"shape={eTun.shapeMode} " +
                 $"hills={eHills} shore={eShore} " +
                 $"veg={eVeg} traversal={eTrav} " +
                 $"morphology={eMorph} " +
@@ -534,6 +542,7 @@ namespace Islands.PCG.Samples
             lastEnableVegetationStage = preset != null ? preset.enableVegetationStage : enableVegetationStage;
             lastEnableTraversalStage = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
+            lastShapeMode = preset != null ? preset.shapeMode : shapeMode;
             lastIslandRadius01 = preset != null ? preset.islandRadius01 : islandRadius01;
             lastWaterThreshold01 = preset != null ? preset.waterThreshold01 : waterThreshold01;
             lastIslandSmoothFrom01 = preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01;
@@ -576,6 +585,7 @@ namespace Islands.PCG.Samples
                 || (preset != null ? preset.enableVegetationStage : enableVegetationStage) != lastEnableVegetationStage
                 || (preset != null ? preset.enableTraversalStage : enableTraversalStage) != lastEnableTraversalStage
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
+                || (preset != null ? preset.shapeMode : shapeMode) != lastShapeMode
                 || !Mathf.Approximately(preset != null ? preset.islandRadius01 : islandRadius01, lastIslandRadius01)
                 || !Mathf.Approximately(preset != null ? preset.waterThreshold01 : waterThreshold01, lastWaterThreshold01)
                 || !Mathf.Approximately(preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01, lastIslandSmoothFrom01)

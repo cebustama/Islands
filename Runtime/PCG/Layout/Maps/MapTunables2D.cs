@@ -31,9 +31,23 @@ namespace Islands.PCG.Layout.Maps
     /// Consumed by Stage_Hills2D for height-threshold hill classification.
     /// Replaces topology-based hill placement with Height field thresholds.
     /// Full golden break for F3+ hashes.
+    ///
+    /// N5.a addition: shapeMode.
+    /// Selects the built-in base shape generator (Ellipse, Rectangle, NoShape, Custom).
+    /// Default Ellipse preserves all existing goldens (bit-identical to pre-N5.a).
     /// </summary>
     public readonly struct MapTunables2D
     {
+        // ------------------------------------------------------------------
+        // N5.a addition
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Selects the built-in base shape generator. Default <see cref="IslandShapeMode.Ellipse"/>
+        /// preserves pre-N5.a behavior. Overridden when <see cref="MapShapeInput.HasShape"/> is true.
+        /// </summary>
+        public readonly IslandShapeMode shapeMode;
+
         // ------------------------------------------------------------------
         // F2 original fields
         // ------------------------------------------------------------------
@@ -59,6 +73,7 @@ namespace Islands.PCG.Layout.Maps
         /// Ellipse aspect ratio applied before domain warp.
         /// 1.0 = circle. >1 = wider (x-stretched). &lt;1 = taller (y-stretched).
         /// Clamped to [0.25, 4.0].
+        /// For Rectangle mode: controls width/height ratio of the rectangle.
         /// </summary>
         public readonly float islandAspectRatio;
 
@@ -66,6 +81,7 @@ namespace Islands.PCG.Layout.Maps
         /// Domain warp amplitude as a fraction of min(width, height).
         /// 0.0 = no warp (pure ellipse / circle). ~0.15 = subtle organic coast.
         /// ~0.30 = strong bays and peninsulas. Clamped to [0..1].
+        /// Applied to Ellipse and Rectangle modes. NoShape ignores warp geometrically.
         /// </summary>
         public readonly float warpAmplitude01;
 
@@ -151,8 +167,10 @@ namespace Islands.PCG.Layout.Maps
         /// no spline remap), with Perlin fBm terrain noise at frequency 8.
         /// Phase N4: full golden break from pre-N4 defaults.
         /// Phase F3b: full golden break for F3+ hashes.
+        /// Phase N5.a: shapeMode = Ellipse (bit-identical to pre-N5.a).
         /// </summary>
         public static MapTunables2D Default => new MapTunables2D(
+            shapeMode: IslandShapeMode.Ellipse,
             islandRadius01: 0.45f,
             waterThreshold01: 0.50f,
             islandSmoothFrom01: 0.30f,
@@ -172,11 +190,12 @@ namespace Islands.PCG.Layout.Maps
         // Constructor
         // ------------------------------------------------------------------
 
+        /// <param name="shapeMode">Built-in base shape generator. Default = Ellipse (pre-N5.a behavior).</param>
         /// <param name="islandRadius01">Island size fraction of min(w,h). [0..1].</param>
         /// <param name="waterThreshold01">Land/water height threshold. [0..1].</param>
         /// <param name="islandSmoothFrom01">Smoothstep inner edge. [0..1].</param>
         /// <param name="islandSmoothTo01">Smoothstep outer edge. [0..1].</param>
-        /// <param name="islandAspectRatio">Ellipse x/y ratio. 1.0 = circle. [0.25..4.0].</param>
+        /// <param name="islandAspectRatio">Ellipse/rectangle x/y ratio. 1.0 = circle/square. [0.25..4.0].</param>
         /// <param name="warpAmplitude01">Domain warp strength as fraction of min(w,h). [0..1].</param>
         /// <param name="heightRedistributionExponent">Height power-curve exponent. 1.0 = identity. [0.5..4.0].</param>
         /// <param name="heightRemapSpline">Piecewise-linear height remap curve. default = identity (no remap).</param>
@@ -198,8 +217,11 @@ namespace Islands.PCG.Layout.Maps
             TerrainNoiseSettings warpNoise = default,
             int heightQuantSteps = 1024,
             float hillsThresholdL1 = 0.65f,
-            float hillsThresholdL2 = 0.80f)
+            float hillsThresholdL2 = 0.80f,
+            IslandShapeMode shapeMode = IslandShapeMode.Ellipse)
         {
+            this.shapeMode = shapeMode;
+
             // Clamp and order all values deterministically (pure math, no RNG).
             float r = math.clamp(islandRadius01, 0f, 1f);
             float wt = math.clamp(waterThreshold01, 0f, 1f);
