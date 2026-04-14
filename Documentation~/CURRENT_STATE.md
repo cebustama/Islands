@@ -1,6 +1,6 @@
 # Current State
 
-Status date: 2026-04-08
+Status date: 2026-04-10 (M2.b resolved)
 
 ## What is active now
 - The Islands documentation migration was handled as Tier L and is now materially closed for the reviewed snapshot corpus.
@@ -10,7 +10,7 @@ Status date: 2026-04-08
 
 ## What is implemented now (confirmed for documentation authority purposes)
 - New PCG runtime direction: grid-first, deterministic, adapters-last.
-- Map Pipeline by Layers implemented slice: **F0–F6 + F3b + F4b + F4c + Phase G + Phase H + Phase H1 + Phase H2 + Phase H2b + Phase H2c + Phase H2d + Phase H3 + Phase H4 + Phase H5 + Phase H6 + Phase H7 + Phase J2 + Phase N2 + Post-N2 Fixes + Phase N4 + Phase N5.a + Phase N5.b + Phase N5.c**.
+- Map Pipeline by Layers implemented slice: **F0–N6 + Phase M + M-fix.a/c + M2.a + M2.b (all golden-captured)**.
 - Layout strategies are an implemented, test-gated support surface under PCG.
 - GraphLibrary runtime is a real implemented surface, but it is **not** promoted subsystem authority.
 - Noise runtime is real and coherent, but it is currently a governed reference / staged support surface, not a promoted subsystem SSoT.
@@ -19,71 +19,54 @@ Status date: 2026-04-08
 - Shader assets and HLSL helpers are active support artifacts, but not a promoted subsystem SSoT.
 
 ## What current package development just resolved
-- Phase N5.c — Extended Noise Palette + Ridged Multifractal.
-  Worley noise type (`TerrainNoiseType.Worley`) is now a parameterized family driven by
-  `WorleyDistanceMetric` (Euclidean, SmoothEuclidean, Chebyshev) × `WorleyFunction`
-  (F1, F2, F2MinusF1, CellAsIslands) = 12 generic instantiations dispatched via a flat
-  switch in `MapNoiseBridge2D.FillWorleyNoise01`. No new `TerrainNoiseType` enum entries
-  were added; the existing `Worley` entry is parameterized by the N5.b struct fields.
-  `FractalMode` enum migrated from `Islands.PCG.Layout.Maps` to `Islands` namespace
-  (declared in `Noise.cs`). `Noise.Settings` extended with `fractalMode`, `ridgedOffset`,
-  `ridgedGain`. `Noise.GetFractalNoise<N>()` branches on `fractalMode`: Standard path is
-  unchanged (zero golden break); Ridged path calls new private `GetRidgedFractalNoise<N>()`
-  implementing the Musgrave ridged multifractal algorithm (offset–abs–square with
-  inter-octave gain feedback). Applies to all `INoise` types (Perlin, Simplex, Value,
-  all Worley variants).
-  Assembly references updated: `Islands.PCG.Editor` and `Islands.PCG.Tests.EditMode`
-  now reference `Islands.Runtime` directly for `FractalMode` resolution.
-  New `MapNoiseBridge2DTests.cs` with 22 tests covering Worley dispatch, ridged behavior,
-  determinism, range invariants, edge cases, and legacy path stability.
-  Zero golden break at defaults. Zero RNG consumption. No new MapLayerId or MapFieldId.
-  Known visual observation: Worley-family noise biases toward bright values due to the
-  `n * 0.5 + 0.5` remap assuming [-1,1] centered output. Worley outputs non-negative
-  distances, mapping to [0.5,1.0]. Tracked as potential post-N5.c follow-up
-  (Worley-aware normalization in FillNoise01Core).
+- M2.b — Contiguous Region Detection + Naming.
+  CCA over `Biome` field produces contiguous same-biome regions; specks merged into
+  largest 4-adjacent neighbour (tie-break: lowest anchor row-major index).
+  `MapFieldId.BiomeRegionId = 5` (COUNT → 6); 0 = water/Unclassified sentinel;
+  1-based integers for classified land regions. Intra-map stable only — cross-seed
+  stability is an explicit non-goal (R-7; see SSoT_CONTRACTS.md).
+  New files: `Stage_Regions2D.cs`, `RegionNameRegistry2D.cs`, `RegionNameTableAsset.cs`.
+  All four viz classes patched (`PCGMapVisualization`, `PCGMapCompositeVisualization`,
+  `PCGMapTilemapVisualization`, `PCGMapTilemapVisualizationEditor`); `stagesM2b` lantern
+  entry and `ScalarOverlaySource.BiomeRegionId = 5` added.
+  Full-pipeline golden captured: `MapPipelineRunner2DGoldenM2bTests.cs`.
+- Prior resolution: M2.a — Biome-Aware Vegetation Density.
+  Per-biome vegetation density via biome-aware per-cell threshold computed in
+  Stage_Vegetation2D from BiomeTable entries. Stage-local `moistureModulation`
+  default set to 0 (biome threshold is now the primary driver; moisture is
+  optional secondary modulation). Option A fallback when biome layer absent:
+  `LegacyThreshold = 0.40f` constant preserves pre-M2.a behavior for
+  biome-disabled pipelines. Pipeline reorder: vegetation now runs after biome
+  classification (was: vegetation before biome). Three visualization classes
+  (PCGMapTilemapVisualization, PCGMapCompositeVisualization, PCGMapVisualization)
+  gained `stagesM2a` lantern entry. StageVegetation2DTests adopts dual-golden
+  pattern (biome-on + biome-off paths). New `MapPipelineRunner2DGoldenM2Tests.cs`
+  captures full-pipeline M2.a goldens. Side effect: M-fix.a/c goldens
+  re-captured — 5 constants updated across `StageBiome2DTests.cs` and
+  `MapPipelineRunner2DGoldenMTests.cs`.
+- Prior resolution: M-fix.a + M-fix.c — Biome Tunables Inspector Wiring + Moisture Default Tuning.
+  10 biome climate tunables promoted from hardcoded Stage_Biome2D defaults to
+  Inspector-accessible serialized fields on PCGMapTilemapVisualization and
+  MapGenerationPreset. Follows shallowWaterDepth01 pattern (stage-local feeding,
+  not via MapTunables2D). Moisture defaults adjusted: coastalMoistureBonus 0.3→0.5,
+  coastDecayRate 0.15→0.3, moistureNoiseAmplitude 0.5→0.3 (coast gradient now visible).
+  Editor conditionally hides biome fields when enableBiomeStage is off.
+  Golden break — all M hashes must be re-captured.
+  4 files modified: Stage_Biome2D.cs, PCGMapTilemapVisualization.cs,
+  MapGenerationPreset.cs, PCGMapTilemapVisualizationEditor.cs.
+  No new stages, layers, or fields. Pure plumbing + default adjustment.
+  Note: 10 tunables wired, not 11 — beachMinTemperature lives on BiomeTable
+  as static readonly, not on Stage_Biome2D. Separate micro-fix if desired.
+- Prior resolution: Phase M — Climate & Biome Classification.
+- Prior resolution: Phase H8 — Mega-Tiles (2×2 Large Terrain Sprites).
+- Prior resolution: Phase N6 — Noise Preview Visualization.
+- Prior resolution: Phase N5.e — Hills Threshold UX Remap.
+- Prior resolution: Phase N5.d — Hills Noise Modulation.
+- Prior resolution: Phase N5.c — Extended Noise Palette + Ridged Multifractal.
 - Prior resolution: Phase N5.b — Noise Settings Assets.
-  Added `NoiseSettingsAsset` ScriptableObject wrapping `TerrainNoiseSettings`, following
-  the override-at-resolve pattern: when assigned to a preset or component noise slot, the
-  asset's settings replace inline values; when null, inline values are used.
-  `MapGenerationPreset` extended with `terrainNoiseAsset` and `warpNoiseAsset` slots.
-  `ToTunables()` resolves asset → inline struct.
-  All three visualization Inspectors updated with noise asset slots + embedded struct fields.
-  Refactored 11 individual noise fields per consumer to 2 embedded `TerrainNoiseSettings`
-  structs (serialization break for existing preset assets and scene-serialized components).
-  `TerrainNoiseSettings` extended with 5 new fields: `WorleyDistanceMetric` enum
-  (Euclidean, SmoothEuclidean, Chebyshev), `WorleyFunction` enum (F1, F2, F2MinusF1,
-  CellAsIslands), `FractalMode` enum (Standard, Ridged), `ridgedOffset` (float, 1.0),
-  `ridgedGain` (float, 2.0). All new fields carried but not functional until N5.c.
-  `IEquatable<TerrainNoiseSettings>` added for dirty-tracking.
-  Custom `TerrainNoiseSettingsDrawer` PropertyDrawer provides conditional visibility:
-  Worley fields hidden when noiseType != Worley; ridged fields hidden when
-  fractalMode == Standard.
 - Prior resolution: Phase N5.a — Base Shape Selector.
-  `IslandShapeMode` enum (Ellipse/Rectangle/NoShape/Custom) + `shapeMode` field on
-  `MapTunables2D`. Ellipse default = bit-identical to pre-N5.a. All visualization
-  Inspectors + Editor updated. Zero golden break at defaults. Zero RNG consumption.
 - Prior resolution: Phase F3b — Height-Coherent Hills (Clean Break).
-  Replaced topology-based Stage_Hills2D (independent noise on LandInterior) with
-  height-threshold classification. HillsL1 and HillsL2 are now derived from
-  Height field thresholds via `MapTunables2D.hillsThresholdL1` / `hillsThresholdL2`.
-  Contract changes: HillsL1 ∩ HillsL2 == ∅ (disjoint, was overlapping);
-  HillsL1/L2 ⊆ Land (was HillsL1 ⊆ LandInterior). LandEdge/LandInterior
-  derivation unchanged (MaskTopologyOps2D.ExtractEdgeAndInterior4).
-  All MapNoiseBridge2D and independent noise removed from Stage_Hills2D.
-  Zero RNG consumption (continues N4 pattern).
-  Thresholds exposed on MapTunables2D, MapGenerationPreset, all three visualization
-  Inspectors (PCGMapVisualization, PCGMapCompositeVisualization,
-  PCGMapTilemapVisualization), and the custom Editor (PCGMapTilemapVisualizationEditor).
-  Full golden break for F3+ hashes. All F3–G pipeline and stage goldens re-locked.
-  Latent Traversal test bug fixed: `Walkable ⊆ Land` assertion corrected to
-  `Walkable ⊆ (Land ∪ ShallowWater)` to match the Post-N2 Issue 3 contract.
-  Modified files: Stage_Hills2D, MapTunables2D, MapGenerationPreset,
-  PCGMapVisualization, PCGMapCompositeVisualization, PCGMapTilemapVisualization,
-  PCGMapTilemapVisualizationEditor, StageHills2DTests, MapGenerationPresetTests,
-  StageTraversal2DTests, plus all F3–G pipeline golden test files.
 - Prior resolution: Phase N4 — Noise Settings Infrastructure + F2 Noise Upgrade.
-  Replaced manual value noise in Stage_BaseTerrain2D with proper noise runtime via
-  MapNoiseBridge2D.FillNoise01. Full golden break from pre-N4 output.
 - Prior resolution: Post-N2 Fixes (Issues 1–3).
 - Phase J2 — Height Redistribution implemented.
 - Phase N2 — Spline Remapping implemented.
@@ -113,17 +96,17 @@ Status date: 2026-04-08
 ## What is not settled yet
 - No unresolved migration batch remains for the reviewed snapshot corpus.
 - Open design questions recorded in the roadmap: river representation, lake modeling, biome output format — now all resolved as design decisions in the roadmap.
-- `MapFieldId.Moisture` write ownership confirmed: Phase M.
 - `MapLayerId.Paths` write ownership confirmed: Phase O.
 - Unity version target for `TilemapCollider2D.usedByComposite` deprecation: upgrade to
   `compositeOperation` if targeting Unity 2022.2+ exclusively (currently suppressed with `#pragma warning disable CS0618`).
-- **Hills noise modulation:** Roadmapped as Phase N5.d. A `hillsNoiseBlend` parameter
-  (0–1) will mix per-cell noise offsets into the height thresholds for additional variation.
-  No contract changes. See N5 section in roadmap.
-- **Worley normalization bias:** Voronoi-family noise biases toward [0.5,1.0] after the
-  standard `n * 0.5 + 0.5` remap because Worley outputs non-negative distances rather
-  than [-1,1] centered values. A Worley-aware normalization mode in FillNoise01Core
-  would improve visual contrast. Small follow-up, no contract impact.
+- **Hills threshold UX:** ~~Roadmapped as Phase N5.e — relative parameterization.~~
+  **Resolved by N5.e.** Hills threshold sliders reparameterized from raw Height [0,1] to
+  relative fractions [0,1]. `hillsL1` = fraction of land height range; `hillsL2` = fraction
+  of remaining range above L1. Remap computed in `MapTunables2D` constructor. Full slider
+  ranges are now usable. See changelog for details.
+- **Phase V** — scope defined: Runtime Inspection UI (V.a hover tooltip, V.b per-cell
+  overlay system). Planning only; design doc `Phase_V_Design.md` to be written when
+  phase activates after M2.b. See `PCG_Roadmap.md` Phase V section for full scope.
 
 ## Noted desired features (not yet roadmapped as phases)
 - **Extended noise type palette (post-N4 observation):** ~~The noise runtime supports several
@@ -133,15 +116,33 @@ Status date: 2026-04-08
   CellAsIslands + SmoothEuclidean is available for archipelago generation (Phase J).
   Ridged multifractal is implemented in the noise runtime for all noise types.
 
-## Immediate next focus
-Phase N5.c (Extended Noise Palette + Ridged Multifractal) done and smoke-tested.
+## Visualization Maintenance Policy
+`PCGMapTilemapVisualization` is the primary testing surface. New tunables are wired into
+it during each phase implementation.
 
-Next implementation sequence (confirmed):
-1. **Phase N5.d** — Hills Noise Modulation.
-   Adds optional per-cell noise offset to the height-threshold hills classification (F3b).
-   `hillsNoiseBlend` (0–1), default 0.0 = pure height-threshold (golden-safe).
-2. **Phase H8** — Mega-Tiles (2x2 large terrain sprites).
-   Adapter-side. Depends on art assets with 2x2 sprite variants.
+`PCGMapVisualization` (GPU lantern) and `PCGMapCompositeVisualization` (Texture2D
+composite) are frozen at their current state (N5.d-complete feature set). They received
+compile-fix field renames in N5.e (hillsThresholdL1/L2 → hillsL1/L2) but no new feature
+wiring. They are updated at milestone boundaries only (e.g., after H8, after Phase M) via
+a single catch-up batch that wires all accumulated tunables. If a specific debugging need
+requires one of these components before the next milestone, the specific field is wired on
+demand.
+
+This policy reduces per-phase touchpoints from 10 files to 7 and from 3 visualization
+components to 1. The lantern and composite remain functional for all tunables up to and
+including N5.d defaults.
+
+## Immediate next focus
+M2.b complete and golden-captured. Next: **Phase L** — Hydrology (Priority-Flood → D8
+→ flow accumulation → river mask + lake CCA). Design complete in `Phase_L_Design.md`.
+
+Confirmed next implementation sequence (toward Phase W):
+1. **Phase L** — Hydrology.
+2. **Phase P** — Pipeline Validation / World Rejection (recommended before W; can land any time after M).
+
+Deferred / optional: H8b, T1, J, K, P (as before).
+
+Long-term target: **Phase W**. Minimum path: M → W. Enriched: M → M2 → L → P → W.
 
 See `planning/active/PCG_Roadmap.md`.
 

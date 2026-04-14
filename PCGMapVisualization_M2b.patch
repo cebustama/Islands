@@ -1,0 +1,92 @@
+--- a/PCGMapVisualization.cs
++++ b/PCGMapVisualization.cs
+@@ -76,6 +76,7 @@
+         [SerializeField] private bool enableTraversalStage = true;
+         [SerializeField] private bool enableMorphologyStage = true;
+         [SerializeField] private bool enableBiomeStage = true;
++        [SerializeField] private bool enableRegionsStage = true;
+ 
+         [Header("Biome (Phase M)")]
+         [SerializeField] private float biomeBaseTemperature = 0.7f;
+@@ -199,6 +200,7 @@
+         private bool lastEnableTraversalStage;
+         private bool lastEnableMorphologyStage;
+         private bool lastEnableBiomeStage;
++        private bool lastEnableRegionsStage;
+         private PCGViewMode lastViewMode;
+         private MapLayerId lastViewLayer;
+         private MapFieldId lastViewField;
+@@ -235,12 +237,14 @@
+         private Stage_Traversal2D traversalStage;
+         private Stage_Morphology2D morphologyStage;
+         private Stage_Biome2D biomeStage;
++        private Stage_Regions2D regionsStage;
+         private IMapStage2D[] stagesF2;
+         private IMapStage2D[] stagesF3;
+         private IMapStage2D[] stagesF4;
+         private IMapStage2D[] stagesF5;
+         private IMapStage2D[] stagesF6;
+         private IMapStage2D[] stagesG;
+         private IMapStage2D[] stagesM;
+         private IMapStage2D[] stagesM2a;
++        private IMapStage2D[] stagesM2b;
+ 
+@@ -261,14 +265,16 @@
+             traversalStage = new Stage_Traversal2D();
+             morphologyStage = new Stage_Morphology2D();
+             biomeStage = new Stage_Biome2D();
++            regionsStage = new Stage_Regions2D();
+ 
+             stagesF2 = new IMapStage2D[1] { baseStage };
+             stagesF3 = new IMapStage2D[2] { baseStage, hillsStage };
+             stagesF4 = new IMapStage2D[3] { baseStage, hillsStage, shoreStage };
+             stagesF5 = new IMapStage2D[4] { baseStage, hillsStage, shoreStage, vegetationStage };
+             stagesF6 = new IMapStage2D[5] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage };
+             stagesG = new IMapStage2D[6] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage };
+             stagesM = new IMapStage2D[7] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage, biomeStage };
+             stagesM2a = new IMapStage2D[7] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage };
++            stagesM2b = new IMapStage2D[8] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage, regionsStage };
+ 
+             CacheParams();
+             dirty = true;
+@@ -300,12 +306,14 @@
+             traversalStage = null;
+             morphologyStage = null;
+             biomeStage = null;
++            regionsStage = null;
+             stagesF2 = null;
+             stagesF3 = null;
+             stagesF4 = null;
+             stagesF5 = null;
+             stagesF6 = null;
+             stagesG = null;
+             stagesM = null;
+             stagesM2a = null;
++            stagesM2b = null;
+         }
+ 
+@@ -376,7 +384,8 @@
+                     tunables: eTun);
+ 
+-                var stages = (enableBiomeStage && eVeg) ? stagesM2a
+-                           : enableBiomeStage ? stagesM
++                var stages = (enableBiomeStage && eVeg && enableRegionsStage) ? stagesM2b
++                           : (enableBiomeStage && eVeg) ? stagesM2a
++                           : enableBiomeStage ? stagesM
+                            : eMorph ? stagesG
+                            : eTrav ? stagesF6
+                            : eVeg ? stagesF5
+@@ -566,6 +575,7 @@
+             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
+             lastEnableBiomeStage = enableBiomeStage;
++            lastEnableRegionsStage = enableRegionsStage;
+             lastViewMode = viewMode;
+             lastViewLayer = viewLayer;
+             lastViewField = viewField;
+@@ -607,6 +617,7 @@
+                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
+                 || enableBiomeStage != lastEnableBiomeStage
++                || enableRegionsStage != lastEnableRegionsStage
+                 || viewMode != lastViewMode
+                 || viewLayer != lastViewLayer
+                 || viewField != lastViewField

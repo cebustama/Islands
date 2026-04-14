@@ -312,8 +312,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
             terrainNoise: TerrainNoiseSettings.DefaultTerrain,
             warpNoise: TerrainNoiseSettings.DefaultWarp,
             heightQuantSteps: 1024,
-            hillsThresholdL1: 0.65f,
-            hillsThresholdL2: 0.80f,
+            hillsL1: 0.30f,
+            hillsL2: 0.43f,
             shapeMode: IslandShapeMode.Rectangle);
 
         [Test]
@@ -413,8 +413,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
             terrainNoise: TerrainNoiseSettings.DefaultTerrain,
             warpNoise: TerrainNoiseSettings.DefaultWarp,
             heightQuantSteps: 1024,
-            hillsThresholdL1: 0.65f,
-            hillsThresholdL2: 0.80f,
+            hillsL1: 0.30f,
+            hillsL2: 0.43f,
             shapeMode: IslandShapeMode.NoShape);
 
         [Test]
@@ -535,8 +535,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
                 terrainNoise: TerrainNoiseSettings.DefaultTerrain,
                 warpNoise: TerrainNoiseSettings.DefaultWarp,
                 heightQuantSteps: 1024,
-                hillsThresholdL1: 0.65f,
-                hillsThresholdL2: 0.80f,
+                hillsL1: 0.30f,
+                hillsL2: 0.43f,
                 shapeMode: IslandShapeMode.Custom);
 
             var ellipseInputs = new MapInputs(Seed, domain, MapTunables2D.Default);

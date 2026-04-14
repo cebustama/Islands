@@ -11,7 +11,6 @@
 |   +---planning
 |   |   +---active
 |   |   |   +---crosscheck_roadmap.md
-|   |   |   +---Noise_Composition_Improvements_Roadmap.md
 |   |   |   +---PCG_Roadmap.md
 |   |   |   +---Phase_L_Design.md
 |   |   |   +---Phase_M_Design.md
@@ -22,6 +21,7 @@
 |   |       +---Islands_Governance_Migration_Roadmap.md
 |   |       +---Islands_PCG_MapPipelineByLayers_Roadmap_v0.1.0_2026-01-29.md
 |   |       +---Islands_PCG_Roadmap_Integrated_With_MapLayers_v0.2.4_2026-02-03.md
+|   |       +---Noise_Composition_Improvements_Roadmap.md
 |   |       \---PhaseF_Planning_Report_MapPipeline_F3_F6_NoiseJobs_2026-02-03_v2.md
 |   +---reference
 |   |   +---GraphLibrary_Pipeline_Technical_Doc.md
@@ -33,6 +33,18 @@
 |   |   +---overview.md
 |   |   +---pcg-layout-strategies-reference.md
 |   |   +---scalar-heatmap-scene-setup.md
+|   |   +---Screenshot 2026-04-11 001049.png
+|   |   +---Screenshot 2026-04-11 001351.png
+|   |   +---Screenshot 2026-04-11 001408.png
+|   |   +---Screenshot 2026-04-11 001426.png
+|   |   +---Screenshot 2026-04-11 001503.png
+|   |   +---Screenshot 2026-04-11 001556.png
+|   |   +---Screenshot 2026-04-11 001615.png
+|   |   +---Screenshot 2026-04-11 001644.png
+|   |   +---Screenshot 2026-04-11 001702.png
+|   |   +---Screenshot 2026-04-11 001733.png
+|   |   +---Screenshot 2026-04-11 001802.png
+|   |   +---Screenshot 2026-04-11 001922.png
 |   |   +---shaders.md
 |   |   +---surfaces.md
 |   |   \---tileset-import-guide.md
@@ -161,10 +173,16 @@
 |   |   +---Adapters
 |   |   |   \---Tilemap
 |   |   |       +---Islands.PCG.Adapters.Tilemap.asmdef
+|   |   |       +---MegaTilePlacement.cs
+|   |   |       +---MegaTileRule.cs
+|   |   |       +---MegaTileScanner.cs
+|   |   |       +---MegaTileStamper.cs
 |   |   |       +---PCGMapTilemapSample.cs
 |   |   |       +---PCGMapTilemapVisualization.cs
 |   |   |       +---ProceduralTileEntry.cs
 |   |   |       +---ProceduralTileFactory.cs
+|   |   |       +---ScalarOverlayRenderer.cs
+|   |   |       +---ScalarOverlaySource.cs
 |   |   |       +---TilemapAdapter2D.cs
 |   |   |       +---TilemapLayerEntry.cs
 |   |   |       +---TilemapLayerGroup.cs
@@ -186,11 +204,15 @@
 |   |   |   +---Maps
 |   |   |   |   +---Stages
 |   |   |   |   |   +---Stage_BaseTerrain2D.cs
+|   |   |   |   |   +---Stage_Biome2D.cs
 |   |   |   |   |   +---Stage_Hills2D.cs
 |   |   |   |   |   +---Stage_Morphology2D.cs
+|   |   |   |   |   +---Stage_Regions2D.cs
 |   |   |   |   |   +---Stage_Shore2D.cs
 |   |   |   |   |   +---Stage_Traversal2D.cs
 |   |   |   |   |   \---Stage_Vegetation2D.cs
+|   |   |   |   +---BiomeTable.cs
+|   |   |   |   +---BiomeType.cs
 |   |   |   |   +---IMapStage2D.cs
 |   |   |   |   +---IslandShapeMode.cs
 |   |   |   |   +---MapContext2D.cs
@@ -203,6 +225,8 @@
 |   |   |   |   +---MapShapeInput.cs
 |   |   |   |   +---MapTunables2D.cs
 |   |   |   |   +---NoiseSettingsAsset.cs
+|   |   |   |   +---RegionNameRegistry2D.cs
+|   |   |   |   +---RegionNameTableAsset.cs
 |   |   |   |   \---TerrainNoiseSettings.cs
 |   |   |   +---CorridorFirstDungeon2D.cs
 |   |   |   +---Direction2D.cs
@@ -266,6 +290,7 @@
 |   |   |       |   |   \---TilesetConfigTests.cs
 |   |   |       |   +---MapExporter2DTests.cs
 |   |   |       |   +---MapGenerationPresetTests.cs
+|   |   |       |   +---MapNoiseBridge2DTests.cs
 |   |   |       |   +---MapPipelineRunner2DGoldenF2cTests.cs
 |   |   |       |   +---MapPipelineRunner2DGoldenF2Tests.cs
 |   |   |       |   +---MapPipelineRunner2DGoldenF3Tests.cs
@@ -273,10 +298,15 @@
 |   |   |       |   +---MapPipelineRunner2DGoldenF5Tests.cs
 |   |   |       |   +---MapPipelineRunner2DGoldenF6Tests.cs
 |   |   |       |   +---MapPipelineRunner2DGoldenGTests.cs
+|   |   |       |   +---MapPipelineRunner2DGoldenM2bTests.cs
+|   |   |       |   +---MapPipelineRunner2DGoldenM2Tests.cs
+|   |   |       |   +---MapPipelineRunner2DGoldenMTests.cs
 |   |   |       |   +---MapPipelineRunner2DTests.cs
 |   |   |       |   +---MaskFloodFillOps2DTests.cs
 |   |   |       |   +---MaskTopologyOps2DTests.cs
+|   |   |       |   +---MegaTileScannerTests.cs
 |   |   |       |   +---StageBaseTerrain2DTests.cs
+|   |   |       |   +---StageBiome2DTests.cs
 |   |   |       |   +---StageHills2DTests.cs
 |   |   |       |   +---StageMorphology2DTests.cs
 |   |   |       |   +---StageShore2DTests.cs
@@ -472,4 +502,5 @@
 +---files.txt
 +---make-tree-unity.bat
 +---package.json
++---PCGMapVisualization_M2b.patch
 \---README.md

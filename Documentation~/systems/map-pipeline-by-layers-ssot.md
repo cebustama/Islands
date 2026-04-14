@@ -2,8 +2,8 @@
 
 Status: Active (implemented slice only)
 Authority: Primary subsystem authority for implemented Map Pipeline by Layers behavior.
-Scope: Implemented F0–Phase N5.b runtime truth and active contracts for Map Pipeline by Layers.
-Out of scope: Phase N5.c+ roadmap work, legacy tilemap map generation, sample-only inspector convenience.
+Scope: Implemented F0–Phase M2.b runtime truth and active contracts for Map Pipeline by Layers.
+Out of scope: Phase L+ roadmap work, legacy tilemap map generation, sample-only inspector convenience.
 
 ## Purpose
 This document governs the implemented and test-gated truth of the Map Pipeline by Layers subsystem.
@@ -15,7 +15,6 @@ This SSoT covers only the currently implemented vertical slice:
 - F2 Base terrain (F2b reformed: ellipse + domain-warp silhouette; F2c: optional external shape input)
 - F3 Hills + topology
 - F4 Shore + ShallowWater
-- F5 Vegetation
 - F6 Traversal (Walkable + Stairs)
 - Phase G Morphology (LandCore + CoastDist)
 - Phase H Visualization (PCGViewMode enum; scalar field color-ramp view; per-layer preset colors)
@@ -32,6 +31,11 @@ This SSoT covers only the currently implemented vertical slice:
 - Phase N5.a Base Shape Selector
 - Phase N5.b Noise Settings Assets (NoiseSettingsAsset; TerrainNoiseSettings extensions;
   PropertyDrawer; configuration override pattern)
+- Phase M Climate & Biome Classification (Stage_Biome2D; BiomeType; BiomeTable;
+  Temperature, Moisture, Biome fields; 4×4 Whittaker lookup)
+- F5 Vegetation
+- Phase M2.b Contiguous Region Detection + Naming (Stage_Regions2D; RegionNameRegistry2D;
+  RegionNameTableAsset; BiomeRegionId field)
 
 `MapLayerId.Paths` is registered but not yet written; its authoritative write belongs in Phase O.
 
@@ -47,17 +51,23 @@ Current `MapLayerId`:
 - HillsL1
 - HillsL2
 - Paths *(registered; not yet written — write deferred to Phase O)*
-- Stairs
+- Stairs *(registered; not yet written — parked pending redesign)*
 - Vegetation
 - Walkable
 - LandEdge
 - LandInterior
 - LandCore *(Phase G)*
+- MidWater *(Phase F4c — written by Stage_Shore2D only when MidWaterDepth01 > 0; layer not allocated otherwise)*
 
 Current `MapFieldId`:
 - Height
-- Moisture *(registered; not yet written — write deferred to Phase M)*
+- Moisture *(Phase M — written by Stage_Biome2D sub-stage M.2)*
 - CoastDist *(Phase G)*
+- Temperature *(Phase M — written by Stage_Biome2D sub-stage M.1)*
+- Biome *(Phase M — written by Stage_Biome2D sub-stage M.3)*
+- BiomeRegionId *(Phase M2.b — written by Stage_Regions2D; 0 = water/Unclassified sentinel; 1-based ints for land regions)*
+
+COUNT = 6
 
 ### Inputs
 `MapInputs`
@@ -189,8 +199,8 @@ functional when N5.c adds corresponding `case` branches in `MapNoiseBridge2D.Fil
 - `Height` (MapFieldId 0) — elevation source for threshold classification
 
 **Writes:**
-- `HillsL1` (MapLayerId 7) — passable slopes: `Land AND Height >= hillsThresholdL1 AND NOT HillsL2`
-- `HillsL2` (MapLayerId 8) — impassable peaks: `Land AND Height >= hillsThresholdL2`
+- `HillsL1` (MapLayerId 3) — passable slopes: `Land AND Height >= hillsThresholdL1 AND NOT HillsL2`
+- `HillsL2` (MapLayerId 4) — impassable peaks: `Land AND Height >= hillsThresholdL2`
 - `LandEdge` (MapLayerId 9) — `Land AND 4-adjacent-to-any-non-Land-cell`
 - `LandInterior` (MapLayerId 10) — `Land AND NOT LandEdge`
 
@@ -262,17 +272,31 @@ for F3+ hashes.
 - does not mutate `Land`, `DeepWater`, or `Height`
 - does not consume `ctx.Rng` (no noise, no randomness)
 
-### F5 vegetation contracts
+### F5 vegetation contracts (M2.a)
 `Stage_Vegetation2D`
-- reads `LandInterior` (read-only), `HillsL2` (read-only), `ShallowWater` (read-only)
+- reads `LandInterior` (read-only), `HillsL2` (read-only), `ShallowWater` (read-only),
+  `Biome` field (read-only, optional), `Moisture` field (read-only, optional)
 - writes `Vegetation`
 - `Vegetation ⊆ Land`
 - `Vegetation ⊆ LandInterior` (the LandEdge ring is always excluded)
 - `Vegetation ∩ HillsL2 == ∅` (no vegetation on hill peaks)
 - `Vegetation ∩ ShallowWater == ∅` (implied by `⊆ LandInterior`; stated explicitly for contract clarity)
-- noise: SimplexPerlin01 via `MapNoiseBridge2D`, fixed salt `0xB7C2F1A4u`, threshold 0.40f
-- does not mutate `Land`, `LandInterior`, `HillsL2`, `ShallowWater`, or `Height`
-- does not write `MapFieldId.Moisture` (deferred to Phase M)
+- noise: SimplexPerlin01 via `MapNoiseBridge2D`, fixed salt `0xB7C2F1A4u`
+- per-cell threshold: when `Biome` field is present, threshold is read from
+  `BiomeTable` entry for the cell's biome (biome-aware density). When `Biome`
+  is absent (biome stage disabled), Option A fallback applies:
+  `LegacyThreshold = 0.40f` constant preserves pre-M2.a behavior.
+- moisture modulation: stage-local `moistureModulation` field, default `0f`
+  (biome threshold is the primary driver; moisture is optional secondary
+  modulation, opt-in per visualization)
+- ordering requirement: must run **after** `Stage_Biome2D` so the `Biome`
+  field is available; pipeline order is enforced by `MapPipelineRunner2D`
+- does not mutate `Land`, `LandInterior`, `HillsL2`, `ShallowWater`, `Biome`,
+  `Moisture`, or `Height`
+- does not write `MapFieldId.Moisture` (owned by Phase M / `Stage_Biome2D`)
+- M2.a golden coverage: `StageVegetation2DTests` dual-golden pattern
+  (biome-on + biome-off paths); full-pipeline goldens in
+  `MapPipelineRunner2DGoldenM2Tests.cs`
 
 ### F6 traversal contracts
 `Stage_Traversal2D`
@@ -352,6 +376,62 @@ for F3+ hashes.
 - Deterministic: same export + same priority table ⇒ identical tilemap output.
 - Lives in `Islands.PCG.Adapters.Tilemap` assembly (separate from `Islands.PCG.Runtime`).
 
+### Phase H8 mega-tile contracts
+
+`MegaTilePlacement`
+- `readonly struct`. Represents a single 2×2 block placement in pipeline
+  coordinates. Fields: `X`, `Y` (bottom-left cell of the block; y=0 at bottom),
+  `RuleIndex` (index into the authoring `MegaTileRule[]` that produced it).
+
+`MegaTileRule`
+- `[Serializable]` struct. Declares a 2×2 replacement rule targeting one
+  `MapLayerId` with four quadrant `TileBase` assets (TL, TR, BL, BR —
+  artist/visual perspective).
+- `IsComplete` iff all four quadrants are assigned; incomplete rules are
+  silently skipped at stamp time.
+
+`MegaTileScanner`
+- Static, read-only consumer of `MapDataExport`. Never writes to pipeline state.
+- `Scan(MapDataExport, MegaTileRule[])` returns `List<MegaTilePlacement>`.
+- Algorithm: greedy top-left row-major scan (y outer, bottom to top;
+  x inner, left to right) with strict 4/4 qualification — all four cells of
+  a candidate 2×2 block must be set in the rule's `targetLayer` **and** unclaimed.
+- Claim semantics: a shared `claimed` bitmap is reused across rules within
+  one `Scan` call. A cell claimed by an earlier (lower-index) rule is
+  excluded from all later rules.
+- Priority: earlier rules (lower index) claim first. Rule ordering is
+  authoring-determined and is a contract surface.
+- Degenerate inputs: null export / null or empty rules / `w < 2` / `h < 2`
+  return an empty list without throwing.
+- Absent target layers are silently skipped; no exception.
+- Deterministic: same export + same rule array ⇒ identical placement list,
+  in identical order.
+
+`MegaTileStamper`
+- Static adapter. Called **after** `TilemapAdapter2D.Apply` (overwrite model):
+  the base adapter stamps 1×1 tiles for all cells first; the stamper then
+  overwrites claimed cells with quadrant sub-sprites.
+- `Apply(Tilemap, List<MegaTilePlacement>, MegaTileRule[], int height, bool flipY)`.
+- Coordinate mapping honours the adapter's `flipY` convention:
+  - `flipY = true` — visual top row is at lower tilemap Y
+    (`tileTL_Y = height - 2 - y`, `tileBL_Y = height - 1 - y`).
+  - `flipY = false` — pipeline coords map directly to tilemap coords.
+- Null guards: null `tilemap`, null `placements`, or null `rules` → no-op.
+- Placements with an out-of-range `RuleIndex` or with `!rule.IsComplete`
+  are skipped.
+- The stamper's `flipY` argument must match the base adapter's `flipY`; the
+  caller is responsible for passing the same value used in `TilemapAdapter2D.Apply`.
+- Lives in `Islands.PCG.Adapters.Tilemap` assembly (same as `TilemapAdapter2D`).
+
+**Invariants:**
+- Read-only w.r.t. pipeline state. Mega-tiles are an adapter-side overlay,
+  not a pipeline stage; they never write `MapLayerId` or `MapFieldId`.
+- A cell is claimed by at most one placement per `Scan` call.
+- Same export + same rules ⇒ identical placement list and identical
+  tilemap output (determinism extends through the stamper).
+- Rule-index priority (earlier wins) is a stable contract; reordering rules
+  is a semantic change and must be treated as such by authored content.
+
 ## Implemented surface
 ### F0
 - `MapIds2D`
@@ -413,6 +493,123 @@ for F3+ hashes.
   - `CoastDist` field (MapFieldId 2)
 - lantern support for morphology layer inspection (`enableMorphologyStage` toggle, `stagesG` array)
 
+### Phase M2.b — Contiguous Region Detection + Naming
+- `Stage_Regions2D`
+- `RegionNameRegistry2D`
+- `RegionNameTableAsset`
+- authoritative outputs:
+  - `BiomeRegionId` field (MapFieldId 5)
+- lantern support for region inspection (`enableRegionsStage` toggle, `stagesM2b` array; `ScalarOverlaySource.BiomeRegionId = 5`)
+
+### Phase M — Climate & Biome Classification
+`Stage_Biome2D` — single `IMapStage2D` with three sub-stages.
+
+**Pipeline position:** After Stage_Morphology2D (G). Before any Phase M2 stage.
+
+**Reads (read-only):**
+- `Height` (MapFieldId 0) — elevation for lapse rate calculation
+- `CoastDist` (MapFieldId 2) — coastal proximity for temperature moderation and moisture
+- `LandEdge` (MapLayerId 9) — Beach override eligibility
+- `Land` (MapLayerId 0) — land eligibility
+
+**Writes:**
+- `Temperature` (MapFieldId 3) — sub-stage M.1
+- `Moisture` (MapFieldId 1) — sub-stage M.2
+- `Biome` (MapFieldId 4) — sub-stage M.3
+
+**Sub-stage M.1 — Temperature:**
+`base_temp - lapse * height - latitude + coast_mod + noise`
+- `latitude` = smoothstep of normalized Y
+- `coast_mod` = coastModerationStrength × smoothstep of CoastDist
+- Noise via MapNoiseBridge2D coordinate hashing, salt `0xB10E0001`
+
+**Sub-stage M.2 — Moisture:**
+`coastalMoistureBonus × smoothstep(coastDecay, CoastDist) + noise`
+- Phase L FlowAccumulation stub (additive term, zero until Phase L implemented)
+- Noise via MapNoiseBridge2D coordinate hashing, salt `0xB10E0002`
+
+**Sub-stage M.3 — Biome classification:**
+- 4×4 Whittaker Temperature × Moisture lookup via `BiomeTable.Lookup(temp01, moist01)`
+- Beach override: warm LandEdge cells → Beach (requires temp ≥ BeachMinTemperature 0.25f)
+- Non-Land cells → biome 0 (sentinel)
+
+**Data structures:**
+- `BiomeType` — byte enum, 12 ecological biomes + Unclassified sentinel + Beach override, append-only.
+- `BiomeTable` — `BiomeDef` struct (type, displayName, vegetationDensity), 4×4 lookup, `Definitions[]` array (M2-ready).
+
+**Stage-local tunables (10, Inspector-accessible via M-fix.a):**
+baseTemperature, lapseRate, latitudeEffect, coastModerationStrength, tempNoiseAmplitude,
+tempNoiseCellSize, coastalMoistureBonus, coastDecayRate, moistureNoiseAmplitude,
+moistureNoiseCellSize.
+Fed directly to the stage instance from PCGMapTilemapVisualization and MapGenerationPreset,
+not via MapTunables2D. Same pattern as shallowWaterDepth01 on Stage_Shore2D.
+`beachMinTemperature` is on BiomeTable (static readonly 0.25f), not on Stage_Biome2D —
+not yet Inspector-tunable.
+
+**RNG / Noise:** Zero ctx.Rng consumption. All noise via MapNoiseBridge2D coordinate hashing.
+
+**No-mutate:** Does not modify Height, CoastDist, Land, LandEdge, or any prior layer/field.
+
+**Invariants:**
+- M-1: Temperature is continuous [0,1] on Land, 0 on non-Land.
+- M-2: Moisture is continuous [0,1] on Land, 0 on non-Land.
+- M-3: Biome ∈ valid BiomeType range on Land, 0 (sentinel) on non-Land.
+- M-4: Beach only on warm LandEdge (temp ≥ BeachMinTemperature).
+- M-5: Deterministic — same inputs + seed → same Temperature, Moisture, Biome.
+- M-6: No ctx.Rng consumption.
+- M-7: Non-invalidation — appending Phase M does not change any F0–G output.
+- M-8: Without-Phase-L — moisture formula operates without FlowAccumulation (zero contribution).
+
+**Visualization:**
+- `PCGMapTilemapVisualization`: `enableBiomeStage` toggle, `stagesM` array, dirty tracking.
+- `ScalarOverlaySource`: Temperature=3, Biome=4, BiomeRegionId=5 (gap 6–9 reserved).
+- `PCGMapTilemapVisualizationEditor`: `enableBiomeStage` drawn after morphology toggle.
+- `MapGenerationPreset`: `enableBiomeStage` field.
+
+### Phase M2.b — Contiguous Region Detection + Naming (Stage_Regions2D)
+
+**Pipeline position:** After Stage_Vegetation2D (F5). M2.b tail — final stage in the M2 group.
+
+**Reads (read-only):**
+- `Land` (MapLayerId 0) — eligibility mask; non-Land cells receive BiomeRegionId = 0 (sentinel).
+- `Biome` (MapFieldId 4) — biome classification; Unclassified sentinel cells receive BiomeRegionId = 0.
+
+**Writes:**
+- `BiomeRegionId` (MapFieldId 5) — contiguous same-biome region IDs; 0 = sentinel, 1-based integers for land regions.
+
+**Algorithm summary:**
+1. CCA (connected-component analysis) over Land cells sharing the same BiomeType value,
+   using 4-connectivity, stable row-major discovery order.
+2. Specks (regions below `minRegionSize` threshold) merged into the largest 4-adjacent
+   neighbour by cell count; tie-break: lowest anchor row-major index.
+3. IDs reassigned as stable 1-based integers after merge pass.
+4. `RegionNameRegistry2D` maps each region ID to a display name using `RegionNameTableAsset`.
+
+**Data structures:**
+- `RegionNameRegistry2D` — runtime name registry produced by the stage; maps `int regionId → string name`.
+- `RegionNameTableAsset` — ScriptableObject name pool; authored list of candidate region names per BiomeType.
+
+**Contracts (R-1 through R-8):**
+- R-1: BiomeRegionId == 0 on all non-Land cells.
+- R-2: BiomeRegionId == 0 on Land cells whose Biome == Unclassified sentinel.
+- R-3: BiomeRegionId >= 1 on all classified Land cells after merge.
+- R-4: All cells in a contiguous same-biome region share the same BiomeRegionId.
+- R-5: No two spatially distinct regions share the same BiomeRegionId within one map run.
+- R-6: Speck merge target is the largest 4-adjacent neighbour; tie-break is lowest anchor row-major index.
+- R-7: BiomeRegionId values are intra-map stable only — must not be persisted or compared across seeds (explicit non-goal; see `SSoT_CONTRACTS.md` M2.b block).
+- R-8: Deterministic — same inputs + seed ⇒ same BiomeRegionId field and same RegionNameRegistry2D.
+
+**RNG / Noise:** Zero ctx.Rng consumption. Name assignment uses a deterministic index derived from region ID and BiomeType.
+
+**No-mutate:** Does not modify Land, Biome, or any prior layer/field.
+
+**Visualization:**
+- All four viz classes patched with `stagesM2b` lantern entry and `ScalarOverlaySource.BiomeRegionId = 5`.
+- `PCGMapTilemapVisualizationEditor` updated for M2.b stage toggle.
+
+**Golden coverage:**
+- `MapPipelineRunner2DGoldenM2bTests.cs` — full-pipeline M2.b golden hash captured.
+
 ### Phase H
 - `PCGMapVisualization` extended with `PCGViewMode` enum (`MaskLayer` / `ScalarField`)
 - `MapContext2D` extended with `GetField(MapFieldId)` public method
@@ -445,6 +642,14 @@ for F3+ hashes.
   keeps Unity.Tilemaps dependency isolated from the headless runtime
 - scene: `Runtime/PCG/Samples/PCG Map Tilemap/PCG Map Tilemap.unity`
 - adapters-last invariant preserved; no new MapLayerId, MapFieldId, or runtime stage contracts
+
+### Phase H8
+- `MegaTilePlacement` — readonly struct, 2×2 placement in pipeline coords (`Runtime/PCG/Adapters/Tilemap/MegaTilePlacement.cs`)
+- `MegaTileRule` — serializable struct, per-layer 2×2 replacement rule with 4 quadrant tiles (`Runtime/PCG/Adapters/Tilemap/MegaTileRule.cs`)
+- `MegaTileScanner` — static, greedy top-left row-major scan with shared cross-rule claim bitmap (`Runtime/PCG/Adapters/Tilemap/MegaTileScanner.cs`)
+- `MegaTileStamper` — static overwrite stamper called after `TilemapAdapter2D.Apply`; honours adapter `flipY` (`Runtime/PCG/Adapters/Tilemap/MegaTileStamper.cs`)
+- lives in `Islands.PCG.Adapters.Tilemap` assembly (same as `TilemapAdapter2D`)
+- adapter-side overlay; no new MapLayerId, MapFieldId, or runtime stage contracts
 
 ### Phase N5.b
 - `NoiseSettingsAsset` — ScriptableObject noise configuration asset (`Runtime/Layout/Maps/NoiseSettingsAsset.cs`)
@@ -521,6 +726,12 @@ for F3+ hashes.
   flipY mirrors Y coordinate; determinism gate
 - Phase N5.b: NoiseSettingsAsset override resolution (asset → inline); IEquatable identity
   and inequality; new field defaults
+- Phase M determinism (Temperature, Moisture, Biome field hashes stable across runs)
+- Phase M field goldens (3 hashes: Temperature, Moisture, Biome)
+- Phase M invariants M-1 through M-8 (temperature range, moisture range, biome range,
+  beach constraint, determinism, no-RNG, non-invalidation, without-Phase-L)
+- Phase M pipeline golden (full F0→M, 3 field hashes)
+- Phase M non-invalidation (prior G-pipeline outputs unchanged when M appended)
 
 ## Known limitations
 - Scalar field normalization range (scalarMin/scalarMax) is inspector-settable but not auto-ranged; CoastDist max distance varies by map size and CoastDistMax tunable
@@ -528,11 +739,12 @@ for F3+ hashes.
 - F2/F3 noise parameters are now configurable via `TerrainNoiseSettings` (N4) and
   `NoiseSettingsAsset` (N5.b). Extended Worley/ridged fields are carried but not
   functional until N5.c adds runtime branches.
-- `MapFieldId.Moisture` is registered but not yet written; ownership deferred to Phase M
+- Temperature reads continuous Height by design — discrete terrain tiers (HillsL1/HillsL2) are gameplay/visual abstractions, not climate inputs. If sharp temperature breaks at hill boundaries are desired, implement as an inline A/B toggle in Stage_Biome2D (see M-fix.b resolution in PCG_Roadmap.md)
+- `beachMinTemperature` lives on BiomeTable as static readonly, not on Stage_Biome2D — not yet Inspector-tunable
 - `MapLayerId.Paths` is registered but not yet written; ownership deferred to Phase O
 - `PCGMapTilemapSample` regenerates only on Start or ContextMenu; live editor regeneration deferred to Phase H2c
 
 ## Not governed here
-- Phase N5.c+ roadmap work (Extended Noise Palette + Ridged Multifractal and beyond)
+- Phase L+ roadmap work (Hydrology and beyond)
 - `Paths` layer write (deferred to Phase O — requires Phase N POI placement as prerequisite)
 - Legacy tilemap generation documents

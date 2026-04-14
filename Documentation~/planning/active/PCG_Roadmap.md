@@ -40,30 +40,37 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase H5: done
 - Phase H7: done
 - Phase H6: done
-- Phase H8: later (planning only)
+- Phase H8: done
+- Phase H8b: optional (planning only)
 - Phase F4b: done
 - Phase F4c: done
 - Phase N2: done
 - Phase N4: done
 - Phase F3b: done
-- Phase N5: in progress
+- Phase N5: done
   - N5.a: done
   - N5.b: done
   - N5.c: done
-  - N5.d: later (planning only)
+  - N5.d: done
+  - N5.e: done
+- Phase N6: done
 - Phase I: later
 - Phase I2: later (planning only)
 - Phase J: later (planning only)
 - Phase J2: later (planning only — new)
 - Phase K: later (planning / exploratory only)
-- Phase L: later (planning only)
-- Phase M: later (planning only)
-- Phase M2: later (planning only — new)
+- Phase L: confirmed (after M2, design complete)
+- Phase M: done
+- M-fix.a: done (Biome Tunables Inspector Wiring + M-fix.c folded in)
+- M-fix.b: resolved (deferred by design — no downstream consumer needs EffectiveElevation)
+- M-fix.c: done (folded into M-fix.a)
+- Phase M2: done (M2.a + M2.b complete, all golden-captured)
 - Phase N: later (planning only)
 - Phase O: later (planning only)
 - Phase P: later (planning only — new)
 - Phase T1: planning (design complete — adapter track)
 - Phase W: later (planning / exploratory only)
+- Phase V: planning only (scope defined — Runtime Inspection UI; design doc pending after M2.b)
 
 ## Documentary note on Layout Strategies
 Layout strategies are currently treated as a governed deep reference / staged support surface under PCG.
@@ -92,9 +99,10 @@ to its design doc if one exists. The design doc contains the implementation-dept
 |-------|----------------|--------|
 | Phase M | [`Phase_M_Design.md`](design/Phase_M_Design.md) | Complete |
 | Phase W | [`Phase_W_Design.md`](design/Phase_W_Design.md) | Complete |
-| Phase M2 | [`Phase_M2_Design.md`](design/Phase_M2_Design.md) | Complete |
+| Phase M2 | [`Phase_M2_Design.md`](design/Phase_M2_Design.md) | Complete (M2.a + M2.b) |
 | Phase L | [`Phase_L_Design.md`](design/Phase_L_Design.md) | Complete |
 | Phase T1 | [`Phase_T1_Design.md`](design/Phase_T1_Design.md) | Complete |
+| Phase H8 | [`Phase_H8_Design.md`](design/Phase_H8_Design.md) | Complete (implemented) |
 
 ## Resolved design decisions (2026-04-06)
 
@@ -474,7 +482,7 @@ heatmap visualization.
 - No new `MapLayerId` or `MapFieldId`.
 
 ### Phase N5 — Noise & Shape Configuration
-**In progress. N5.a, N5.b, N5.c done. Sequenced after Phase F3b (done), before Phase H8.**
+**Done. N5.a–e complete. Sequenced after Phase F3b (done).**
 
 Consolidates four related configuration improvements into one phase. N5.a–c are
 independently implementable; N5.b and N5.c have natural synergy (asset format includes
@@ -594,26 +602,89 @@ breaking the 1:1 correspondence between Height contour lines and hill boundaries
 - Low complexity. No new `MapLayerId` or `MapFieldId`. Independent of N5.a–c.
 - Depends on: Phase F3b (done), Phase N4 (MapNoiseBridge2D infrastructure).
 
+### Phase N6 — Noise Preview Visualization
+**Done. Sequenced after Phase N5 (done).**
+
+Replaced the scalar overlay system on `PCGMapTilemapVisualization` with a Texture2D +
+SpriteRenderer approach. Two independent overlay slots for A/B comparison of pipeline
+fields and raw noise patterns.
+
+- **`ScalarOverlaySource` enum:** Height, CoastDist, Moisture (pipeline fields);
+  TerrainNoise, WarpNoiseX, WarpNoiseY, HillsNoise (noise previews via
+  `MapNoiseBridge2D.FillNoise01` with exact stage-matching salts).
+- **`ScalarOverlayRenderer` helper:** manages child GameObject + SpriteRenderer + Texture2D
+  per overlay slot. `FilterMode.Point`, `HideFlags.DontSave`. Aligns to tilemap via
+  `layoutGrid.cellSize` scaling.
+- **Performance:** one `tex.Apply()` per overlay replaces 65K `SetTile()` at 256×256.
+- **Legacy removed:** heatmap tilemap path, per-cell tint path, all associated fields.
+- Tilemap viz only (per visualization maintenance policy).
+- 2 new files, 2 modified files.
+- No new `MapLayerId` or `MapFieldId`.
+- Depends on: Phase N4 (MapNoiseBridge2D), Phase N5.d (hills noise salt).
+
 ### Phase H8 — Mega-Tiles (2×2 Large Terrain Sprites)
-**Later. Sequenced after Phase N5.**
+**Done.**
+**See [`Phase_H8_Design.md`](design/Phase_H8_Design.md) for full design, tradeoff analysis,
+coordinate mapping, and visual smoke test protocol.**
 
 Replaces clusters of same-type tiles with large multi-cell sprite groups.
-First target: 2×2 HillsL2 clusters → single large mountain sprite.
+First target: 2×2 HillsL2 clusters → single large mountain sprite (TL/TR/BL/BR quadrants).
 
-- **Scan rule:** when a 2×2 block contains 3+ HillsL2 cells, the entire 2×2 block
-  is replaced by a 4-quadrant large mountain sprite (TL/TR/BL/BR).
-- **Candidate approaches** (to evaluate at implementation):
-  - **Rule Tile with Extended Neighbor** — Unity's RuleTile supports extending the
-    neighbor check beyond 3×3. Each cell in a qualifying 2×2 cluster gets a rule
-    that identifies its quadrant position and assigns the correct sub-sprite.
-  - **Adapter pre-pass** — scan the exported HillsL2 mask for 2×2 clusters before
-    stamping. Mark qualifying cells with their quadrant, then stamp the large sprite
-    parts. Keeps the logic in adapter code rather than Rule Tile config.
-  - **Custom TileBase subclass** — a `MegaTile` that overrides `GetTileData` and
-    checks its 2×2 neighborhood at render time.
-- Extensible beyond mountains: forest groves (2×2 Vegetation), town clusters, etc.
-- Pure adapter/sample-side. No new MapLayerId, MapFieldId, or runtime stage contracts.
-- Depends on: Phase H6 (Rule Tiles), tileset art with 2×2 large mountain variants.
+Resolved decisions:
+- **Adapter pre-pass** (not RuleTile, not custom TileBase). `MegaTileScanner` reads
+  `MapDataExport` (read-only), produces `MegaTilePlacement[]`; `MegaTileStamper` overwrites
+  claimed cells on the tilemap after standard `TilemapAdapter2D.Apply()`.
+- **Strict 4/4 qualification** — only blocks where all four cells have the target layer
+  set qualify. No mask mutation. Adapters-last preserved.
+- **Greedy top-left row-major scan** — deterministic, O(W×H), claimed cells excluded
+  from subsequent checks. Shared claimed array across all rules.
+- **Overwrite stamp order** — standard Apply first, mega-tile stamper second. No changes
+  to existing Apply contract.
+- **Generic `MegaTileRule` struct** — `{ MapLayerId targetLayer, TileBase quadrantTL/TR/BL/BR }`.
+  Multiple rules evaluated in priority order. Extensible to Vegetation, future layers.
+- **Inspector fields on `PCGMapTilemapVisualization`** — `enableMegaTiles` bool +
+  `MegaTileRule[]` array. FNV-1a dirty hash extended.
+- **No new MapLayerId / MapFieldId / runtime stage.** Pure adapter-side in
+  `Islands.PCG.Adapters.Tilemap`.
+- **Block size locked to 2×2.** Multi-dimension support deferred to optional Phase H8b.
+- Art blocked on quadrant sprites. Implemented with procedural placeholder sprites;
+  art swap is a single TileBase asset assignment.
+
+Files:
+- `MegaTilePlacement.cs`, `MegaTileScanner.cs`, `MegaTileStamper.cs`, `MegaTileRule.cs`
+  in `Runtime/PCG/Adapters/Tilemap/`.
+- `MegaTileScannerTests.cs` in `Runtime/PCG/Tests/EditMode/PCG/Maps/` (10 tests).
+- `PCGMapTilemapVisualization.cs` and `PCGMapTilemapVisualizationEditor.cs` modified.
+
+### Phase H8b — Multi-Dimension Mega-Tiles
+**Optional (planning only). Sequenced after H8. Not a prerequisite for any other phase.**
+
+Generalizes the H8 scanner/stamper from a fixed 2×2 block to configurable block sizes.
+Target dimensions: 1×2, 2×1, 2×3, 3×2, 3×3.
+
+- **`MegaTileRule` extended** with `blockWidth` / `blockHeight` fields (default 2/2 for
+  backward compatibility). `TileBase[]` flat row-major array replaces the four named
+  quadrant fields (a 2×3 block needs 6 tiles, a 3×3 needs 9).
+- **`MegaTileScanner.ScanOneRule` generalized** from checking 4 cells to checking W×H
+  cells in nested loops. The greedy row-major scan and shared claimed array remain
+  unchanged. Algorithm stays O(W×H) per rule.
+- **`MegaTilePlacement` extended** — carries block dimensions (or derives them from rule
+  index lookup).
+- **`MegaTileStamper` generalized** — iterates the tile array row-major with flipY
+  mapping extended to arbitrary block height.
+- **Greedy scan bias consideration:** For larger blocks (3×3), the top-left greedy bias
+  becomes more visible. Empirical testing across seed ranges should validate visual
+  acceptability. If the bias is problematic, a grid-aligned scan (even-coordinate origins)
+  can be offered as an alternative mode via a `ScanMode` enum on the rule.
+- **Orientation for non-square blocks:** 1×2 and 2×1 are distinct rules (not auto-rotated).
+  A 1×2 rule scans for vertical pairs; a 2×1 rule scans for horizontal pairs.
+- **Inspector UX:** The tile array size is `blockWidth × blockHeight`. The Editor can
+  validate that the array length matches the declared dimensions.
+- Pure adapter-side. No new MapLayerId, MapFieldId, or runtime stage contracts.
+  Adapters-last invariant preserved.
+- Depends on: Phase H8 (done).
+- **Trigger:** Implement when art assets with non-2×2 sprite groups become available, or
+  when gameplay/visual needs require varied mega-tile dimensions.
 
 ### Phase T1 — PCG Map Mesh Visualization
 **Planning. Design complete. Sequenced on adapter track, parallel to mainline.**
@@ -724,7 +795,7 @@ Planning / exploratory only.
   each injected via MapShapeInput (F2c).
 
 ### Phase L — Hydrology (Rivers & Lakes)
-**Planning only.**
+**Confirmed (after M2). Design complete.**
 **See [`Phase_L_Design.md`](design/Phase_L_Design.md) for detailed design.**
 
 - Fills height depressions via Priority-Flood.
@@ -735,41 +806,120 @@ Planning / exploratory only.
 - Depends on: F2 (Height field). Optional dependency on Phase K (elevation).
 
 ### Phase M — Climate & Biome Classification
-**Planning only.**
-**See [`Phase_M_Design.md`](design/Phase_M_Design.md) for detailed stage contracts,
-sub-stage breakdown, `BiomeDef` struct, Whittaker lookup, invariants, and test plan.**
+**Done.** Implemented, test-gated, golden hashes captured, smoke test passed.
+**See [`Phase_M_Design.md`](design/Phase_M_Design.md) for detailed design.**
 
-Writes three new fields:
-- `MapFieldId.Temperature` — elevation-based lapse rate + latitude proxy + coast moderation + noise
-- `MapFieldId.Moisture` — coast proximity + river proximity (Phase L) + noise
-- `MapFieldId.Biome` — Whittaker-style Temperature × Moisture lookup
+Single `IMapStage2D` (Stage_Biome2D) with three sub-stages: M.1 Temperature, M.2 Moisture,
+M.3 Biome. `MapFieldId` extended: Temperature=3, Biome=4 (COUNT→5). 12 ecological biomes
+(`BiomeType` byte enum) + Unclassified sentinel + Beach override. 4×4 Whittaker lookup
+(`BiomeTable`). Zero ctx.Rng; noise via MapNoiseBridge2D coordinate hashing. 11 stage-local
+tunables. Pipeline position: after Stage_Morphology2D (G). 13 unit tests + full pipeline
+golden (3 field hashes) + non-invalidation test.
 
-Sub-stages:
-- **Sub-stage M.1 — Temperature field:**
-  `base_temp - latitude_factor - (elevation × lapse_rate) + coast_moderation + noise_perturbation`
-  No RNG consumption required if noise uses coordinate hashing via MapNoiseBridge2D.
+**Smoke test observations:**
+- Temperature: PASS. Gradient tracks Height correctly; steep smoothstep transitions produce
+  sharp temperature boundaries (correct — lapse rate amplifies the height S-curve).
+- Moisture: PASS with tuning flag. Formula correct but noise amplitude (0.5) drowns the
+  coast-to-interior gradient (~0.18 range). Biome output healthy despite this.
+- Biome: PASS. Clear discrete bands, Beach ring on warm coasts, cold peaks, water sentinel=0.
 
-- **Sub-stage M.2 — Moisture field:**
-  First authoritative write to `MapFieldId.Moisture` (registered but never written until now).
-  CoastDist + FlowAccumulation (Phase L, optional) + noise.
+### M-fix.a — Biome Tunables Inspector Wiring
+**Done.** M-fix.c folded in. Golden break — re-capture all M hashes.
 
-- **Sub-stage M.3 — Biome classification:**
-  Whittaker Temperature × Moisture lookup. `BiomeDef[]` code-side table.
+10 biome climate tunables promoted from hardcoded Stage_Biome2D defaults to
+Inspector-accessible serialized fields on PCGMapTilemapVisualization and
+MapGenerationPreset. Same pattern as shallowWaterDepth01 (stage-local feeding).
+Editor conditionally hides biome fields when enableBiomeStage is off.
+Moisture defaults adjusted: coastalMoistureBonus 0.3→0.5, coastDecayRate 0.15→0.3,
+moistureNoiseAmplitude 0.5→0.3 (coast gradient now visible).
 
-- **Downstream effects:**
-  - `Stage_Vegetation2D` refactored in Phase M2 for per-biome coverage.
-  - `TilesetConfig` extended with biome-conditional entries.
-  - Phase N (POI Placement) gains biome suitability constraints.
-- Depends on: F2 (Height), F4 (ShallowWater), Phase G (CoastDist),
-  optionally Phase J (RegionId), optionally Phase L (FlowAccumulation).
+4 files modified: Stage_Biome2D.cs, PCGMapTilemapVisualization.cs,
+MapGenerationPreset.cs, PCGMapTilemapVisualizationEditor.cs.
+No new stages, layers, or fields.
+
+Note: 10 tunables wired, not 11 — beachMinTemperature lives on BiomeTable as
+static readonly, not on Stage_Biome2D.
+
+### M-fix.b — Effective Elevation Field
+**Resolved (deferred by design).** No implementation needed.
+
+Temperature reads continuous Height because elevation is continuous. Discrete terrain
+tiers (HillsL1/HillsL2) are gameplay/visual abstractions for movement cost and tile art,
+not climate inputs. The 0.02 temperature gap between adjacent Height values at a hill
+boundary is correct physics — nearby cells at similar elevation have similar temperature.
+
+Analysis of downstream consumers found zero stages that would benefit from an
+EffectiveElevation field: M2.a reads Biome/Moisture (not Height), M2.b reads Biome only,
+Phase W reads world-scale Height (continuous is correct at that scale), Phase L requires
+continuous Height for flow routing (a staircase field would break Priority-Flood).
+
+If a designer later wants sharp temperature breaks at hill boundaries, implement as an
+inline A/B toggle (`useEffectiveElevation`) in Stage_Biome2D — no new MapFieldId or
+stage required. The decision is explicitly reversible.
+
+### M-fix.c — Moisture Default Tuning
+**Done (folded into M-fix.a).**
+
+Defaults changed in Stage_Biome2D: coastalMoistureBonus 0.3→0.5, coastDecayRate 0.15→0.3,
+moistureNoiseAmplitude 0.5→0.3.
 
 ### Phase M2 — Biome-Aware Vegetation & Region Naming
-Planning only. Sequenced after Phase M.
+**Confirmed (after M). Design complete.**
 **See [`Phase_M2_Design.md`](design/Phase_M2_Design.md) for detailed design.**
 
-- **M2.a — Biome-aware vegetation refactor.**
-- **M2.b — Contiguous region detection and naming.**
+- **M2.a — Biome-aware vegetation refactor.** ✅ Complete (golden-captured).
+  Per-cell threshold from `BiomeTable`; stage-local `moistureModulation=0`
+  default; Option A fallback `LegacyThreshold=0.40f` when biome layer absent;
+  pipeline reorder so `Stage_Vegetation2D` runs after `Stage_Biome2D`;
+  three viz classes gained `stagesM2a` lantern entry; dual-golden test
+  pattern in `StageVegetation2DTests`; new `MapPipelineRunner2DGoldenM2Tests.cs`;
+  M-fix.a/c goldens re-captured as side effect (5 constants across
+  `StageBiome2DTests.cs` and `MapPipelineRunner2DGoldenMTests.cs`).
+  See `CURRENT_STATE.md` and `map-pipeline-by-layers-ssot.md` F5 contract.
+- **M2.b — Contiguous region detection and naming.** ✅ Complete (golden-captured).
+  CCA over `Biome` field → contiguous region ids → deterministic naming via
+  `RegionNameRegistry2D` + `RegionNameTableAsset`. `MapFieldId.BiomeRegionId = 5`
+  (COUNT → 6). All four viz classes patched; `ScalarOverlaySource.BiomeRegionId = 5`.
+  Full-pipeline golden captured in `MapPipelineRunner2DGoldenM2bTests.cs`.
+  See `CURRENT_STATE.md` and `map-pipeline-by-layers-ssot.md` M2.b contract.
 - Depends on: Phase M, F5.
+
+### Phase V — Runtime Inspection UI
+**Planning only.** Sequenced after Phase M2.b, before Phase N.
+
+Runtime inspection overlay for the PCG pipeline. Read-only sample/tooling phase — produces
+no authored data, does not participate in golden tests or determinism gates. Does not replace
+edit-mode visualizations (`PCGMapVisualization`, `PCGMapCompositeVisualization`,
+`PCGMapTilemapVisualization`) — runs alongside them.
+
+**V.a — Hover Tooltip.** Mouse hover over the rendered tilemap → live readout of grid
+coordinates, layer membership, and all authored scalar fields (Height, CoastDist,
+Temperature, Moisture, Biome name + ID, BiomeRegionId if present, etc.). UI displays in a
+screen-space canvas panel. Uses a small `IMapContextSource` interface so any existing
+visualization can expose its live `MapContext2D`. Requires a one-line interface
+implementation added to each existing viz class.
+
+**V.b — Per-Cell Overlay System.** `PCGRuntimeOverlay` MonoBehaviour with two modes:
+- **Text overlay** — numeric label per cell from a chosen scalar field. Soft cap at
+  128×128 domains.
+- **Discrete color overlay** — per-cell color from a lookup palette indexed by an
+  integer-valued field. Primary use cases: biome color visualization (resolves the
+  "continuous scalar is the wrong tool for discrete IDs" problem identified during M2.a
+  visual smoke testing) and region visualization for M2.b named regions.
+
+**Expected files:** `PCGHoverTooltip.cs`, `IMapContextSource.cs`, `PCGRuntimeOverlay.cs`,
+`BiomeColorPalette.cs`, plus a one-line `IMapContextSource` implementation on each existing
+viz class.
+
+**Dependencies:** None hard. Softly benefits from Phase M (climate fields to display) and
+M2.a/M2.b (vegetation density and named regions to display).
+
+**Non-goals:** No authoring (read-only). No persistence. No golden coverage. No determinism
+gates.
+
+Authority note: Phase V is roadmap-scoped only. It is **not** implementation authority and
+**not** a governed surface. Design document `Phase_V_Design.md` to be written when the phase
+activates (after M2.b closes). Do not promote into SSoTs until designed.
 
 ### Phase N — World-Site / POI Placement
 Planning only.

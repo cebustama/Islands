@@ -10,7 +10,6 @@
 +---planning
 |   +---active
 |   |   +---crosscheck_roadmap.md
-|   |   +---Noise_Composition_Improvements_Roadmap.md
 |   |   +---PCG_Roadmap.md
 |   |   +---Phase_L_Design.md
 |   |   +---Phase_M_Design.md
@@ -21,6 +20,7 @@
 |       +---Islands_Governance_Migration_Roadmap.md
 |       +---Islands_PCG_MapPipelineByLayers_Roadmap_v0.1.0_2026-01-29.md
 |       +---Islands_PCG_Roadmap_Integrated_With_MapLayers_v0.2.4_2026-02-03.md
+|       +---Noise_Composition_Improvements_Roadmap.md
 |       \---PhaseF_Planning_Report_MapPipeline_F3_F6_NoiseJobs_2026-02-03_v2.md
 +---reference
 |   +---GraphLibrary_Pipeline_Technical_Doc.md

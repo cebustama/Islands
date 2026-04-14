@@ -83,6 +83,7 @@ namespace Islands.PCG.Layout.Maps
     /// Phase N5.c: all N5.b fields are functional. FractalMode migrated to Islands namespace.
     ///             Worley case parameterized by metric × function (12 combinations).
     ///             Ridged multifractal algorithm implemented in noise runtime.
+    /// Phase N5.d: added DefaultHills for hills noise modulation.
     /// </summary>
     [Serializable]
     public struct TerrainNoiseSettings : IEquatable<TerrainNoiseSettings>
@@ -172,6 +173,28 @@ namespace Islands.PCG.Layout.Maps
             noiseType = TerrainNoiseType.Perlin,
             frequency = 4,
             octaves = 1,
+            lacunarity = 2,
+            persistence = 0.5f,
+            amplitude = 1.0f,
+            worleyDistanceMetric = WorleyDistanceMetric.Euclidean,
+            worleyFunction = WorleyFunction.F1,
+            fractalMode = FractalMode.Standard,
+            ridgedOffset = 1.0f,
+            ridgedGain = 2.0f,
+        };
+
+        /// <summary>
+        /// Default settings for hills noise modulation (N5.d).
+        /// Medium-scale Perlin fBm: frequency 6, 2 octaves — produces broad organic
+        /// variation in hill boundary shapes without overwhelming the Height-threshold
+        /// structure. Amplitude is 1.0 (not consumed by the bridge — modulation depth
+        /// is controlled by <see cref="MapTunables2D.hillsNoiseBlend"/>).
+        /// </summary>
+        public static TerrainNoiseSettings DefaultHills => new TerrainNoiseSettings
+        {
+            noiseType = TerrainNoiseType.Perlin,
+            frequency = 6,
+            octaves = 2,
             lacunarity = 2,
             persistence = 0.5f,
             amplitude = 1.0f,

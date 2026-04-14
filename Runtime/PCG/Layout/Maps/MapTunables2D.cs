@@ -35,6 +35,21 @@ namespace Islands.PCG.Layout.Maps
     /// N5.a addition: shapeMode.
     /// Selects the built-in base shape generator (Ellipse, Rectangle, NoShape, Custom).
     /// Default Ellipse preserves all existing goldens (bit-identical to pre-N5.a).
+    ///
+    /// N5.d additions: hillsNoiseBlend, hillsNoise.
+    /// Optional per-cell noise modulation of hill height thresholds. Default 0.0 blend
+    /// preserves all existing goldens (bit-identical to pre-N5.d). hillsNoise configures
+    /// the noise algorithm via TerrainNoiseSettings (amplitude field ignored — modulation
+    /// depth is controlled by hillsNoiseBlend).
+    ///
+    /// N5.e: Hills threshold UX remap.
+    /// Constructor now accepts hillsL1 / hillsL2 as relative fractions [0,1] instead
+    /// of raw Height-space thresholds. The remap computes effective thresholds:
+    ///   L1_eff = waterThreshold + hillsL1 * (1 - waterThreshold)
+    ///   L2_eff = L1_eff + hillsL2 * (1 - L1_eff)
+    /// Stored fields hillsThresholdL1 / hillsThresholdL2 remain as effective raw
+    /// thresholds consumed by Stage_Hills2D — no stage changes required.
+    /// L2 >= L1 is guaranteed by construction. Golden break for F3+ hashes.
     /// </summary>
     public readonly struct MapTunables2D
     {
@@ -140,23 +155,48 @@ namespace Islands.PCG.Layout.Maps
         public readonly int heightQuantSteps;
 
         // ------------------------------------------------------------------
-        // F3b additions
+        // F3b additions (N5.e: stored as effective raw thresholds)
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Height threshold for HillsL1 (passable slopes).
+        /// Effective height threshold for HillsL1 (passable slopes).
         /// Land cells with Height >= this value become HillsL1 (unless >= hillsThresholdL2).
-        /// [0..1]. Default 0.65.
+        /// [0..1]. Computed from the relative hillsL1 input via N5.e remap:
+        ///   hillsThresholdL1 = waterThreshold + hillsL1 * (1 - waterThreshold).
         /// </summary>
         public readonly float hillsThresholdL1;
 
         /// <summary>
-        /// Height threshold for HillsL2 (impassable peaks).
+        /// Effective height threshold for HillsL2 (impassable peaks).
         /// Land cells with Height >= this value become HillsL2.
-        /// Must be >= hillsThresholdL1 (clamped internally).
-        /// [0..1]. Default 0.80.
+        /// Always >= hillsThresholdL1 (guaranteed by N5.e remap construction).
+        /// [0..1]. Computed from the relative hillsL2 input via N5.e remap:
+        ///   hillsThresholdL2 = hillsThresholdL1 + hillsL2 * (1 - hillsThresholdL1).
         /// </summary>
         public readonly float hillsThresholdL2;
+
+        // ------------------------------------------------------------------
+        // N5.d additions
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Noise modulation blend factor for hill boundary variation.
+        /// 0.0 = pure height-threshold (current F3b behavior, golden-safe).
+        /// 0.5 = moderate noise modulation — thresholds shift ±noise, producing organic
+        ///       hill boundaries that loosely follow height but with irregular edges.
+        /// 1.0 = maximum noise influence.
+        /// [0..1]. Default 0.0.
+        /// </summary>
+        public readonly float hillsNoiseBlend;
+
+        /// <summary>
+        /// Noise settings for hills noise modulation (N5.d).
+        /// Configures algorithm, frequency, octaves, etc. for the noise field that
+        /// offsets hill classification thresholds. The <see cref="TerrainNoiseSettings.amplitude"/>
+        /// field is ignored — modulation depth is controlled by <see cref="hillsNoiseBlend"/>.
+        /// Default: Perlin, freq 6, octaves 2 (medium-scale organic variation).
+        /// </summary>
+        public readonly TerrainNoiseSettings hillsNoise;
 
         // ------------------------------------------------------------------
         // Default
@@ -168,6 +208,9 @@ namespace Islands.PCG.Layout.Maps
         /// Phase N4: full golden break from pre-N4 defaults.
         /// Phase F3b: full golden break for F3+ hashes.
         /// Phase N5.a: shapeMode = Ellipse (bit-identical to pre-N5.a).
+        /// Phase N5.d: hillsNoiseBlend = 0.0 (bit-identical to pre-N5.d).
+        /// Phase N5.e: hillsL1/L2 relative fractions replace raw thresholds.
+        ///   Effective thresholds ≈ 0.65 / 0.8005 (golden break from pre-N5.e 0.65 / 0.80).
         /// </summary>
         public static MapTunables2D Default => new MapTunables2D(
             shapeMode: IslandShapeMode.Ellipse,
@@ -182,8 +225,10 @@ namespace Islands.PCG.Layout.Maps
             terrainNoise: TerrainNoiseSettings.DefaultTerrain,
             warpNoise: TerrainNoiseSettings.DefaultWarp,
             heightQuantSteps: 1024,
-            hillsThresholdL1: 0.65f,
-            hillsThresholdL2: 0.80f
+            hillsL1: 0.30f,
+            hillsL2: 0.43f,
+            hillsNoiseBlend: 0.0f,
+            hillsNoise: TerrainNoiseSettings.DefaultHills
         );
 
         // ------------------------------------------------------------------
@@ -202,8 +247,12 @@ namespace Islands.PCG.Layout.Maps
         /// <param name="terrainNoise">Noise settings for height perturbation. Default = Perlin fBm freq 8.</param>
         /// <param name="warpNoise">Noise settings for domain warp. Default = Perlin freq 4.</param>
         /// <param name="heightQuantSteps">Height quantization steps. 0 = none, 1024 = smooth. Default = 1024.</param>
-        /// <param name="hillsThresholdL1">Height threshold for HillsL1 slopes. [0..1]. Default = 0.65.</param>
-        /// <param name="hillsThresholdL2">Height threshold for HillsL2 peaks. [0..1]. Must be >= hillsThresholdL1. Default = 0.80.</param>
+        /// <param name="hillsL1">Fraction of land height range for HillsL1 threshold. [0..1]. Default = 0.30.
+        ///   Effective threshold = waterThreshold + hillsL1 * (1 - waterThreshold). (N5.e)</param>
+        /// <param name="hillsL2">Fraction of remaining range above L1 for HillsL2 threshold. [0..1]. Default = 0.43.
+        ///   Effective threshold = L1_eff + hillsL2 * (1 - L1_eff). (N5.e)</param>
+        /// <param name="hillsNoiseBlend">Noise modulation blend for hill boundaries. [0..1]. Default = 0.0 (no noise). (N5.d)</param>
+        /// <param name="hillsNoise">Noise settings for hills modulation. Default = Perlin freq 6. Amplitude ignored. (N5.d)</param>
         public MapTunables2D(
             float islandRadius01,
             float waterThreshold01,
@@ -216,8 +265,10 @@ namespace Islands.PCG.Layout.Maps
             TerrainNoiseSettings terrainNoise = default,
             TerrainNoiseSettings warpNoise = default,
             int heightQuantSteps = 1024,
-            float hillsThresholdL1 = 0.65f,
-            float hillsThresholdL2 = 0.80f,
+            float hillsL1 = 0.30f,
+            float hillsL2 = 0.43f,
+            float hillsNoiseBlend = 0.0f,
+            TerrainNoiseSettings hillsNoise = default,
             IslandShapeMode shapeMode = IslandShapeMode.Ellipse)
         {
             this.shapeMode = shapeMode;
@@ -256,12 +307,23 @@ namespace Islands.PCG.Layout.Maps
                 : TerrainNoiseSettings.DefaultWarp;
             this.heightQuantSteps = math.max(0, heightQuantSteps);
 
-            // F3b: hills thresholds. L2 must be >= L1.
-            float hl1 = math.clamp(hillsThresholdL1, 0f, 1f);
-            float hl2 = math.clamp(hillsThresholdL2, 0f, 1f);
-            if (hl2 < hl1) hl2 = hl1;
-            this.hillsThresholdL1 = hl1;
-            this.hillsThresholdL2 = hl2;
+            // N5.e: Hills UX remap — relative fractions → effective raw thresholds.
+            // L1: fraction of [waterThreshold, 1.0] range.
+            // L2: fraction of [L1_effective, 1.0] range.
+            // Guarantees L2_effective >= L1_effective by construction (both inputs >= 0,
+            // both multiplied by non-negative remaining range).
+            float hl1_in = math.clamp(hillsL1, 0f, 1f);
+            float hl2_in = math.clamp(hillsL2, 0f, 1f);
+            float hl1_eff = wt + hl1_in * (1f - wt);
+            float hl2_eff = hl1_eff + hl2_in * (1f - hl1_eff);
+            this.hillsThresholdL1 = hl1_eff;
+            this.hillsThresholdL2 = hl2_eff;
+
+            // N5.d: hills noise modulation.
+            this.hillsNoiseBlend = math.clamp(hillsNoiseBlend, 0f, 1f);
+            this.hillsNoise = hillsNoise.frequency > 0
+                ? hillsNoise
+                : TerrainNoiseSettings.DefaultHills;
         }
     }
 }

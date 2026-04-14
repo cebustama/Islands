@@ -12,6 +12,9 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const int H = 64;
         private const uint Seed = 12345u;
 
+        // N5.e: zeroed for re-lock. Effective hillsThresholdL2 changed from 0.80 to
+        // ~0.8005 due to remap float precision. HillsL1/L2 hashes differ; LandEdge/
+        // LandInterior are structurally unaffected but re-locked together.
         private const ulong ExpectedLandEdgeHash64 = 0x17D1FE919DCC3C33UL;
         private const ulong ExpectedLandInteriorHash64 = 0x228E6C047D7792EFUL;
         private const ulong ExpectedHillsL1Hash64 = 0xD8B3DCF4A4AC3BA0UL;
@@ -42,7 +45,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
                 if (ExpectedLandEdgeHash64 == 0UL || ExpectedLandInteriorHash64 == 0UL || ExpectedHillsL1Hash64 == 0UL || ExpectedHillsL2Hash64 == 0UL)
                 {
                     Assert.Fail(
-                        "F3 pipeline goldens are not initialized.\n" +
+                        "F3/N5.e pipeline goldens are not initialized.\n" +
                         $"Set ExpectedLandEdgeHash64     = 0x{edgeHash:X16}UL;\n" +
                         $"Set ExpectedLandInteriorHash64 = 0x{interiorHash:X16}UL;\n" +
                         $"Set ExpectedHillsL1Hash64      = 0x{h1Hash:X16}UL;\n" +

@@ -1,5 +1,181 @@
 # Changelog — SSoT
 
+## Phase N6 — Noise Preview Visualization
+Date: 2026-04-09
+
+### What changed
+- **Scalar overlay system on `PCGMapTilemapVisualization` replaced with Texture2D +
+  SpriteRenderer approach.** Two independent overlay slots replace the single-slot heatmap
+  tilemap + per-cell tint system. Each overlay renders as a `Texture2D` displayed via a
+  child `SpriteRenderer`, aligned pixel-to-cell with the base tilemap.
+- **New `ScalarOverlaySource` enum** with 7 data sources:
+  - Pipeline fields: `Height`, `CoastDist`, `Moisture` (read from `MapContext2D`).
+  - Noise previews: `TerrainNoise`, `WarpNoiseX`, `WarpNoiseY`, `HillsNoise` (computed
+    on-demand via `MapNoiseBridge2D.FillNoise01` with exact stage-matching salts).
+  - Gap in numbering (3–9) reserves space for future Phase M pipeline fields.
+- **New `ScalarOverlayRenderer` helper class** manages the child GameObject, SpriteRenderer,
+  Texture2D, Sprite, and Color32 buffer for one overlay. `FilterMode.Point` for crisp cell
+  edges. `HideFlags.DontSave | HideFlags.NotEditable` prevents scene serialization clutter.
+  Alignment reads `tilemap.layoutGrid.cellSize` and scales the sprite transform.
+- **Two overlay slots** in the Inspector, each with: enable toggle, `ScalarOverlaySource`
+  dropdown, min/max range, color low/high ramp, and alpha slider. Auto-applies sensible
+  min/max defaults when the source changes (CoastDist: −1 to 20; all others: 0 to 1).
+- **Performance improvement:** one `tex.Apply()` per overlay per rebuild replaces 65,536
+  `SetTile()` calls at 256×256 resolution. This is a bulk memory upload vs. N² individual
+  Unity API calls.
+- **Noise preview salts match governed stages exactly:**
+  `TerrainNoise = 0xF2A10001u`, `WarpNoiseX = 0xF2A20002u`, `WarpNoiseY = 0xF2A30003u`,
+  `HillsNoise = 0xF3D50001u`. Noise settings read from resolved `MapTunables2D`, guaranteeing
+  the preview shows the exact same noise the pipeline consumed.
+- **Legacy overlay paths fully removed:** `ApplyScalarOverlay`, `ApplyScalarHeatmapTilemap`,
+  `ApplyScalarOverlayTint`, `ResetTintColors`, `SetHeatmapRendererAlpha`,
+  `ApplyOverlayFieldDefaults`, `HeatmapPaletteSteps`, `_overlayWasApplied`.
+- **Custom Editor updated** with two conditional overlay sections (fields expand on enable).
+
+### Serialization break
+Fields removed from `PCGMapTilemapVisualization`: `enableScalarOverlay`, `overlayField`
+(MapFieldId), `overlayMin`, `overlayMax`, `overlayColorLow`, `overlayColorHigh`,
+`scalarHeatmapTilemap`, `heatmapAlpha`. New overlay fields start disabled with defaults.
+Sample-side only — no runtime contract impact.
+
+### Golden impact
+No golden impact. No pipeline stages modified. No `MapLayerId` or `MapFieldId` changes.
+Pure adapter/visualization change.
+
+### New files
+- `ScalarOverlaySource.cs` — `Runtime/PCG/Adapters/Tilemap/` (enum, 58 lines).
+- `ScalarOverlayRenderer.cs` — `Runtime/PCG/Adapters/Tilemap/` (helper class, 210 lines).
+
+### Modified files
+- `PCGMapTilemapVisualization.cs` — overlay system replaced (net +83 lines: 972 from 889).
+- `PCGMapTilemapVisualizationEditor.cs` — overlay Inspector sections updated (269 from 249).
+
+### No new MapLayerId or MapFieldId.
+
+
+## Phase N5.e — Hills Threshold UX Remap
+Date: 2026-04-08
+
+### What changed
+- **Hills threshold sliders reparameterized from raw Height [0,1] to relative fractions [0,1].**
+  `hillsL1` and `hillsL2` on `MapTunables2D` now express relative position within the
+  available land height range, rather than absolute height values.
+  - `hillsL1` [0,1]: fraction of [waterThreshold, 1.0]. Effective threshold =
+    `waterThreshold + hillsL1 × (1 − waterThreshold)`.
+  - `hillsL2` [0,1]: fraction of [L1_effective, 1.0]. Effective threshold =
+    `L1_effective + hillsL2 × (1 − L1_effective)`.
+  - L2 ≥ L1 is guaranteed by construction (L2 starts above L1_effective); no explicit
+    clamping needed.
+- **Remap computed in `MapTunables2D` constructor.** `Stage_Hills2D` unchanged — it reads
+  the effective raw thresholds exactly as before. The remap is a pure input-side transform.
+- **New defaults:** `hillsL1 = 0.30`, `hillsL2 = 0.43`. At the default `waterThreshold = 0.50`,
+  effective thresholds are ≈ 0.65 / 0.8005, closely matching the prior absolute defaults.
+- **`MapGenerationPreset` updated** with renamed fields (`hillsL1`, `hillsL2`). `ToTunables()`
+  passes the relative values to `MapTunables2D`, which computes the remap.
+- **Serialization break:** `MapGenerationPreset` and all visualization components carry
+  renamed fields (from `hillsThresholdL1`/`hillsThresholdL2` to `hillsL1`/`hillsL2`).
+  No `FormerlySerializedAs` — this is a semantic change (relative vs. absolute), so silent
+  migration would produce incorrect values. Existing preset assets must re-enter values.
+- **`PCGMapVisualization` and `PCGMapCompositeVisualization`** received compile-fix field
+  renames only (no new feature wiring), per the visualization maintenance policy. Lantern
+  and composite remain frozen at N5.d feature set.
+- **`PCGMapTilemapVisualization` and `PCGMapTilemapVisualizationEditor`** updated with
+  renamed fields and relative-fraction semantics.
+
+### Golden impact
+Golden break for F3, F6, and StageHills2D tests (new default effective thresholds differ
+from prior absolute defaults). Re-locked. F4, F5, G pipeline goldens unchanged.
+
+### Test additions
+- `StageHills2DTests.cs`: 5 new remap tests —
+  `N5e_RelativeL1_MapsToExpectedEffective`,
+  `N5e_RelativeL2_MapsToExpectedEffective`,
+  `N5e_L2AlwaysAboveL1_ByConstruction`,
+  `N5e_ZeroFractions_MapToWaterThreshold`,
+  `N5e_OneFractions_MapToOne`.
+- `MapGenerationPresetTests.cs`: 4 new/updated tests for relative-fraction defaults and
+  forwarding. Old L2-below-L1 clamping test removed (impossible by construction).
+
+### Modified files
+- `MapTunables2D.cs` — remap logic in constructor; fields renamed to `hillsL1`/`hillsL2`.
+- `MapGenerationPreset.cs` — field rename + `ToTunables()` updated.
+- `PCGMapVisualization.cs` — compile-fix rename only.
+- `PCGMapCompositeVisualization.cs` — compile-fix rename only.
+- `PCGMapTilemapVisualization.cs` — field rename + relative-fraction semantics.
+- `PCGMapTilemapVisualizationEditor.cs` — field rename.
+- `StageHills2DTests.cs` — 5 new remap tests.
+- `StageBaseTerrain2DTests.cs` — updated for new effective defaults.
+- `MapGenerationPresetTests.cs` — 4 new/updated tests; L2-below-L1 test removed.
+- `MapPipelineRunner2DGoldenF3Tests.cs` — golden re-locked.
+- `MapPipelineRunner2DGoldenF6Tests.cs` — golden re-locked.
+
+### No new MapLayerId or MapFieldId.
+
+### Authority
+- `MapTunables2D` is runtime implementation truth (remap logic lives here).
+- `Stage_Hills2D.cs` is runtime implementation truth (unchanged by N5.e).
+- Visualization consumers are sample-side only.
+
+## Phase N5.d — Hills Noise Modulation
+Date: 2026-04-08
+
+### What changed
+- **`hillsNoiseBlend` tunable on `MapTunables2D`.** Float [0,1], default 0.0. Controls
+  per-cell noise modulation of hill classification thresholds. 0.0 = pure height-threshold
+  (F3b behavior, golden-safe). > 0 = thresholds shift by `blend * (noise - 0.5) * 0.30`,
+  producing organic hill boundaries that loosely follow height but with irregular edges.
+  Both thresholds (L1 and L2) shift by the same offset, preserving the L1–L2 gap and all
+  invariants (HillsL1 ∩ HillsL2 == ∅, both ⊆ Land).
+- **`hillsNoise` field on `MapTunables2D`.** `TerrainNoiseSettings` struct configuring the
+  noise algorithm for hill threshold modulation. Default `DefaultHills` (Perlin, freq 6,
+  oct 2). The `amplitude` field is ignored — modulation depth is controlled by
+  `hillsNoiseBlend`. Default-struct check: frequency=0 maps to `DefaultHills`.
+- **`TerrainNoiseSettings.DefaultHills` static property added.** Perlin, frequency 6,
+  octaves 2, lacunarity 2, persistence 0.5, amplitude 1.0, Standard fractal mode.
+  Medium-scale organic variation suitable for hill boundary modulation.
+- **`Stage_Hills2D` modified.** When `hillsNoiseBlend > 0`, fills a noise array via
+  `MapNoiseBridge2D.FillNoise01` (salt `0xF3D50001u`, `Allocator.Temp`) and offsets both
+  effective thresholds per cell. When `blend == 0`, no allocation, no noise fill — identical
+  code path to pre-N5.d. Zero ctx.Rng consumption. Doc comment updated to note optional
+  coordinate-hashed noise.
+- **`ModulationRange = 0.30f` constant** in `Stage_Hills2D`. At blend=1.0, thresholds shift
+  by ±0.15 in height-space. Fixed for now; can be exposed as a tunable later if needed.
+- **`MapGenerationPreset` extended** with `hillsNoiseBlend` (float), `hillsNoiseSettings`
+  (TerrainNoiseSettings, DefaultHills), and `hillsNoiseAsset` (NoiseSettingsAsset, nullable).
+  `ToTunables()` resolves asset → inline struct following the N5.b override-at-resolve pattern.
+  Hills (F3b) header updated to include blend slider. New Hills Noise (N5.d) header added
+  for noise struct.
+- **All three visualization Inspectors updated** (`PCGMapVisualization`,
+  `PCGMapCompositeVisualization`, `PCGMapTilemapVisualization`): `hillsNoiseBlend` field,
+  `hillsNoiseAsset` + `hillsNoiseSettings` fields, `ResolveHillsNoise()` helper,
+  dirty-tracking cache + comparison, tunables construction wiring.
+- **`PCGMapTilemapVisualizationEditor` updated** with `hillsNoiseBlend`, `hillsNoiseAsset`,
+  `hillsNoiseSettings` serialized properties and Inspector drawing.
+
+### Golden impact
+No golden break at defaults. `hillsNoiseBlend = 0.0` (default) produces bit-identical
+output to pre-N5.d. All existing F3b–G pipeline golden tests pass unchanged.
+
+### Test additions
+- `StageHills2DTests.cs`: 5 new tests — `N5d_Blend0_MatchesPreN5dGoldens`,
+  `N5d_BlendPositive_IsDeterministic`, `N5d_BlendPositive_DiffersFromBlend0`,
+  `N5d_BlendPositive_Invariants_Hold`, `N5d_BlendPositive_SeedVariation`.
+- `MapGenerationPresetTests.cs`: 8 new tests — `DefaultValues_HillsNoiseBlend_IsZero`,
+  `DefaultValues_HillsNoiseSettings_MatchDefaultHills`, `DefaultValues_HillsNoiseAsset_IsNull`,
+  `ToTunables_HillsNoiseBlend_IsForwardedCorrectly`,
+  `ToTunables_HillsNoiseSettings_AreForwardedCorrectly`,
+  `ToTunables_DefaultPreset_HillsNoiseMatchesDefault`,
+  `ToTunables_WithHillsNoiseAsset_ReadsFromAsset`,
+  `ToTunables_NullHillsNoiseAsset_ReadsInlineSettings`.
+
+### No new MapLayerId or MapFieldId.
+
+### Authority
+- `Stage_Hills2D.cs` is runtime implementation truth.
+- `MapTunables2D` is runtime implementation truth.
+- `TerrainNoiseSettings` is runtime implementation truth.
+- Visualization consumers are sample-side only.
+
 ## Phase N5.c — Extended Noise Palette + Ridged Multifractal
 Date: 2026-04-08
 
@@ -305,9 +481,9 @@ golden hashes re-locked. F0–F2 goldens unaffected.
 - New `MapGenerationPreset` ScriptableObject (`Runtime/PCG/Samples/Presets/MapGenerationPreset.cs`):
   - Fields: seed (uint), resolution (int), stage toggles (Hills/Shore/Veg/Traversal/Morphology),
     F2 tunables (islandRadius01, waterThreshold01, islandSmoothFrom01, islandSmoothTo01,
-    islandAspectRatio, warpAmplitude01), noise (noiseCellSize, noiseAmplitude, quantSteps),
+    islandAspectRatio, warpAmplitude01), noise settings (noiseCellSize, noiseAmplitude, quantSteps),
     clearBeforeRun. `[CreateAssetMenu]` under Islands/PCG/Map Generation Preset.
-  - `ToTunables()` produces a `MapTunables2D` from shape fields; MapTunables2D clamps/orders values.
+  - `ToTunables()` produces a `MapTunables2D` from the preset's shape fields; MapTunables2D clamps/orders values.
   - Default field values match the component defaults (noiseAmplitude=0.18f, quantSteps=1024,
     noiseCellSize=8, seed=1u, resolution=64, all stage toggles=true, islandAspectRatio=1.0,
     warpAmplitude01=0.0).
@@ -352,8 +528,7 @@ golden hashes re-locked. F0–F2 goldens unaffected.
 - No new MapLayerId, MapFieldId, or runtime stage contracts. Adapters-last invariant preserved.
 - Smoke tests passed: preset swap triggers map regeneration with correct console hash;
   TilesetConfig swap updates tilemap tiles; null slots correctly fall back to inline fields.
-- `PCG_Roadmap.md` updated: Phase H3 marked Done; Phase H4 marked Next. Phase H2d section body
-  corrected from planning text to implementation facts.
+- `PCG_Roadmap.md` updated: Phase H3 marked Done; Phase H4 marked Next.
 - `CURRENT_STATE.md` updated: H3 recorded as resolved; immediate next focus set to Phase H4.
 
 ## 2026-04-04 (Phase H2d)

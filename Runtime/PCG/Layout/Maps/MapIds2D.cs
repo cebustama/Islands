@@ -40,6 +40,15 @@ namespace Islands.PCG.Layout.Maps
         // Phase G append-only additions (do not reorder existing IDs)
         CoastDist = 2,
 
-        COUNT = 3
+        // Phase M append-only additions (do not reorder existing IDs)
+        Temperature = 3,
+        Biome = 4,
+
+        // Phase M2.b append-only additions (do not reorder existing IDs)
+        // Named BiomeRegionId (not RegionId) to reserve namespace for future overlay
+        // regions (factions, sacred ground, cross-biome territories) — D6.
+        BiomeRegionId = 5,
+
+        COUNT = 6
     }
 }

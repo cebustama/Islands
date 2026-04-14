@@ -39,6 +39,15 @@ namespace Islands.PCG.Adapters.Tilemap
     ///           Separate warp noise settings. heightQuantSteps tunable.
     /// Phase N5.b: NoiseSettingsAsset slots. Refactored individual noise fields to embedded
     ///             TerrainNoiseSettings structs with IEquatable dirty-tracking.
+    /// Phase N5.e: Hills threshold UX remap — hillsThresholdL1/L2 → hillsL1/L2 (relative fractions).
+    /// Phase N6: Scalar overlay replaced — Texture2D + SpriteRenderer replaces heatmap tilemap.
+    ///           Two independent overlay slots with ScalarOverlaySource (pipeline fields + noise previews).
+    ///           Legacy per-cell tint and heatmap tilemap paths removed.
+    /// Phase H8: Mega-tile support — 2×2 large terrain sprite replacement via adapter post-pass.
+    ///           MegaTileScanner + MegaTileStamper. Pure adapter-side, no pipeline mutation.
+    /// Phase M: enableBiomeStage toggle + Stage_Biome2D wiring. Temperature/Biome overlay sources.
+    /// M-fix.a: 10 biome climate tunables promoted to Inspector (serialized fields + dirty tracking).
+    ///          Moisture defaults adjusted (M-fix.c folded in). Golden break.
     /// </summary>
     [ExecuteAlways]
     [AddComponentMenu("Islands/PCG/Map Tilemap Visualization")]
@@ -83,6 +92,8 @@ namespace Islands.PCG.Adapters.Tilemap
         [SerializeField] private bool enableVegetationStage = true;
         [SerializeField] private bool enableTraversalStage = true;
         [SerializeField] private bool enableMorphologyStage = true;
+        [SerializeField] private bool enableBiomeStage = true;
+        [SerializeField] private bool enableRegionsStage = true;
 
         [Header("Island Shape")]
         [Range(0f, 1f)][SerializeField] private float islandRadius01 = 0.45f;
@@ -105,6 +116,10 @@ namespace Islands.PCG.Adapters.Tilemap
         [Tooltip("Optional reusable noise asset for domain warp.\n" +
                  "When assigned, overrides inline Warp Noise settings.")]
         [SerializeField] private NoiseSettingsAsset warpNoiseAsset;
+        [Tooltip("Optional reusable noise asset for hills noise modulation (N5.d).\n" +
+                 "When assigned, overrides inline Hills Noise settings.\n" +
+                 "Only relevant when Hills Noise Blend > 0.")]
+        [SerializeField] private NoiseSettingsAsset hillsNoiseAsset;
 
         // N5.b: embedded noise structs (replace individual N4 fields)
         [Header("Terrain Noise")]
@@ -113,6 +128,9 @@ namespace Islands.PCG.Adapters.Tilemap
         [Header("Warp Noise")]
         [SerializeField] private TerrainNoiseSettings warpNoiseSettings = TerrainNoiseSettings.DefaultWarp;
 
+        [Header("Hills Noise (N5.d)")]
+        [SerializeField] private TerrainNoiseSettings hillsNoiseSettings = TerrainNoiseSettings.DefaultHills;
+
         // N4: height quantization (replaces quantSteps)
         [Header("Height Quantization (N4)")]
         [Min(0)][SerializeField] private int heightQuantSteps = 1024;
@@ -120,14 +138,62 @@ namespace Islands.PCG.Adapters.Tilemap
         [Header("Height Redistribution (J2)")]
         [Range(0.5f, 4f)][SerializeField] private float heightRedistributionExponent = 1.0f;
 
-        [Header("Hills (F3b)")]
-        [Range(0f, 1f)][SerializeField] private float hillsThresholdL1 = 0.65f;
-        [Range(0f, 1f)][SerializeField] private float hillsThresholdL2 = 0.80f;
+        [Header("Hills (F3b / N5.e)")]
+        [Range(0f, 1f)]
+        [Tooltip("Hill slopes (HillsL1) — fraction of the land height range.\n" +
+                 "0.0 = all land eligible for hills. 1.0 = no hills.\n" +
+                 "Effective threshold = waterThreshold + hillsL1 × (1 − waterThreshold).\n" +
+                 "Default 0.30 ≈ effective 0.65 at default water threshold.")]
+        [SerializeField] private float hillsL1 = 0.30f;
+        [Range(0f, 1f)]
+        [Tooltip("Hill peaks (HillsL2) — fraction of the remaining range above L1.\n" +
+                 "0.0 = L2 starts at L1 (L1 band empty). 1.0 = only highest cells are peaks.\n" +
+                 "Effective threshold = L1_eff + hillsL2 × (1 − L1_eff).\n" +
+                 "Default 0.43 ≈ effective 0.80 at default water threshold.")]
+        [SerializeField] private float hillsL2 = 0.43f;
+        [Range(0f, 1f)]
+        [Tooltip("Noise modulation of hill boundaries (N5.d).\n" +
+                 "0.0 = pure height-threshold (default).\n" +
+                 "0.5 = moderate variation.\n" +
+                 "1.0 = maximum noise influence.")]
+        [SerializeField] private float hillsNoiseBlend = 0f;
 
         [Header("Height Remap (N2)")]
         [Tooltip("Height remap curve applied after power redistribution.\n" +
                  "Straight diagonal (0,0)→(1,1) = identity. Sampled to a spline at runtime.")]
         [SerializeField] private AnimationCurve heightRemapCurve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+
+        [Header("Biome Climate (Phase M)")]
+        [Range(0f, 1f)]
+        [Tooltip("Sea-level equatorial base temperature. 0.7 = warm tropical islands.")]
+        [SerializeField] private float biomeBaseTemperature = 0.7f;
+        [Range(0f, 1f)]
+        [Tooltip("Height-to-temperature reduction. 0.5 = highest peaks lose half base temp.")]
+        [SerializeField] private float biomeLapseRate = 0.5f;
+        [Range(0f, 1f)]
+        [Tooltip("Y-axis latitude gradient strength. 0.0 for single-island. Non-zero for Phase W world maps.")]
+        [SerializeField] private float biomeLatitudeEffect = 0.0f;
+        [Range(0f, 0.5f)]
+        [Tooltip("Coastal temperature moderation. 1/(1+coastDist) falloff.")]
+        [SerializeField] private float biomeCoastModerationStrength = 0.1f;
+        [Range(0f, 0.3f)]
+        [Tooltip("Temperature noise amplitude. Low-frequency perturbation.")]
+        [SerializeField] private float biomeTempNoiseAmplitude = 0.05f;
+        [Min(1)]
+        [Tooltip("Temperature noise cell size (frequency). Coarse; 2× terrain noise freq.")]
+        [SerializeField] private int biomeTempNoiseCellSize = 16;
+        [Range(0f, 1f)]
+        [Tooltip("Coastal proximity moisture bonus at coast.")]
+        [SerializeField] private float biomeCoastalMoistureBonus = 0.5f;
+        [Range(0f, 1f)]
+        [Tooltip("Coastal moisture decay rate. Higher = faster inland decay.")]
+        [SerializeField] private float biomeCoastDecayRate = 0.3f;
+        [Range(0f, 1f)]
+        [Tooltip("Moisture noise amplitude. Perturbation; coast gradient is dominant.")]
+        [SerializeField] private float biomeMoistureNoiseAmplitude = 0.3f;
+        [Min(1)]
+        [Tooltip("Moisture noise cell size. 4–8× lower frequency than terrain noise.")]
+        [SerializeField] private int biomeMoistureNoiseCellSize = 32;
 
         [Header("Run Behavior")]
         [SerializeField] private bool clearBeforeRun = true;
@@ -148,31 +214,49 @@ namespace Islands.PCG.Adapters.Tilemap
         [SerializeField] private TileBase colliderTile;
         [SerializeField] private bool enableColliderAutoSetup = true;
 
+        [Header("Mega-Tiles (H8)")]
+        [Tooltip("Enable 2×2 mega-tile replacement for qualifying layer clusters.\n" +
+                 "Runs as an adapter post-pass after standard tile stamping.")]
+        [SerializeField] private bool enableMegaTiles = false;
+
+        [Tooltip("Rules for 2×2 mega-tile replacement. Evaluated in order; earlier rules claim cells first.\n" +
+                 "Each rule targets a specific mask layer and provides four quadrant tiles (TL/TR/BL/BR).")]
+        [SerializeField] private MegaTileRule[] megaTileRules = System.Array.Empty<MegaTileRule>();
+
         [Header("Procedural Tiles")]
         [Tooltip("Generate solid-color tiles at runtime. Takes precedence over TilesetConfig.")]
         [SerializeField] private bool useProceduralTiles = false;
         [SerializeField] private ProceduralTileEntry[] proceduralColorTable = System.Array.Empty<ProceduralTileEntry>();
         [SerializeField] private Color proceduralFallbackColor = new Color(0.25f, 0.25f, 0.25f);
 
-        [Header("Scalar Field Overlay")]
-        [Tooltip("Tint tiles based on a scalar field (Height, CoastDist, etc.).\n" +
-                 "Changing the field auto-sets min/max to sensible defaults.")]
-        [SerializeField] private bool enableScalarOverlay = false;
-        [SerializeField] private MapFieldId overlayField = MapFieldId.Height;
-        [SerializeField] private float overlayMin = 0f;
-        [SerializeField] private float overlayMax = 1f;
-        [SerializeField] private Color overlayColorLow = new Color(0.40f, 0.40f, 0.65f, 1f);
-        [SerializeField] private Color overlayColorHigh = Color.white;
-
-        [Header("Scalar Heatmap Tilemap")]
-        [Tooltip("Dedicated tilemap for scalar field heatmap (solid-color tiles).\n" +
-                 "Must be under its own Grid if cell size differs from the base tilemap.\n" +
-                 "When assigned and overlay enabled, replaces the per-cell tint approach.\n" +
-                 "When null, the per-cell tint fallback is used instead.")]
-        [SerializeField] private UnityEngine.Tilemaps.Tilemap scalarHeatmapTilemap;
+        [Header("Scalar Overlay 1 (N6)")]
+        [Tooltip("Enable first scalar overlay. Renders as a Texture2D sprite\n" +
+                 "aligned on top of the tilemap — no per-cell tile stamping.")]
+        [SerializeField] private bool enableOverlay1 = false;
+        [Tooltip("Data source for overlay 1.\n" +
+                 "Pipeline fields (Height, CoastDist, Moisture) read from the pipeline context.\n" +
+                 "Noise previews (TerrainNoise, WarpNoiseX/Y, HillsNoise) are computed on-demand\n" +
+                 "with the exact same salts and settings the pipeline stages use.")]
+        [SerializeField] private ScalarOverlaySource overlaySource1 = ScalarOverlaySource.Height;
+        [SerializeField] private float overlayMin1 = 0f;
+        [SerializeField] private float overlayMax1 = 1f;
+        [SerializeField] private Color overlayColorLow1 = new Color(0.10f, 0.10f, 0.44f, 1f);
+        [SerializeField] private Color overlayColorHigh1 = Color.white;
         [Range(0f, 1f)]
-        [Tooltip("TilemapRenderer alpha for the heatmap tilemap.")]
-        [SerializeField] private float heatmapAlpha = 0.65f;
+        [Tooltip("Opacity of overlay 1. 0 = invisible, 1 = opaque.")]
+        [SerializeField] private float overlayAlpha1 = 0.65f;
+
+        [Header("Scalar Overlay 2 (N6)")]
+        [Tooltip("Enable second scalar overlay for A/B comparison.\n" +
+                 "Independent source, color ramp, and alpha.")]
+        [SerializeField] private bool enableOverlay2 = false;
+        [SerializeField] private ScalarOverlaySource overlaySource2 = ScalarOverlaySource.TerrainNoise;
+        [SerializeField] private float overlayMin2 = 0f;
+        [SerializeField] private float overlayMax2 = 1f;
+        [SerializeField] private Color overlayColorLow2 = new Color(0.44f, 0.10f, 0.10f, 1f);
+        [SerializeField] private Color overlayColorHigh2 = Color.white;
+        [Range(0f, 1f)]
+        [SerializeField] private float overlayAlpha2 = 0.65f;
 
         // =====================================================================
         // Runtime state
@@ -188,8 +272,10 @@ namespace Islands.PCG.Adapters.Tilemap
         private Stage_Vegetation2D vegetationStage;
         private Stage_Traversal2D traversalStage;
         private Stage_Morphology2D morphologyStage;
+        private Stage_Biome2D biomeStage;
+        private Stage_Regions2D regionsStage;
 
-        private IMapStage2D[] stagesF2, stagesF3, stagesF4, stagesF5, stagesF6, stagesG;
+        private IMapStage2D[] stagesF2, stagesF3, stagesF4, stagesF5, stagesF6, stagesG, stagesM, stagesM2a, stagesM2b;
 
         // =====================================================================
         // Dirty tracking cache
@@ -201,19 +287,27 @@ namespace Islands.PCG.Adapters.Tilemap
         private int lastResolution;
         private bool lastEnableHillsStage, lastEnableShoreStage;
         private float lastShallowWaterDepth01, lastMidWaterDepth01;
-        private bool lastEnableVegetationStage, lastEnableTraversalStage, lastEnableMorphologyStage;
+        private bool lastEnableVegetationStage, lastEnableTraversalStage, lastEnableMorphologyStage, lastEnableBiomeStage;
+        private bool lastEnableRegionsStage;
         private float lastIslandRadius01, lastWaterThreshold01;
         private float lastIslandSmoothFrom01, lastIslandSmoothTo01;
         private float lastIslandAspectRatio, lastWarpAmplitude01;
         private IslandShapeMode lastShapeMode;
         private float lastHeightRedistributionExponent;
-        // F3b hills dirty tracking
-        private float lastHillsThresholdL1;
-        private float lastHillsThresholdL2;
+        // F3b / N5.e hills dirty tracking
+        private float lastHillsL1;
+        private float lastHillsL2;
+        private float lastHillsNoiseBlend;
         private int lastHeightRemapCurveHash;
+        // Phase M: biome climate dirty tracking
+        private float lastBiomeBaseTemperature, lastBiomeLapseRate, lastBiomeLatitudeEffect;
+        private float lastBiomeCoastModerationStrength, lastBiomeTempNoiseAmplitude;
+        private int lastBiomeTempNoiseCellSize;
+        private float lastBiomeCoastalMoistureBonus, lastBiomeCoastDecayRate, lastBiomeMoistureNoiseAmplitude;
+        private int lastBiomeMoistureNoiseCellSize;
         // N5.b: noise dirty tracking (replaces 11 individual fields)
-        private NoiseSettingsAsset lastTerrainNoiseAsset, lastWarpNoiseAsset;
-        private TerrainNoiseSettings lastTerrainNoise, lastWarpNoise;
+        private NoiseSettingsAsset lastTerrainNoiseAsset, lastWarpNoiseAsset, lastHillsNoiseAsset;
+        private TerrainNoiseSettings lastTerrainNoise, lastWarpNoise, lastHillsNoise;
         private int lastHeightQuantSteps;
         private bool lastFlipY, lastClearBeforeRun;
         private bool lastUseProceduralTiles;
@@ -223,15 +317,26 @@ namespace Islands.PCG.Adapters.Tilemap
         private UnityEngine.Tilemaps.Tilemap lastOverlayTilemap, lastColliderTilemap;
         private TileBase lastColliderTile;
         private bool lastEnableColliderAutoSetup;
-        private bool lastEnableScalarOverlay;
-        private MapFieldId lastOverlayField;
-        private float lastOverlayMin, lastOverlayMax;
-        private Color lastOverlayColorLow, lastOverlayColorHigh;
-        private UnityEngine.Tilemaps.Tilemap lastScalarHeatmapTilemap;
-        private float lastHeatmapAlpha;
+        // H8: mega-tile dirty tracking
+        private bool lastEnableMegaTiles;
+        private ulong lastMegaTileHash;
+        // N6: overlay dirty tracking (replaces old scalar overlay + heatmap tilemap fields)
+        private bool lastEnableOverlay1;
+        private ScalarOverlaySource lastOverlaySource1;
+        private float lastOverlayMin1, lastOverlayMax1;
+        private Color lastOverlayColorLow1, lastOverlayColorHigh1;
+        private float lastOverlayAlpha1;
+        private bool lastEnableOverlay2;
+        private ScalarOverlaySource lastOverlaySource2;
+        private float lastOverlayMin2, lastOverlayMax2;
+        private Color lastOverlayColorLow2, lastOverlayColorHigh2;
+        private float lastOverlayAlpha2;
 
-        /// <summary>Tracks whether overlay was applied on the previous rebuild (for Issue 1 reset pass).</summary>
-        private bool _overlayWasApplied;
+        // N6: overlay renderers and working buffers
+        private ScalarOverlayRenderer _overlayRenderer1;
+        private ScalarOverlayRenderer _overlayRenderer2;
+        private float[] _overlayBuffer1;
+        private float[] _overlayBuffer2;
 
         /// <summary>True when a MapGenerationPreset is assigned (inline fields hidden).</summary>
         public bool HasPreset => preset != null;
@@ -249,18 +354,28 @@ namespace Islands.PCG.Adapters.Tilemap
 
         private void OnDisable()
         {
+            _overlayRenderer1?.Dispose(); _overlayRenderer1 = null;
+            _overlayRenderer2?.Dispose(); _overlayRenderer2 = null;
+            _overlayBuffer1 = null;
+            _overlayBuffer2 = null;
+
             ctx?.Dispose();
             ctx = null;
             ctxResolution = -1;
             baseStage = null; hillsStage = null; shoreStage = null;
             vegetationStage = null; traversalStage = null; morphologyStage = null;
-            stagesF2 = stagesF3 = stagesF4 = stagesF5 = stagesF6 = stagesG = null;
+            biomeStage = null;
+            regionsStage = null;
+            stagesF2 = stagesF3 = stagesF4 = stagesF5 = stagesF6 = stagesG = stagesM = stagesM2a = stagesM2b = null;
         }
 
         private void Update()
         {
-            if (overlayField != lastOverlayField)
-                ApplyOverlayFieldDefaults();
+            // N6: auto-apply sensible min/max when overlay source changes.
+            if (overlaySource1 != lastOverlaySource1)
+                ApplyOverlaySourceDefaults(overlaySource1, ref overlayMin1, ref overlayMax1);
+            if (overlaySource2 != lastOverlaySource2)
+                ApplyOverlaySourceDefaults(overlaySource2, ref overlayMin2, ref overlayMax2);
 
             if (ParamsChanged())
             {
@@ -285,6 +400,8 @@ namespace Islands.PCG.Adapters.Tilemap
             bool eVeg = preset != null ? preset.enableVegetationStage : enableVegetationStage;
             bool eTrav = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             bool eMorph = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
+            bool eBiome = preset != null ? preset.enableBiomeStage : enableBiomeStage;
+            bool eRegions = enableRegionsStage;
             bool eClear = preset != null ? preset.clearBeforeRun : clearBeforeRun;
 
             // N5.b: build tunables — preset handles its own asset resolution via ToTunables().
@@ -304,8 +421,12 @@ namespace Islands.PCG.Adapters.Tilemap
                           ? warpNoiseAsset.Settings
                           : warpNoiseSettings,
                       heightQuantSteps: heightQuantSteps,
-                      hillsThresholdL1: hillsThresholdL1,
-                      hillsThresholdL2: hillsThresholdL2,
+                      hillsL1: hillsL1,
+                      hillsL2: hillsL2,
+                      hillsNoiseBlend: hillsNoiseBlend,
+                      hillsNoise: hillsNoiseAsset != null
+                          ? hillsNoiseAsset.Settings
+                          : hillsNoiseSettings,
                       shapeMode: shapeMode);
 
             EnsureContextAllocated(eRes);
@@ -320,8 +441,20 @@ namespace Islands.PCG.Adapters.Tilemap
             shoreStage.ShallowWaterDepth01 = Mathf.Max(0f, eShallowDepth);
             shoreStage.MidWaterDepth01 = Mathf.Max(0f, eMidDepth);
 
+            // Phase M: feed biome climate tunables to stage instance.
+            biomeStage.baseTemperature = preset != null ? preset.biomeBaseTemperature : biomeBaseTemperature;
+            biomeStage.lapseRate = preset != null ? preset.biomeLapseRate : biomeLapseRate;
+            biomeStage.latitudeEffect = preset != null ? preset.biomeLatitudeEffect : biomeLatitudeEffect;
+            biomeStage.coastModerationStrength = preset != null ? preset.biomeCoastModerationStrength : biomeCoastModerationStrength;
+            biomeStage.tempNoiseAmplitude = preset != null ? preset.biomeTempNoiseAmplitude : biomeTempNoiseAmplitude;
+            biomeStage.tempNoiseCellSize = preset != null ? preset.biomeTempNoiseCellSize : biomeTempNoiseCellSize;
+            biomeStage.coastalMoistureBonus = preset != null ? preset.biomeCoastalMoistureBonus : biomeCoastalMoistureBonus;
+            biomeStage.coastDecayRate = preset != null ? preset.biomeCoastDecayRate : biomeCoastDecayRate;
+            biomeStage.moistureNoiseAmplitude = preset != null ? preset.biomeMoistureNoiseAmplitude : biomeMoistureNoiseAmplitude;
+            biomeStage.moistureNoiseCellSize = preset != null ? preset.biomeMoistureNoiseCellSize : biomeMoistureNoiseCellSize;
+
             var inputs = new MapInputs(eSeed, new GridDomain2D(eRes, eRes), eTun);
-            var stages = eMorph ? stagesG : eTrav ? stagesF6 : eVeg ? stagesF5
+            var stages = (eBiome && eVeg && eRegions) ? stagesM2b : (eBiome && eVeg) ? stagesM2a : eBiome ? stagesM : eMorph ? stagesG : eTrav ? stagesF6 : eVeg ? stagesF5
                        : eShore ? stagesF4 : eHills ? stagesF3 : stagesF2;
 
             MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: eClear);
@@ -356,7 +489,23 @@ namespace Islands.PCG.Adapters.Tilemap
             else
                 TilemapAdapter2D.Apply(export, tilemap, activeTable, activeFallback, true, flipY);
 
-            ApplyScalarOverlay(eRes);
+            // ---- H8: Mega-tile post-pass ----
+            if (enableMegaTiles && megaTileRules != null && megaTileRules.Length > 0)
+            {
+                var megaPlacements = MegaTileScanner.Scan(export, megaTileRules);
+                if (megaPlacements.Count > 0)
+                {
+                    if (enableMultiLayer)
+                        MegaTileStamper.ApplyMultiLayer(tilemap, overlayTilemap,
+                            megaPlacements, megaTileRules, eRes, flipY);
+                    else
+                        MegaTileStamper.Apply(tilemap,
+                            megaPlacements, megaTileRules, eRes, flipY);
+                }
+            }
+
+            // N6: Texture2D overlays (replaces heatmap tilemap stamping).
+            ApplyOverlays(eRes, eTun, eSeed);
 
             int stamped = CountStampedTiles(eRes);
             dirty = false;
@@ -365,159 +514,315 @@ namespace Islands.PCG.Adapters.Tilemap
             Debug.Log(
                 $"[PCGMapTilemapVisualization] #{updateCalls} res={eRes} seed={eSeed} " +
                 $"shape={eTun.shapeMode} " +
-                $"hills={eHills} shore={eShore} veg={eVeg} trav={eTrav} morph={eMorph} " +
+                $"hills={eHills} shore={eShore} veg={eVeg} trav={eTrav} morph={eMorph} biome={eBiome} " +
                 $"flipY={flipY} proc={useProceduralTiles} multi={enableMultiLayer} " +
-                $"overlay={enableScalarOverlay}({overlayField}) heatmap={scalarHeatmapTilemap != null} tiles={stamped}/{eRes * eRes}");
+                $"mega={enableMegaTiles}({megaTileRules?.Length ?? 0}r) " +
+                $"overlay1={enableOverlay1}({overlaySource1}) overlay2={enableOverlay2}({overlaySource2}) " +
+                $"tiles={stamped}/{eRes * eRes}");
         }
 
         // =====================================================================
-        // Scalar field overlay (N2 + post-N2 fixes)
+        // Scalar overlays — N6 Texture2D + SpriteRenderer system
+        // Replaces the N2/post-N2 heatmap tilemap and per-cell tint paths.
         // =====================================================================
 
-        /// <summary>Quantized palette steps for the heatmap tilemap (capped for cache efficiency).</summary>
-        private const int HeatmapPaletteSteps = 256;
+        // Stage salts — must match the governed stages exactly.
+        private const uint TerrainNoiseSalt = 0xF2A10001u;
+        private const uint WarpXNoiseSalt = 0xF2A20002u;
+        private const uint WarpYNoiseSalt = 0xF2A30003u;
+        private const uint HillsNoiseSalt = 0xF3D50001u;
 
         /// <summary>
-        /// Top-level overlay dispatcher. Uses the dedicated heatmap tilemap when assigned,
-        /// falls back to per-cell SetColor tint otherwise.
+        /// Create/update/hide both overlay renderers based on current enable state.
+        /// Called after the pipeline runs and tiles are stamped.
         /// </summary>
-        private void ApplyScalarOverlay(int res)
+        private void ApplyOverlays(int res, MapTunables2D tunables, uint seed)
         {
-            bool hasOverlay = enableScalarOverlay && ctx.IsFieldCreated(overlayField);
+            ApplyOneOverlay(
+                ref _overlayRenderer1, ref _overlayBuffer1,
+                enableOverlay1, overlaySource1,
+                overlayMin1, overlayMax1,
+                overlayColorLow1, overlayColorHigh1,
+                overlayAlpha1, res, tunables, seed,
+                "ScalarOverlay1", 100);
 
-            if (scalarHeatmapTilemap != null)
-            {
-                ApplyScalarHeatmapTilemap(res, hasOverlay);
-                // Ensure the tint path is clean when heatmap is active.
-                if (_overlayWasApplied)
-                    ResetTintColors(res);
-                _overlayWasApplied = false;
-            }
-            else
-            {
-                // Clear heatmap tilemap if it was previously assigned and is now null.
-                // (No-op when it was never assigned.)
-                ApplyScalarOverlayTint(res, hasOverlay);
-            }
+            ApplyOneOverlay(
+                ref _overlayRenderer2, ref _overlayBuffer2,
+                enableOverlay2, overlaySource2,
+                overlayMin2, overlayMax2,
+                overlayColorLow2, overlayColorHigh2,
+                overlayAlpha2, res, tunables, seed,
+                "ScalarOverlay2", 101);
         }
 
-        /// <summary>
-        /// Dedicated heatmap tilemap path (Issue 2). Stamps solid-color procedural tiles
-        /// onto a separate tilemap, colored by the scalar field value. Color palette is
-        /// quantized to <see cref="HeatmapPaletteSteps"/> steps for cache efficiency.
-        /// </summary>
-        private void ApplyScalarHeatmapTilemap(int res, bool hasOverlay)
+        private void ApplyOneOverlay(
+            ref ScalarOverlayRenderer renderer, ref float[] buffer,
+            bool enabled, ScalarOverlaySource source,
+            float min, float max,
+            Color colorLow, Color colorHigh,
+            float alpha, int res,
+            MapTunables2D tunables, uint seed,
+            string goName, int sortingOrder)
         {
-            if (!hasOverlay)
+            if (!enabled)
             {
-                scalarHeatmapTilemap.ClearAllTiles();
-                // Sync renderer alpha even when disabled (avoids stale alpha on re-enable).
-                SetHeatmapRendererAlpha();
+                if (renderer != null) renderer.SetVisible(false);
                 return;
             }
 
-            // Clear all tiles before stamping — removes stale tiles from previous
-            // generations at different resolutions (e.g. 256→64 would leave 256×256 ghosts).
-            scalarHeatmapTilemap.ClearAllTiles();
+            // Lazy-create renderer.
+            if (renderer == null)
+                renderer = new ScalarOverlayRenderer(transform, goName, sortingOrder);
 
-            ScalarField2D field = ctx.GetField(overlayField);
-            float oRange = overlayMax - overlayMin;
-            float oInvRange = (oRange > 1e-6f) ? (1f / oRange) : 0f;
-            float invSteps = 1f / (HeatmapPaletteSteps - 1);
+            // Ensure buffer sized correctly.
+            int len = res * res;
+            if (buffer == null || buffer.Length != len)
+                buffer = new float[len];
 
-            for (int y = 0; y < res; y++)
-            {
-                for (int x = 0; x < res; x++)
-                {
-                    int ty = flipY ? (res - 1 - y) : y;
-                    var pos = new Vector3Int(x, ty, 0);
+            // Fill scalar data from the selected source.
+            FillOverlayBuffer(source, buffer, res, tunables, seed);
 
-                    float v = math.saturate((field.GetUnchecked(x, y) - overlayMin) * oInvRange);
-                    // Quantize to N steps for tile cache efficiency.
-                    int step = (int)(v * (HeatmapPaletteSteps - 1) + 0.5f);
-                    float qv = step * invSteps;
-                    Color c = Color.Lerp(overlayColorLow, overlayColorHigh, qv);
-
-                    TileBase tile = ProceduralTileFactory.GetOrCreate(c);
-                    scalarHeatmapTilemap.SetTile(pos, tile);
-                }
-            }
-
-            SetHeatmapRendererAlpha();
-        }
-
-        private void SetHeatmapRendererAlpha()
-        {
-            scalarHeatmapTilemap.color = new Color(1f, 1f, 1f, heatmapAlpha);
+            // Upload to texture and align.
+            renderer.SetData(buffer, res, res, min, max, colorLow, colorHigh, flipY);
+            renderer.SetAlpha(alpha);
+            renderer.SetVisible(true);
+            renderer.AlignToTilemap(tilemap);
         }
 
         /// <summary>
-        /// Per-cell tint fallback path (Issue 1 fix). Only touches tile colors when overlay
-        /// is enabled. On enabled→disabled transition, resets tile colors via LockColor.
+        /// Fill a float[] buffer from the selected <see cref="ScalarOverlaySource"/>.
+        /// Pipeline fields read from <c>ctx</c>; noise previews computed on-demand
+        /// via <see cref="MapNoiseBridge2D.FillNoise01"/> with stage-matching salts.
         /// </summary>
-        private void ApplyScalarOverlayTint(int res, bool hasOverlay)
+        private void FillOverlayBuffer(
+            ScalarOverlaySource source, float[] dst,
+            int res, MapTunables2D tunables, uint seed)
         {
-            if (tilemap == null) return;
+            int len = res * res;
 
-            if (!hasOverlay)
+            switch (source)
             {
-                // Issue 1 fix: only run a reset pass on the enabled→disabled transition.
-                if (_overlayWasApplied)
-                    ResetTintColors(res);
-                _overlayWasApplied = false;
+                case ScalarOverlaySource.Height:
+                    FillFromField(MapFieldId.Height, dst, res);
+                    break;
+
+                case ScalarOverlaySource.CoastDist:
+                    FillFromField(MapFieldId.CoastDist, dst, res);
+                    break;
+
+                case ScalarOverlaySource.Moisture:
+                    FillFromField(MapFieldId.Moisture, dst, res);
+                    break;
+
+                case ScalarOverlaySource.Temperature:
+                    FillFromField(MapFieldId.Temperature, dst, res);
+                    break;
+
+                case ScalarOverlaySource.Biome:
+                    FillFromField(MapFieldId.Biome, dst, res);
+                    break;
+
+                case ScalarOverlaySource.BiomeRegionId:
+                    FillFromField(MapFieldId.BiomeRegionId, dst, res);
+                    break;
+
+                case ScalarOverlaySource.TerrainNoise:
+                    FillFromNoise(dst, res, seed, TerrainNoiseSalt, tunables.terrainNoise);
+                    break;
+
+                case ScalarOverlaySource.WarpNoiseX:
+                    FillFromNoise(dst, res, seed, WarpXNoiseSalt, tunables.warpNoise);
+                    break;
+
+                case ScalarOverlaySource.WarpNoiseY:
+                    FillFromNoise(dst, res, seed, WarpYNoiseSalt, tunables.warpNoise);
+                    break;
+
+                case ScalarOverlaySource.HillsNoise:
+                    FillFromNoise(dst, res, seed, HillsNoiseSalt, tunables.hillsNoise);
+                    break;
+
+                case ScalarOverlaySource.ShapeMask:
+                    FillShapeMask(dst, res, tunables, seed);
+                    break;
+
+                default:
+                    System.Array.Clear(dst, 0, len);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Read a pipeline scalar field into the managed float[] buffer.
+        /// Fills zeros if the field is not created (e.g. Moisture before Phase M).
+        /// </summary>
+        private void FillFromField(MapFieldId fieldId, float[] dst, int res)
+        {
+            if (!ctx.IsFieldCreated(fieldId))
+            {
+                System.Array.Clear(dst, 0, dst.Length);
                 return;
             }
 
-            // Overlay ON: tint tiles.
-            ScalarField2D field = ctx.GetField(overlayField);
-            float oRange = overlayMax - overlayMin;
-            float oInvRange = (oRange > 1e-6f) ? (1f / oRange) : 0f;
-
+            ScalarField2D field = ctx.GetField(fieldId);
             for (int y = 0; y < res; y++)
             {
+                int row = y * res;
                 for (int x = 0; x < res; x++)
-                {
-                    int ty = flipY ? (res - 1 - y) : y;
-                    var pos = new Vector3Int(x, ty, 0);
-                    float v = math.saturate((field.GetUnchecked(x, y) - overlayMin) * oInvRange);
-                    Color tint = Color.Lerp(overlayColorLow, overlayColorHigh, v);
-                    tilemap.SetTileFlags(pos, TileFlags.None);
-                    tilemap.SetColor(pos, tint);
-                }
+                    dst[row + x] = field.GetUnchecked(x, y);
             }
-
-            _overlayWasApplied = true;
         }
 
         /// <summary>
-        /// Restores tile-asset built-in colors by re-locking the color flag.
-        /// Used when overlay transitions from enabled to disabled, or when switching
-        /// from tint path to heatmap path.
+        /// Compute noise on-demand and copy to managed float[] buffer.
+        /// Uses a temporary <see cref="NativeArray{T}"/> for the bridge call.
         /// </summary>
-        private void ResetTintColors(int res)
+        private void FillFromNoise(
+            float[] dst, int res, uint seed, uint salt,
+            in TerrainNoiseSettings noiseSettings)
         {
-            if (tilemap == null) return;
-            for (int y = 0; y < res; y++)
-                for (int x = 0; x < res; x++)
-                {
-                    int ty = flipY ? (res - 1 - y) : y;
-                    var pos = new Vector3Int(x, ty, 0);
-                    tilemap.SetTileFlags(pos, TileFlags.LockColor);
-                }
-        }
-
-        private void ApplyOverlayFieldDefaults()
-        {
-            switch (overlayField)
+            var domain = new GridDomain2D(res, res);
+            var tmp = new NativeArray<float>(domain.Length, Unity.Collections.Allocator.Temp);
+            try
             {
-                case MapFieldId.Height: overlayMin = 0f; overlayMax = 1f; break;
-                case MapFieldId.CoastDist: overlayMin = -1f; overlayMax = 20f; break;
-                default: overlayMin = 0f; overlayMax = 1f; break;
+                MapNoiseBridge2D.FillNoise01(in domain, tmp, seed, salt, in noiseSettings);
+                tmp.CopyTo(dst);
+            }
+            finally
+            {
+                if (tmp.IsCreated) tmp.Dispose();
             }
         }
 
-        [ContextMenu("Reset Overlay Range to Defaults")]
-        private void ResetOverlayRangeToDefaults() => ApplyOverlayFieldDefaults();
+        /// <summary>
+        /// Recompute the pure island shape mask [0,1] on-demand.
+        /// Mirrors the mask01 computation in Stage_BaseTerrain2D (Ellipse / Rectangle /
+        /// NoShape paths) using the same warp noise salts and tunables. Does NOT include
+        /// noise perturbation, redistribution, quantization, or spline remap — those are
+        /// post-mask operations visible via the Height overlay.
+        ///
+        /// When shapeMode = NoShape the mask is uniformly 1.0 (height = pure noise).
+        /// When an F2c external shape is active, the built-in shape is shown as fallback
+        /// (the visualizer does not have access to the external MaskGrid2D).
+        /// </summary>
+        private void FillShapeMask(float[] dst, int res, MapTunables2D tunables, uint seed)
+        {
+            int w = res, h = res;
+
+            // NoShape: mask is uniformly 1.0 (height = pure noise, no silhouette).
+            if (tunables.shapeMode == IslandShapeMode.NoShape)
+            {
+                for (int i = 0; i < dst.Length; i++) dst[i] = 1f;
+                return;
+            }
+
+            // Shared geometry — mirrors Stage_BaseTerrain2D exactly.
+            float minDim = math.min((float)w, (float)h);
+            float radius = math.max(1f, minDim * tunables.islandRadius01);
+            float invRadiusSq = 1f / (radius * radius);
+            float fromSq = tunables.islandSmoothFrom01 * tunables.islandSmoothFrom01;
+            float toSq = tunables.islandSmoothTo01 * tunables.islandSmoothTo01;
+            float2 center = new float2(w * 0.5f, h * 0.5f);
+            float aspect = tunables.islandAspectRatio;
+            float invAspectSq = 1f / (aspect * aspect);
+            float warpAmp = tunables.warpAmplitude01 * minDim;
+
+            // Rectangle half-extents.
+            float rectHalfX = radius * aspect;
+            float rectHalfY = radius;
+            float invRectHalfX = rectHalfX > 0f ? 1f / rectHalfX : 0f;
+            float invRectHalfY = rectHalfY > 0f ? 1f / rectHalfY : 0f;
+
+            bool isRect = tunables.shapeMode == IslandShapeMode.Rectangle;
+
+            var domain = new GridDomain2D(w, h);
+            int cellCount = w * h;
+            var warpXArr = new NativeArray<float>(cellCount, Unity.Collections.Allocator.Temp);
+            var warpYArr = new NativeArray<float>(cellCount, Unity.Collections.Allocator.Temp);
+            try
+            {
+                MapNoiseBridge2D.FillNoise01(in domain, warpXArr, seed, WarpXNoiseSalt, in tunables.warpNoise);
+                MapNoiseBridge2D.FillNoise01(in domain, warpYArr, seed, WarpYNoiseSalt, in tunables.warpNoise);
+
+                for (int y = 0; y < h; y++)
+                {
+                    int row = y * w;
+                    for (int x = 0; x < w; x++)
+                    {
+                        int idx = row + x;
+                        float wx = warpXArr[idx] * 2f - 1f;
+                        float wy = warpYArr[idx] * 2f - 1f;
+                        float2 p = new float2(x + 0.5f, y + 0.5f);
+                        float2 pw = p + new float2(wx, wy) * warpAmp;
+                        float2 v = pw - center;
+
+                        float mask01;
+                        if (isRect)
+                        {
+                            float fracX = math.abs(v.x) * invRectHalfX;
+                            float fracY = math.abs(v.y) * invRectHalfY;
+                            float rectDist01 = math.max(fracX, fracY);
+                            float rectDistSq = rectDist01 * rectDist01;
+                            mask01 = 1f - math.smoothstep(fromSq, toSq, rectDistSq);
+                        }
+                        else
+                        {
+                            // Ellipse (default + Custom fallback).
+                            float distSq = v.x * v.x * invAspectSq + v.y * v.y;
+                            float radial01Sq = math.saturate(distSq * invRadiusSq);
+                            mask01 = 1f - math.smoothstep(fromSq, toSq, radial01Sq);
+                        }
+
+                        dst[idx] = mask01;
+                    }
+                }
+            }
+            finally
+            {
+                if (warpXArr.IsCreated) warpXArr.Dispose();
+                if (warpYArr.IsCreated) warpYArr.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Set sensible min/max defaults when the overlay source changes.
+        /// </summary>
+        private static void ApplyOverlaySourceDefaults(
+            ScalarOverlaySource source, ref float min, ref float max)
+        {
+            switch (source)
+            {
+                case ScalarOverlaySource.CoastDist:
+                    min = -1f; max = 20f;
+                    break;
+                case ScalarOverlaySource.Height:
+                case ScalarOverlaySource.Moisture:
+                case ScalarOverlaySource.Temperature:
+                case ScalarOverlaySource.TerrainNoise:
+                case ScalarOverlaySource.WarpNoiseX:
+                case ScalarOverlaySource.WarpNoiseY:
+                case ScalarOverlaySource.HillsNoise:
+                case ScalarOverlaySource.ShapeMask:
+                default:
+                    min = 0f; max = 1f;
+                    break;
+                case ScalarOverlaySource.Biome:
+                    min = 0f; max = 12f;
+                    break;
+                case ScalarOverlaySource.BiomeRegionId:
+                    min = 0f; max = 20f;
+                    break;
+            }
+        }
+
+        [ContextMenu("Reset Overlay 1 Range to Defaults")]
+        private void ResetOverlay1Defaults() =>
+            ApplyOverlaySourceDefaults(overlaySource1, ref overlayMin1, ref overlayMax1);
+
+        [ContextMenu("Reset Overlay 2 Range to Defaults")]
+        private void ResetOverlay2Defaults() =>
+            ApplyOverlaySourceDefaults(overlaySource2, ref overlayMin2, ref overlayMax2);
+
 
         // =====================================================================
         // Helpers
@@ -548,12 +853,18 @@ namespace Islands.PCG.Adapters.Tilemap
             vegetationStage = new Stage_Vegetation2D();
             traversalStage = new Stage_Traversal2D();
             morphologyStage = new Stage_Morphology2D();
+            biomeStage = new Stage_Biome2D();
+            regionsStage = new Stage_Regions2D();
             stagesF2 = new IMapStage2D[] { baseStage };
             stagesF3 = new IMapStage2D[] { baseStage, hillsStage };
             stagesF4 = new IMapStage2D[] { baseStage, hillsStage, shoreStage };
             stagesF5 = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage };
             stagesF6 = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage };
             stagesG = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage };
+            stagesM = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage, biomeStage };
+            // M2.a: vegetation moves AFTER biome. Activated when both Biome and Vegetation toggles are on.
+            stagesM2a = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage };
+            stagesM2b = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage, regionsStage };
         }
 
         // =====================================================================
@@ -575,6 +886,13 @@ namespace Islands.PCG.Adapters.Tilemap
             return warpNoiseAsset != null ? warpNoiseAsset.Settings : warpNoiseSettings;
         }
 
+        private TerrainNoiseSettings ResolveHillsNoise()
+        {
+            if (preset != null)
+                return preset.hillsNoiseAsset != null ? preset.hillsNoiseAsset.Settings : preset.hillsNoiseSettings;
+            return hillsNoiseAsset != null ? hillsNoiseAsset.Settings : hillsNoiseSettings;
+        }
+
         private void CacheParams()
         {
             _lastPreset = preset;
@@ -589,6 +907,8 @@ namespace Islands.PCG.Adapters.Tilemap
             lastEnableVegetationStage = preset != null ? preset.enableVegetationStage : enableVegetationStage;
             lastEnableTraversalStage = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
+            lastEnableBiomeStage = preset != null ? preset.enableBiomeStage : enableBiomeStage;
+            lastEnableRegionsStage = enableRegionsStage;
             lastIslandRadius01 = preset != null ? preset.islandRadius01 : islandRadius01;
             lastWaterThreshold01 = preset != null ? preset.waterThreshold01 : waterThreshold01;
             lastIslandSmoothFrom01 = preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01;
@@ -597,15 +917,29 @@ namespace Islands.PCG.Adapters.Tilemap
             lastWarpAmplitude01 = preset != null ? preset.warpAmplitude01 : warpAmplitude01;
             lastShapeMode = preset != null ? preset.shapeMode : shapeMode;
             lastHeightRedistributionExponent = preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent;
-            // F3b hills params
-            lastHillsThresholdL1 = preset != null ? preset.hillsThresholdL1 : hillsThresholdL1;
-            lastHillsThresholdL2 = preset != null ? preset.hillsThresholdL2 : hillsThresholdL2;
+            // F3b / N5.e hills params
+            lastHillsL1 = preset != null ? preset.hillsL1 : hillsL1;
+            lastHillsL2 = preset != null ? preset.hillsL2 : hillsL2;
+            lastHillsNoiseBlend = preset != null ? preset.hillsNoiseBlend : hillsNoiseBlend;
             lastHeightRemapCurveHash = ComputeCurveHash(preset != null ? preset.heightRemapCurve : heightRemapCurve);
+            // Phase M: biome climate
+            lastBiomeBaseTemperature = preset != null ? preset.biomeBaseTemperature : biomeBaseTemperature;
+            lastBiomeLapseRate = preset != null ? preset.biomeLapseRate : biomeLapseRate;
+            lastBiomeLatitudeEffect = preset != null ? preset.biomeLatitudeEffect : biomeLatitudeEffect;
+            lastBiomeCoastModerationStrength = preset != null ? preset.biomeCoastModerationStrength : biomeCoastModerationStrength;
+            lastBiomeTempNoiseAmplitude = preset != null ? preset.biomeTempNoiseAmplitude : biomeTempNoiseAmplitude;
+            lastBiomeTempNoiseCellSize = preset != null ? preset.biomeTempNoiseCellSize : biomeTempNoiseCellSize;
+            lastBiomeCoastalMoistureBonus = preset != null ? preset.biomeCoastalMoistureBonus : biomeCoastalMoistureBonus;
+            lastBiomeCoastDecayRate = preset != null ? preset.biomeCoastDecayRate : biomeCoastDecayRate;
+            lastBiomeMoistureNoiseAmplitude = preset != null ? preset.biomeMoistureNoiseAmplitude : biomeMoistureNoiseAmplitude;
+            lastBiomeMoistureNoiseCellSize = preset != null ? preset.biomeMoistureNoiseCellSize : biomeMoistureNoiseCellSize;
             // N5.b: noise (asset + struct, replaces 11 individual fields)
             lastTerrainNoiseAsset = preset != null ? preset.terrainNoiseAsset : terrainNoiseAsset;
             lastWarpNoiseAsset = preset != null ? preset.warpNoiseAsset : warpNoiseAsset;
             lastTerrainNoise = ResolveTerrainNoise();
             lastWarpNoise = ResolveWarpNoise();
+            lastHillsNoiseAsset = preset != null ? preset.hillsNoiseAsset : hillsNoiseAsset;
+            lastHillsNoise = ResolveHillsNoise();
             lastHeightQuantSteps = preset != null ? preset.heightQuantSteps : heightQuantSteps;
             lastFlipY = flipY;
             lastClearBeforeRun = preset != null ? preset.clearBeforeRun : clearBeforeRun;
@@ -617,14 +951,24 @@ namespace Islands.PCG.Adapters.Tilemap
             lastColliderTilemap = colliderTilemap;
             lastColliderTile = colliderTile;
             lastEnableColliderAutoSetup = enableColliderAutoSetup;
-            lastEnableScalarOverlay = enableScalarOverlay;
-            lastOverlayField = overlayField;
-            lastOverlayMin = overlayMin;
-            lastOverlayMax = overlayMax;
-            lastOverlayColorLow = overlayColorLow;
-            lastOverlayColorHigh = overlayColorHigh;
-            lastScalarHeatmapTilemap = scalarHeatmapTilemap;
-            lastHeatmapAlpha = heatmapAlpha;
+            // H8: mega-tiles
+            lastEnableMegaTiles = enableMegaTiles;
+            lastMegaTileHash = ComputeMegaTileHash();
+            // N6: overlay dirty tracking
+            lastEnableOverlay1 = enableOverlay1;
+            lastOverlaySource1 = overlaySource1;
+            lastOverlayMin1 = overlayMin1;
+            lastOverlayMax1 = overlayMax1;
+            lastOverlayColorLow1 = overlayColorLow1;
+            lastOverlayColorHigh1 = overlayColorHigh1;
+            lastOverlayAlpha1 = overlayAlpha1;
+            lastEnableOverlay2 = enableOverlay2;
+            lastOverlaySource2 = overlaySource2;
+            lastOverlayMin2 = overlayMin2;
+            lastOverlayMax2 = overlayMax2;
+            lastOverlayColorLow2 = overlayColorLow2;
+            lastOverlayColorHigh2 = overlayColorHigh2;
+            lastOverlayAlpha2 = overlayAlpha2;
         }
 
         private bool ParamsChanged()
@@ -640,6 +984,8 @@ namespace Islands.PCG.Adapters.Tilemap
                 || (preset != null ? preset.enableVegetationStage : enableVegetationStage) != lastEnableVegetationStage
                 || (preset != null ? preset.enableTraversalStage : enableTraversalStage) != lastEnableTraversalStage
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
+                || (preset != null ? preset.enableBiomeStage : enableBiomeStage) != lastEnableBiomeStage
+                || enableRegionsStage != lastEnableRegionsStage
                 || !Mathf.Approximately(preset != null ? preset.islandRadius01 : islandRadius01, lastIslandRadius01)
                 || !Mathf.Approximately(preset != null ? preset.waterThreshold01 : waterThreshold01, lastWaterThreshold01)
                 || !Mathf.Approximately(preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01, lastIslandSmoothFrom01)
@@ -648,15 +994,29 @@ namespace Islands.PCG.Adapters.Tilemap
                 || !Mathf.Approximately(preset != null ? preset.warpAmplitude01 : warpAmplitude01, lastWarpAmplitude01)
                 || (preset != null ? preset.shapeMode : shapeMode) != lastShapeMode
                 || !Mathf.Approximately(preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent, lastHeightRedistributionExponent)
-                // F3b hills params
-                || !Mathf.Approximately(preset != null ? preset.hillsThresholdL1 : hillsThresholdL1, lastHillsThresholdL1)
-                || !Mathf.Approximately(preset != null ? preset.hillsThresholdL2 : hillsThresholdL2, lastHillsThresholdL2)
+                // F3b / N5.e hills params
+                || !Mathf.Approximately(preset != null ? preset.hillsL1 : hillsL1, lastHillsL1)
+                || !Mathf.Approximately(preset != null ? preset.hillsL2 : hillsL2, lastHillsL2)
+                || !Mathf.Approximately(preset != null ? preset.hillsNoiseBlend : hillsNoiseBlend, lastHillsNoiseBlend)
                 || ComputeCurveHash(preset != null ? preset.heightRemapCurve : heightRemapCurve) != lastHeightRemapCurveHash
+                // Phase M: biome climate
+                || !Mathf.Approximately(preset != null ? preset.biomeBaseTemperature : biomeBaseTemperature, lastBiomeBaseTemperature)
+                || !Mathf.Approximately(preset != null ? preset.biomeLapseRate : biomeLapseRate, lastBiomeLapseRate)
+                || !Mathf.Approximately(preset != null ? preset.biomeLatitudeEffect : biomeLatitudeEffect, lastBiomeLatitudeEffect)
+                || !Mathf.Approximately(preset != null ? preset.biomeCoastModerationStrength : biomeCoastModerationStrength, lastBiomeCoastModerationStrength)
+                || !Mathf.Approximately(preset != null ? preset.biomeTempNoiseAmplitude : biomeTempNoiseAmplitude, lastBiomeTempNoiseAmplitude)
+                || (preset != null ? preset.biomeTempNoiseCellSize : biomeTempNoiseCellSize) != lastBiomeTempNoiseCellSize
+                || !Mathf.Approximately(preset != null ? preset.biomeCoastalMoistureBonus : biomeCoastalMoistureBonus, lastBiomeCoastalMoistureBonus)
+                || !Mathf.Approximately(preset != null ? preset.biomeCoastDecayRate : biomeCoastDecayRate, lastBiomeCoastDecayRate)
+                || !Mathf.Approximately(preset != null ? preset.biomeMoistureNoiseAmplitude : biomeMoistureNoiseAmplitude, lastBiomeMoistureNoiseAmplitude)
+                || (preset != null ? preset.biomeMoistureNoiseCellSize : biomeMoistureNoiseCellSize) != lastBiomeMoistureNoiseCellSize
                 // N5.b: noise (asset ref + resolved struct comparison)
                 || (preset != null ? preset.terrainNoiseAsset : terrainNoiseAsset) != lastTerrainNoiseAsset
                 || (preset != null ? preset.warpNoiseAsset : warpNoiseAsset) != lastWarpNoiseAsset
                 || !ResolveTerrainNoise().Equals(lastTerrainNoise)
                 || !ResolveWarpNoise().Equals(lastWarpNoise)
+                || (preset != null ? preset.hillsNoiseAsset : hillsNoiseAsset) != lastHillsNoiseAsset
+                || !ResolveHillsNoise().Equals(lastHillsNoise)
                 || (preset != null ? preset.heightQuantSteps : heightQuantSteps) != lastHeightQuantSteps
                 || flipY != lastFlipY
                 || (preset != null ? preset.clearBeforeRun : clearBeforeRun) != lastClearBeforeRun
@@ -668,14 +1028,24 @@ namespace Islands.PCG.Adapters.Tilemap
                 || colliderTilemap != lastColliderTilemap
                 || colliderTile != lastColliderTile
                 || enableColliderAutoSetup != lastEnableColliderAutoSetup
-                || enableScalarOverlay != lastEnableScalarOverlay
-                || overlayField != lastOverlayField
-                || !Mathf.Approximately(overlayMin, lastOverlayMin)
-                || !Mathf.Approximately(overlayMax, lastOverlayMax)
-                || overlayColorLow != lastOverlayColorLow
-                || overlayColorHigh != lastOverlayColorHigh
-                || scalarHeatmapTilemap != lastScalarHeatmapTilemap
-                || !Mathf.Approximately(heatmapAlpha, lastHeatmapAlpha);
+                // H8: mega-tiles
+                || enableMegaTiles != lastEnableMegaTiles
+                || ComputeMegaTileHash() != lastMegaTileHash
+                // N6: overlay params
+                || enableOverlay1 != lastEnableOverlay1
+                || overlaySource1 != lastOverlaySource1
+                || !Mathf.Approximately(overlayMin1, lastOverlayMin1)
+                || !Mathf.Approximately(overlayMax1, lastOverlayMax1)
+                || overlayColorLow1 != lastOverlayColorLow1
+                || overlayColorHigh1 != lastOverlayColorHigh1
+                || !Mathf.Approximately(overlayAlpha1, lastOverlayAlpha1)
+                || enableOverlay2 != lastEnableOverlay2
+                || overlaySource2 != lastOverlaySource2
+                || !Mathf.Approximately(overlayMin2, lastOverlayMin2)
+                || !Mathf.Approximately(overlayMax2, lastOverlayMax2)
+                || overlayColorLow2 != lastOverlayColorLow2
+                || overlayColorHigh2 != lastOverlayColorHigh2
+                || !Mathf.Approximately(overlayAlpha2, lastOverlayAlpha2);
         }
 
         // =====================================================================
@@ -710,6 +1080,23 @@ namespace Islands.PCG.Adapters.Tilemap
                 Color32 c = proceduralColorTable[i].Color;
                 h ^= (ulong)(uint)(int)proceduralColorTable[i].LayerId; h *= P;
                 h ^= c.r; h *= P; h ^= c.g; h *= P; h ^= c.b; h *= P; h ^= c.a; h *= P;
+            }
+            return h;
+        }
+
+        private ulong ComputeMegaTileHash()
+        {
+            const ulong O = 14695981039346656037UL; const ulong P = 1099511628211UL;
+            ulong h = O;
+            h ^= enableMegaTiles ? 1UL : 0UL; h *= P;
+            if (megaTileRules == null) return h;
+            for (int i = 0; i < megaTileRules.Length; i++)
+            {
+                h ^= (ulong)(uint)(int)megaTileRules[i].targetLayer; h *= P;
+                h ^= (ulong)(uint)(megaTileRules[i].quadrantTL != null ? megaTileRules[i].quadrantTL.GetInstanceID() : 0); h *= P;
+                h ^= (ulong)(uint)(megaTileRules[i].quadrantTR != null ? megaTileRules[i].quadrantTR.GetInstanceID() : 0); h *= P;
+                h ^= (ulong)(uint)(megaTileRules[i].quadrantBL != null ? megaTileRules[i].quadrantBL.GetInstanceID() : 0); h *= P;
+                h ^= (ulong)(uint)(megaTileRules[i].quadrantBR != null ? megaTileRules[i].quadrantBR.GetInstanceID() : 0); h *= P;
             }
             return h;
         }

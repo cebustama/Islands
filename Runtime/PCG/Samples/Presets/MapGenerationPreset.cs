@@ -28,6 +28,12 @@ namespace Islands.PCG.Samples
     ///             Refactored individual noise fields to embedded TerrainNoiseSettings structs.
     ///             Serialization break: field names changed from terrainNoiseType/terrainFrequency/...
     ///             to terrainNoiseSettings.noiseType/terrainNoiseSettings.frequency/...
+    /// Phase N5.d: hillsNoiseBlend + hillsNoiseSettings / hillsNoiseAsset for hills noise modulation.
+    /// Phase N5.e: Hills threshold UX remap — hillsThresholdL1/L2 → hillsL1/L2 (relative fractions).
+    ///             Serialization break: field names changed. Old raw-threshold values are not
+    ///             migrated (semantic change); existing presets fall back to new defaults.
+    /// Phase M: enableBiomeStage toggle for Climate &amp; Biome Classification.
+    /// M-fix.a: 10 biome climate tunables promoted to Inspector. Moisture defaults adjusted (M-fix.c folded in).
     /// </summary>
     [CreateAssetMenu(
         fileName = "MapGenerationPreset",
@@ -81,6 +87,57 @@ namespace Islands.PCG.Samples
                  "Produces LandCore (eroded interior) and CoastDist (distance-from-coast field).\n" +
                  "Requires Traversal enabled for correct layer dependencies.")]
         public bool enableMorphologyStage = true;
+
+        [Tooltip("Include the Biome classification stage (Phase M).\n" +
+                 "Produces Temperature, Moisture, and Biome scalar fields.\n" +
+                 "Requires Morphology enabled for CoastDist dependency.")]
+        public bool enableBiomeStage = true;
+
+        // ==================================================================
+        // Biome Climate (Phase M / M-fix.a)
+        // ==================================================================
+
+        [Header("Biome Climate (Phase M)")]
+        [Range(0f, 1f)]
+        [Tooltip("Sea-level equatorial base temperature. 0.7 = warm tropical islands.")]
+        public float biomeBaseTemperature = 0.7f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Height-to-temperature reduction. 0.5 = highest peaks lose half base temp.")]
+        public float biomeLapseRate = 0.5f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Y-axis latitude gradient strength. 0.0 for single-island (no latitude).\n" +
+                 "Non-zero for Phase W world maps.")]
+        public float biomeLatitudeEffect = 0.0f;
+
+        [Range(0f, 0.5f)]
+        [Tooltip("Coastal temperature moderation strength. 1/(1+coastDist) falloff.")]
+        public float biomeCoastModerationStrength = 0.1f;
+
+        [Range(0f, 0.3f)]
+        [Tooltip("Temperature noise amplitude. Low-frequency perturbation.")]
+        public float biomeTempNoiseAmplitude = 0.05f;
+
+        [Min(1)]
+        [Tooltip("Temperature noise cell size (frequency). Coarse; 2× terrain noise freq.")]
+        public int biomeTempNoiseCellSize = 16;
+
+        [Range(0f, 1f)]
+        [Tooltip("Coastal proximity moisture bonus at coast.")]
+        public float biomeCoastalMoistureBonus = 0.5f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Coastal moisture decay rate. Higher = faster inland decay.")]
+        public float biomeCoastDecayRate = 0.3f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Moisture noise amplitude. Perturbation; coast gradient is dominant.")]
+        public float biomeMoistureNoiseAmplitude = 0.3f;
+
+        [Min(1)]
+        [Tooltip("Moisture noise cell size. 4–8× lower frequency than terrain noise.")]
+        public int biomeMoistureNoiseCellSize = 32;
 
         // ==================================================================
         // Island Shape (N5.a)
@@ -180,6 +237,12 @@ namespace Islands.PCG.Samples
                  "When null, inline settings are used.")]
         public NoiseSettingsAsset warpNoiseAsset;
 
+        [Tooltip("Optional reusable noise asset for hills noise modulation (N5.d).\n" +
+                 "When assigned, overrides the inline Hills Noise settings below.\n" +
+                 "When null, inline settings are used.\n" +
+                 "Only relevant when Hills Noise Blend > 0.")]
+        public NoiseSettingsAsset hillsNoiseAsset;
+
         // ==================================================================
         // Terrain Noise (N4 → N5.b struct embed)
         // ==================================================================
@@ -201,23 +264,43 @@ namespace Islands.PCG.Samples
         public TerrainNoiseSettings warpNoiseSettings = TerrainNoiseSettings.DefaultWarp;
 
         // ==================================================================
-        // Hills (F3b)
+        // Hills (F3b / N5.e)
         // ==================================================================
 
-        [Header("Hills (F3b)")]
+        [Header("Hills (F3b / N5.e)")]
         [Range(0f, 1f)]
-        [Tooltip("Height threshold for hill slopes (HillsL1).\n" +
-                 "Land cells with Height >= this become passable slopes.\n" +
-                 "0.65 = default. Lower values = more slope coverage.\n" +
-                 "Must be <= Hills Peak Threshold (clamped internally if reversed).")]
-        public float hillsThresholdL1 = 0.65f;
+        [Tooltip("Hill slopes (HillsL1) — fraction of the land height range.\n" +
+                 "0.0 = all land eligible for hills. 1.0 = no hills.\n" +
+                 "Effective threshold = waterThreshold + hillsL1 × (1 − waterThreshold).\n" +
+                 "Default 0.30 ≈ effective 0.65 at default water threshold.")]
+        public float hillsL1 = 0.30f;
 
         [Range(0f, 1f)]
-        [Tooltip("Height threshold for hill peaks (HillsL2).\n" +
-                 "Land cells with Height >= this become impassable peaks.\n" +
-                 "0.80 = default. Lower values = more peak coverage.\n" +
-                 "Must be >= Hills Slope Threshold (clamped internally if reversed).")]
-        public float hillsThresholdL2 = 0.80f;
+        [Tooltip("Hill peaks (HillsL2) — fraction of the remaining range above L1.\n" +
+                 "0.0 = L2 starts at L1 (L1 band empty, all hills are peaks).\n" +
+                 "1.0 = only the highest cells become peaks.\n" +
+                 "Effective threshold = L1_eff + hillsL2 × (1 − L1_eff).\n" +
+                 "Default 0.43 ≈ effective 0.80 at default water threshold.")]
+        public float hillsL2 = 0.43f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Noise modulation of hill boundaries (N5.d).\n" +
+                 "0.0 = pure height-threshold (default, golden-safe).\n" +
+                 "0.5 = moderate noise variation — hill edges no longer exactly trace Height contours.\n" +
+                 "1.0 = maximum noise influence on hill boundary shapes.\n" +
+                 "Only affects classification thresholds; all invariants preserved.")]
+        public float hillsNoiseBlend = 0f;
+
+        // ==================================================================
+        // Hills Noise (N5.d)
+        // ==================================================================
+
+        [Header("Hills Noise (N5.d)")]
+        [Tooltip("Noise algorithm, frequency, octaves, and fractal settings for\n" +
+                 "hills threshold modulation. Overridden by Hills Noise Asset when assigned.\n" +
+                 "Only relevant when Hills Noise Blend > 0.\n" +
+                 "The amplitude field is ignored — modulation depth is controlled by Hills Noise Blend.")]
+        public TerrainNoiseSettings hillsNoiseSettings = TerrainNoiseSettings.DefaultHills;
 
         // ==================================================================
         // Height Quantization (N4 — moved from constant)
@@ -279,6 +362,8 @@ namespace Islands.PCG.Samples
         /// Phase F3b: includes hills threshold settings.
         /// Phase N5.a: includes shapeMode.
         /// Phase N5.b: resolves NoiseSettingsAsset slots (asset → inline fallback).
+        /// Phase N5.d: includes hillsNoiseBlend + hillsNoise (asset → inline fallback).
+        /// Phase N5.e: hillsL1/L2 relative fractions (remap computed in MapTunables2D ctor).
         /// </summary>
         public MapTunables2D ToTunables() => new MapTunables2D(
             islandRadius01: islandRadius01,
@@ -296,8 +381,12 @@ namespace Islands.PCG.Samples
                 ? warpNoiseAsset.Settings
                 : warpNoiseSettings,
             heightQuantSteps: heightQuantSteps,
-            hillsThresholdL1: hillsThresholdL1,
-            hillsThresholdL2: hillsThresholdL2,
+            hillsL1: hillsL1,
+            hillsL2: hillsL2,
+            hillsNoiseBlend: hillsNoiseBlend,
+            hillsNoise: hillsNoiseAsset != null
+                ? hillsNoiseAsset.Settings
+                : hillsNoiseSettings,
             shapeMode: shapeMode);
     }
 }

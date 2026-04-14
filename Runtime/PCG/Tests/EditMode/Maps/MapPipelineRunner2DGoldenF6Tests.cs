@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using Unity.Collections;
 using Islands.PCG.Core;
 using Islands.PCG.Grids;
@@ -13,7 +13,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const int H = 64;
         private const uint Seed = 42u;
 
-        // Set to values reported on first run.
+        // N5.e: zeroed for re-lock. Walkable/Stairs depend on HillsL2 which shifts
+        // due to the hills threshold remap (effective L2 ≈ 0.8005 vs old 0.80).
         private const ulong ExpectedWalkableHash = 0xA9A213FFB5842CF7UL;
         private const ulong ExpectedStairsHash = 0x678993F8298D975FUL;
 
@@ -42,12 +43,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
 
                 if (ExpectedWalkableHash == 0UL)
                     Assert.Fail(
-                        "F6 pipeline Walkable golden not initialized.\n" +
+                        "F6/N5.e pipeline Walkable golden not initialized.\n" +
                         $"Set ExpectedWalkableHash = 0x{walkHash:X16}UL;");
 
                 if (ExpectedStairsHash == 0UL)
                     Assert.Fail(
-                        "F6 pipeline Stairs golden not initialized.\n" +
+                        "F6/N5.e pipeline Stairs golden not initialized.\n" +
                         $"Set ExpectedStairsHash = 0x{stairHash:X16}UL;");
 
                 Assert.AreEqual(ExpectedWalkableHash, walkHash,

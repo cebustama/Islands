@@ -92,6 +92,8 @@ namespace Islands.PCG.Samples
         [SerializeField] private bool enableVegetationStage = true;
         [SerializeField] private bool enableTraversalStage = true;
         [SerializeField] private bool enableMorphologyStage = true;
+        [SerializeField] private bool enableBiomeStage = true;
+        [SerializeField] private bool enableRegionsStage = true;
 
         // =====================================================================
         // Inspector — Layer Slots
@@ -132,9 +134,15 @@ namespace Islands.PCG.Samples
         [Header("Height Redistribution (J2)")]
         [Range(0.5f, 4f)][SerializeField] private float heightRedistributionExponent = 1.0f;
 
-        [Header("Hills (F3b)")]
-        [Range(0f, 1f)][SerializeField] private float hillsThresholdL1 = 0.65f;
-        [Range(0f, 1f)][SerializeField] private float hillsThresholdL2 = 0.80f;
+        [Header("Hills (F3b / N5.e)")]
+        [Range(0f, 1f)][SerializeField] private float hillsL1 = 0.30f;
+        [Range(0f, 1f)][SerializeField] private float hillsL2 = 0.43f;
+        [Range(0f, 1f)]
+        [Tooltip("Noise modulation of hill boundaries (N5.d).\n" +
+                 "0.0 = pure height-threshold (default).\n" +
+                 "0.5 = moderate variation.\n" +
+                 "1.0 = maximum noise influence.")]
+        [SerializeField] private float hillsNoiseBlend = 0f;
 
         // N5.b: noise settings assets (optional override)
         [Header("Noise Settings Assets (N5.b)")]
@@ -144,6 +152,10 @@ namespace Islands.PCG.Samples
         [Tooltip("Optional reusable noise asset for domain warp.\n" +
                  "When assigned, overrides inline Warp Noise settings.")]
         [SerializeField] private NoiseSettingsAsset warpNoiseAsset;
+        [Tooltip("Optional reusable noise asset for hills noise modulation (N5.d).\n" +
+                 "When assigned, overrides inline Hills Noise settings.\n" +
+                 "Only relevant when Hills Noise Blend > 0.")]
+        [SerializeField] private NoiseSettingsAsset hillsNoiseAsset;
 
         // N5.b: embedded noise structs (replace individual N4 fields)
         [Header("Terrain Noise")]
@@ -151,6 +163,9 @@ namespace Islands.PCG.Samples
 
         [Header("Warp Noise")]
         [SerializeField] private TerrainNoiseSettings warpNoiseSettings = TerrainNoiseSettings.DefaultWarp;
+
+        [Header("Hills Noise (N5.d)")]
+        [SerializeField] private TerrainNoiseSettings hillsNoiseSettings = TerrainNoiseSettings.DefaultHills;
 
         // N4: height quantization (replaces quantSteps)
         [Header("Height Quantization (N4)")]
@@ -186,6 +201,22 @@ namespace Islands.PCG.Samples
         private IMapStage2D[] stagesF5;
         private IMapStage2D[] stagesF6;
         private IMapStage2D[] stagesG;
+        private IMapStage2D[] stagesM;
+        private IMapStage2D[] stagesM2a;
+        private IMapStage2D[] stagesM2b;
+        private Stage_Biome2D biomeStage;
+        private Stage_Regions2D regionsStage;
+        // Biome tunables (inline only — no preset wiring in this viz).
+        [SerializeField] private float biomeBaseTemperature = 0.7f;
+        [SerializeField] private float biomeLapseRate = 0.5f;
+        [SerializeField] private float biomeLatitudeEffect = 0.0f;
+        [SerializeField] private float biomeCoastModerationStrength = 0.1f;
+        [SerializeField] private float biomeTempNoiseAmplitude = 0.05f;
+        [SerializeField] private int biomeTempNoiseCellSize = 16;
+        [SerializeField] private float biomeCoastalMoistureBonus = 0.5f;
+        [SerializeField] private float biomeCoastDecayRate = 0.3f;
+        [SerializeField] private float biomeMoistureNoiseAmplitude = 0.3f;
+        [SerializeField] private int biomeMoistureNoiseCellSize = 32;
 
         // =====================================================================
         // Dirty tracking cache
@@ -198,6 +229,8 @@ namespace Islands.PCG.Samples
         private bool lastEnableVegetationStage;
         private bool lastEnableTraversalStage;
         private bool lastEnableMorphologyStage;
+        private bool lastEnableBiomeStage;
+        private bool lastEnableRegionsStage;
         private IslandShapeMode lastShapeMode;
         private float lastIslandRadius01;
         private float lastWaterThreshold01;
@@ -206,12 +239,13 @@ namespace Islands.PCG.Samples
         private float lastIslandAspectRatio;
         private float lastWarpAmplitude01;
         private float lastHeightRedistributionExponent;
-        // F3b hills dirty tracking
-        private float lastHillsThresholdL1;
-        private float lastHillsThresholdL2;
+        // F3b / N5.e hills dirty tracking
+        private float lastHillsL1;
+        private float lastHillsL2;
+        private float lastHillsNoiseBlend;
         // N5.b: noise dirty tracking (replaces 11 individual fields)
-        private NoiseSettingsAsset lastTerrainNoiseAsset, lastWarpNoiseAsset;
-        private TerrainNoiseSettings lastTerrainNoise, lastWarpNoise;
+        private NoiseSettingsAsset lastTerrainNoiseAsset, lastWarpNoiseAsset, lastHillsNoiseAsset;
+        private TerrainNoiseSettings lastTerrainNoise, lastWarpNoise, lastHillsNoise;
         private int lastHeightQuantSteps;
         private bool lastClearBeforeRun;
         private ulong lastSlotsHash;
@@ -272,7 +306,9 @@ namespace Islands.PCG.Samples
             vegetationStage = null;
             traversalStage = null;
             morphologyStage = null;
-            stagesF2 = stagesF3 = stagesF4 = stagesF5 = stagesF6 = stagesG = null;
+            biomeStage = null;
+            regionsStage = null;
+            stagesF2 = stagesF3 = stagesF4 = stagesF5 = stagesF6 = stagesG = stagesM = stagesM2a = stagesM2b = null;
         }
 
         private void Update()
@@ -312,8 +348,12 @@ namespace Islands.PCG.Samples
                           ? warpNoiseAsset.Settings
                           : warpNoiseSettings,
                       heightQuantSteps: heightQuantSteps,
-                      hillsThresholdL1: hillsThresholdL1,
-                      hillsThresholdL2: hillsThresholdL2,
+                      hillsL1: hillsL1,
+                      hillsL2: hillsL2,
+                      hillsNoiseBlend: hillsNoiseBlend,
+                      hillsNoise: hillsNoiseAsset != null
+                          ? hillsNoiseAsset.Settings
+                          : hillsNoiseSettings,
                       shapeMode: shapeMode);
 
             EnsureContextAllocated(eRes);
@@ -330,12 +370,26 @@ namespace Islands.PCG.Samples
                 domain: new GridDomain2D(eRes, eRes),
                 tunables: eTun);
 
-            var stages = eMorph ? stagesG
+            var stages = (enableBiomeStage && eVeg && enableRegionsStage) ? stagesM2b
+                       : (enableBiomeStage && eVeg) ? stagesM2a
+                       : enableBiomeStage ? stagesM
+                       : eMorph ? stagesG
                        : eTrav ? stagesF6
                        : eVeg ? stagesF5
                        : eShore ? stagesF4
                        : eHills ? stagesF3
                        : stagesF2;
+
+            biomeStage.baseTemperature = biomeBaseTemperature;
+            biomeStage.lapseRate = biomeLapseRate;
+            biomeStage.latitudeEffect = biomeLatitudeEffect;
+            biomeStage.coastModerationStrength = biomeCoastModerationStrength;
+            biomeStage.tempNoiseAmplitude = biomeTempNoiseAmplitude;
+            biomeStage.tempNoiseCellSize = biomeTempNoiseCellSize;
+            biomeStage.coastalMoistureBonus = biomeCoastalMoistureBonus;
+            biomeStage.coastDecayRate = biomeCoastDecayRate;
+            biomeStage.moistureNoiseAmplitude = biomeMoistureNoiseAmplitude;
+            biomeStage.moistureNoiseCellSize = biomeMoistureNoiseCellSize;
 
             MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: eClear);
 
@@ -512,7 +566,12 @@ namespace Islands.PCG.Samples
             stagesF4 = new IMapStage2D[] { baseStage, hillsStage, shoreStage };
             stagesF5 = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage };
             stagesF6 = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage };
+            biomeStage = new Stage_Biome2D();
+            regionsStage = new Stage_Regions2D();
             stagesG = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage };
+            stagesM = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage, biomeStage };
+            stagesM2a = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage };
+            stagesM2b = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage, regionsStage };
         }
 
         // =====================================================================
@@ -534,6 +593,13 @@ namespace Islands.PCG.Samples
             return warpNoiseAsset != null ? warpNoiseAsset.Settings : warpNoiseSettings;
         }
 
+        private TerrainNoiseSettings ResolveHillsNoise()
+        {
+            if (preset != null)
+                return preset.hillsNoiseAsset != null ? preset.hillsNoiseAsset.Settings : preset.hillsNoiseSettings;
+            return hillsNoiseAsset != null ? hillsNoiseAsset.Settings : hillsNoiseSettings;
+        }
+
         private void CacheParams()
         {
             _lastPreset = preset;
@@ -544,6 +610,8 @@ namespace Islands.PCG.Samples
             lastEnableVegetationStage = preset != null ? preset.enableVegetationStage : enableVegetationStage;
             lastEnableTraversalStage = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
+            lastEnableBiomeStage = enableBiomeStage;
+            lastEnableRegionsStage = enableRegionsStage;
             lastShapeMode = preset != null ? preset.shapeMode : shapeMode;
             lastIslandRadius01 = preset != null ? preset.islandRadius01 : islandRadius01;
             lastWaterThreshold01 = preset != null ? preset.waterThreshold01 : waterThreshold01;
@@ -552,14 +620,17 @@ namespace Islands.PCG.Samples
             lastIslandAspectRatio = preset != null ? preset.islandAspectRatio : islandAspectRatio;
             lastWarpAmplitude01 = preset != null ? preset.warpAmplitude01 : warpAmplitude01;
             lastHeightRedistributionExponent = preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent;
-            // F3b hills params
-            lastHillsThresholdL1 = preset != null ? preset.hillsThresholdL1 : hillsThresholdL1;
-            lastHillsThresholdL2 = preset != null ? preset.hillsThresholdL2 : hillsThresholdL2;
+            // F3b / N5.e hills params
+            lastHillsL1 = preset != null ? preset.hillsL1 : hillsL1;
+            lastHillsL2 = preset != null ? preset.hillsL2 : hillsL2;
+            lastHillsNoiseBlend = preset != null ? preset.hillsNoiseBlend : hillsNoiseBlend;
             // N5.b: noise (asset + struct, replaces 11 individual fields)
             lastTerrainNoiseAsset = preset != null ? preset.terrainNoiseAsset : terrainNoiseAsset;
             lastWarpNoiseAsset = preset != null ? preset.warpNoiseAsset : warpNoiseAsset;
             lastTerrainNoise = ResolveTerrainNoise();
             lastWarpNoise = ResolveWarpNoise();
+            lastHillsNoiseAsset = preset != null ? preset.hillsNoiseAsset : hillsNoiseAsset;
+            lastHillsNoise = ResolveHillsNoise();
             lastHeightQuantSteps = preset != null ? preset.heightQuantSteps : heightQuantSteps;
             lastClearBeforeRun = preset != null ? preset.clearBeforeRun : clearBeforeRun;
             lastEnableScalarOverlay = enableScalarOverlay;
@@ -580,6 +651,8 @@ namespace Islands.PCG.Samples
                 || (preset != null ? preset.enableVegetationStage : enableVegetationStage) != lastEnableVegetationStage
                 || (preset != null ? preset.enableTraversalStage : enableTraversalStage) != lastEnableTraversalStage
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
+                || enableBiomeStage != lastEnableBiomeStage
+                || enableRegionsStage != lastEnableRegionsStage
                 || (preset != null ? preset.shapeMode : shapeMode) != lastShapeMode
                 || !Mathf.Approximately(preset != null ? preset.islandRadius01 : islandRadius01, lastIslandRadius01)
                 || !Mathf.Approximately(preset != null ? preset.waterThreshold01 : waterThreshold01, lastWaterThreshold01)
@@ -588,14 +661,17 @@ namespace Islands.PCG.Samples
                 || !Mathf.Approximately(preset != null ? preset.islandAspectRatio : islandAspectRatio, lastIslandAspectRatio)
                 || !Mathf.Approximately(preset != null ? preset.warpAmplitude01 : warpAmplitude01, lastWarpAmplitude01)
                 || !Mathf.Approximately(preset != null ? preset.heightRedistributionExponent : heightRedistributionExponent, lastHeightRedistributionExponent)
-                // F3b hills params
-                || !Mathf.Approximately(preset != null ? preset.hillsThresholdL1 : hillsThresholdL1, lastHillsThresholdL1)
-                || !Mathf.Approximately(preset != null ? preset.hillsThresholdL2 : hillsThresholdL2, lastHillsThresholdL2)
+                // F3b / N5.e hills params
+                || !Mathf.Approximately(preset != null ? preset.hillsL1 : hillsL1, lastHillsL1)
+                || !Mathf.Approximately(preset != null ? preset.hillsL2 : hillsL2, lastHillsL2)
+                || !Mathf.Approximately(preset != null ? preset.hillsNoiseBlend : hillsNoiseBlend, lastHillsNoiseBlend)
                 // N5.b: noise (asset ref + resolved struct comparison)
                 || (preset != null ? preset.terrainNoiseAsset : terrainNoiseAsset) != lastTerrainNoiseAsset
                 || (preset != null ? preset.warpNoiseAsset : warpNoiseAsset) != lastWarpNoiseAsset
                 || !ResolveTerrainNoise().Equals(lastTerrainNoise)
                 || !ResolveWarpNoise().Equals(lastWarpNoise)
+                || (preset != null ? preset.hillsNoiseAsset : hillsNoiseAsset) != lastHillsNoiseAsset
+                || !ResolveHillsNoise().Equals(lastHillsNoise)
                 || (preset != null ? preset.heightQuantSteps : heightQuantSteps) != lastHeightQuantSteps
                 || (preset != null ? preset.clearBeforeRun : clearBeforeRun) != lastClearBeforeRun
                 || enableScalarOverlay != lastEnableScalarOverlay

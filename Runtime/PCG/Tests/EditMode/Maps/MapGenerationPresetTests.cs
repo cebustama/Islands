@@ -1,8 +1,8 @@
+﻿using Islands;
+using Islands.PCG.Layout.Maps;
+using Islands.PCG.Samples;
 using NUnit.Framework;
 using UnityEngine;
-using Islands.PCG.Samples;
-using Islands.PCG.Layout.Maps;
-using Islands;
 
 /// <summary>
 /// EditMode tests for <see cref="MapGenerationPreset"/>.
@@ -14,6 +14,8 @@ using Islands;
 /// Phase N5.a: shapeMode field.
 /// Phase N5.b: NoiseSettingsAsset slots. Refactored individual noise fields to
 ///             embedded TerrainNoiseSettings structs. New field defaults.
+/// Phase N5.d: hillsNoiseBlend + hillsNoiseSettings / hillsNoiseAsset.
+/// Phase N5.e: Hills threshold UX remap — hillsThresholdL1/L2 → hillsL1/L2 (relative fractions).
 /// </summary>
 [TestFixture]
 public class MapGenerationPresetTests
@@ -235,48 +237,72 @@ public class MapGenerationPresetTests
     }
 
     // ------------------------------------------------------------------
-    // F3b Hills thresholds
+    // F3b / N5.e Hills relative fractions
     // ------------------------------------------------------------------
 
     [Test]
-    public void DefaultValues_HillsThresholds_MatchF3bDefaults()
+    public void DefaultValues_HillsL1L2_MatchN5eDefaults()
     {
-        Assert.AreEqual(0.65f, _preset.hillsThresholdL1, 1e-6f);
-        Assert.AreEqual(0.80f, _preset.hillsThresholdL2, 1e-6f);
+        Assert.AreEqual(0.30f, _preset.hillsL1, 1e-6f);
+        Assert.AreEqual(0.43f, _preset.hillsL2, 1e-6f);
     }
 
     [Test]
-    public void ToTunables_HillsThresholds_AreForwardedCorrectly()
+    public void ToTunables_HillsL1L2_AreForwardedAsRelativeFractions()
     {
-        _preset.hillsThresholdL1 = 0.55f;
-        _preset.hillsThresholdL2 = 0.90f;
+        _preset.hillsL1 = 0.40f;
+        _preset.hillsL2 = 0.50f;
+        // waterThreshold = 0.50 (default)
+        // L1_eff = 0.50 + 0.40 * 0.50 = 0.70
+        // L2_eff = 0.70 + 0.50 * 0.30 = 0.85
 
         MapTunables2D t = _preset.ToTunables();
 
-        Assert.AreEqual(0.55f, t.hillsThresholdL1, 1e-5f);
-        Assert.AreEqual(0.90f, t.hillsThresholdL2, 1e-5f);
+        Assert.AreEqual(0.70f, t.hillsThresholdL1, 1e-5f,
+            "Effective L1 threshold should follow remap formula.");
+        Assert.AreEqual(0.85f, t.hillsThresholdL2, 1e-5f,
+            "Effective L2 threshold should follow remap formula.");
     }
 
     [Test]
-    public void ToTunables_HillsL2BelowL1_IsClamped()
+    public void ToTunables_HillsL2Effective_AlwaysGEL1()
     {
-        _preset.hillsThresholdL1 = 0.70f;
-        _preset.hillsThresholdL2 = 0.50f; // intentionally below L1
+        // With the N5.e remap, L2 >= L1 is guaranteed by construction.
+        // No explicit clamping needed — hillsL2 = 0 → L2 starts at L1.
+        _preset.hillsL1 = 0.80f;
+        _preset.hillsL2 = 0.0f;
 
         MapTunables2D t = _preset.ToTunables();
 
         Assert.GreaterOrEqual(t.hillsThresholdL2, t.hillsThresholdL1,
-            "MapTunables2D must clamp hillsThresholdL2 >= hillsThresholdL1.");
+            "N5.e remap must guarantee hillsThresholdL2 >= hillsThresholdL1.");
     }
 
     [Test]
-    public void ToTunables_DefaultPreset_HillsMatchMapTunables2DDefault()
+    public void ToTunables_DefaultPreset_HillsEffectivesMatchDefault()
     {
         MapTunables2D fromPreset = _preset.ToTunables();
         MapTunables2D expected = MapTunables2D.Default;
 
         Assert.AreEqual(expected.hillsThresholdL1, fromPreset.hillsThresholdL1, 1e-5f);
         Assert.AreEqual(expected.hillsThresholdL2, fromPreset.hillsThresholdL2, 1e-5f);
+    }
+
+    [Test]
+    public void ToTunables_HillsRemap_RespectsWaterThreshold()
+    {
+        _preset.waterThreshold01 = 0.30f;
+        _preset.hillsL1 = 0.50f;
+        _preset.hillsL2 = 0.50f;
+        // L1_eff = 0.30 + 0.50 * 0.70 = 0.65
+        // L2_eff = 0.65 + 0.50 * 0.35 = 0.825
+
+        MapTunables2D t = _preset.ToTunables();
+
+        Assert.AreEqual(0.65f, t.hillsThresholdL1, 1e-5f,
+            "Remap should use the preset's waterThreshold, not the default.");
+        Assert.AreEqual(0.825f, t.hillsThresholdL2, 1e-5f,
+            "Remap should use the preset's waterThreshold for L2 calculation.");
     }
 
     // ------------------------------------------------------------------
@@ -419,5 +445,99 @@ public class MapGenerationPresetTests
         var c = TerrainNoiseSettings.DefaultTerrain;
         c.worleyDistanceMetric = WorleyDistanceMetric.Chebyshev;
         Assert.IsFalse(a.Equals(c));
+    }
+
+    // ------------------------------------------------------------------
+    // N5.d Hills Noise Modulation
+    // ------------------------------------------------------------------
+
+    [Test]
+    public void DefaultValues_HillsNoiseBlend_IsZero()
+    {
+        Assert.AreEqual(0f, _preset.hillsNoiseBlend, 1e-6f);
+    }
+
+    [Test]
+    public void DefaultValues_HillsNoiseSettings_MatchDefaultHills()
+    {
+        Assert.AreEqual(TerrainNoiseType.Perlin, _preset.hillsNoiseSettings.noiseType);
+        Assert.AreEqual(6, _preset.hillsNoiseSettings.frequency);
+        Assert.AreEqual(2, _preset.hillsNoiseSettings.octaves);
+    }
+
+    [Test]
+    public void DefaultValues_HillsNoiseAsset_IsNull()
+    {
+        Assert.IsNull(_preset.hillsNoiseAsset);
+    }
+
+    [Test]
+    public void ToTunables_HillsNoiseBlend_IsForwardedCorrectly()
+    {
+        _preset.hillsNoiseBlend = 0.6f;
+
+        MapTunables2D t = _preset.ToTunables();
+
+        Assert.AreEqual(0.6f, t.hillsNoiseBlend, 1e-5f);
+    }
+
+    [Test]
+    public void ToTunables_HillsNoiseSettings_AreForwardedCorrectly()
+    {
+        _preset.hillsNoiseSettings.noiseType = TerrainNoiseType.Simplex;
+        _preset.hillsNoiseSettings.frequency = 12;
+
+        MapTunables2D t = _preset.ToTunables();
+
+        Assert.AreEqual(TerrainNoiseType.Simplex, t.hillsNoise.noiseType);
+        Assert.AreEqual(12, t.hillsNoise.frequency);
+    }
+
+    [Test]
+    public void ToTunables_DefaultPreset_HillsNoiseMatchesDefault()
+    {
+        MapTunables2D fromPreset = _preset.ToTunables();
+        MapTunables2D expected = MapTunables2D.Default;
+
+        Assert.AreEqual(expected.hillsNoiseBlend, fromPreset.hillsNoiseBlend, 1e-5f);
+        Assert.AreEqual(expected.hillsNoise.frequency, fromPreset.hillsNoise.frequency);
+    }
+
+    [Test]
+    public void ToTunables_WithHillsNoiseAsset_ReadsFromAsset()
+    {
+        var asset = ScriptableObject.CreateInstance<NoiseSettingsAsset>();
+        try
+        {
+            var so = new UnityEditor.SerializedObject(asset);
+            var settingsProp = so.FindProperty("settings");
+            settingsProp.FindPropertyRelative("noiseType").enumValueIndex = (int)TerrainNoiseType.Value;
+            settingsProp.FindPropertyRelative("frequency").intValue = 10;
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            _preset.hillsNoiseAsset = asset;
+
+            MapTunables2D t = _preset.ToTunables();
+
+            Assert.AreEqual(TerrainNoiseType.Value, t.hillsNoise.noiseType);
+            Assert.AreEqual(10, t.hillsNoise.frequency);
+        }
+        finally
+        {
+            Object.DestroyImmediate(asset);
+        }
+    }
+
+    [Test]
+    public void ToTunables_NullHillsNoiseAsset_ReadsInlineSettings()
+    {
+        _preset.hillsNoiseAsset = null;
+        _preset.hillsNoiseSettings.noiseType = TerrainNoiseType.Worley;
+        _preset.hillsNoiseSettings.frequency = 3;
+
+        MapTunables2D t = _preset.ToTunables();
+
+        Assert.AreEqual(TerrainNoiseType.Worley, t.hillsNoise.noiseType);
+        Assert.AreEqual(3, t.hillsNoise.frequency);
     }
 }
