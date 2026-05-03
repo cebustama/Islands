@@ -263,6 +263,43 @@ Rain shadow adjustments can push rainfall values **outside the configured min/ma
 
 Adams specifically cited rain shadows as a major quality improvement: "The world maps improved greatly when rain shadows were taken into consideration."
 
+#### D4.1. Runtime coupling: how rainfall is consumed after worldgen
+
+The worldgen rainfall field is not a throwaway intermediate — it is persisted as a regional property and read by the runtime weather system as a static probability parameter. The coupling is **unidirectional**: runtime consumes, worldgen produces, and runtime never regenerates the rainfall field.
+
+**Fortress mode** reduces weather to a small set of discrete events — rain, snow, and (in evil biomes) the special clouds and rains described below. The DF wiki confirms the direct coupling: *"Rainfall causes it to rain more in a given area"* (`Advanced world generation`). A higher worldgen rainfall value at the embark region increases the frequency of rain events in fortress mode. Normal (non-evil) rain cleans tiles (removing blood, vomit, etc.), fills murky pools by 1/7 per hit, and freezes into ice walls in freezing climates. The `[WEATHER:YES/NO]` token in `d_init.txt` globally disables normal weather — confirmation that the runtime rain event is a discrete sampled event, not a field simulation. There are no cumulus/cirrus/stratus semantics in fortress mode; weather is effectively a boolean "raining / not raining" per embark region, modulated by the scalar rainfall field and the temperature field (snow vs. rain).
+
+**Adventure mode** adds the richer cloud taxonomy as visualization on top of the same static rainfall source. DF wiki confirms three layered cloud categories with specific rain-causing subtypes:
+
+- **Cumulus layer**: scattered cumulus / many cumulus (causes rain) / cumulonimbus (causes rain)
+- **Cirrus layer**: on/off (never causes rain)
+- **Stratus layer**: altostratus / stratus (causes rain) / nimbostratus (causes rain)
+- **Fog** (independent of clouds): thin mist / fog / thick fog
+
+These layers superimpose and follow standard meteorological semantics (e.g., cumulonimbus → thunderstorm; altostratus → hazy overcast without precipitation). They are observation-only — DF wiki states: *"clouds, fog/mist and the stars in adventure mode, however, they have no gameplay impact in fortress mode."*
+
+**Adventure mode also exposes a latitude-banded wind field**, which is the most concrete runtime counterpart to the worldgen wind-direction question. East-West wind at a given embark tile is derived from its latitude (counted in tiles from the pole-most edge), with values tabulated by the wiki and confirmed by Toady One in a Future of the Fortress forum thread: *"the directions alternate over the latitudes and depend on the pole settings, and yeah, a no-pole world is treated like a N+S pole world."* The banding is modeled loosely on real atmospheric circulation cells (trade winds → westerlies → polar easterlies); negative values are east-to-west, positive values are west-to-east. Certain locations additionally receive "mountain/valley winds and sea breezes" during morning and afternoon time windows — local agents superimposed on the latitudinal band.
+
+Whether this latitude-banded model is *also* what worldgen uses during the rainshadow pass remains **unconfirmed**, but is the strongest available hypothesis (see §H.1).
+
+**Evil weather is a separate runtime system**, not a modulation of the rainfall field. Evil clouds and evil rains are generated during worldgen as inorganic substance definitions with syndromes, attached to evil biomes. At runtime they spawn at map edges and propagate in miasma-like bursts in a wind-driven direction, inflicting syndrome effects on creatures caught in them. They consume the biome evil classification but not the rainfall scalar directly.
+
+**Full worldgen → runtime dependency chain** (all arrows are unidirectional reads):
+
+```
+worldgen:                              runtime (fortress + adventure):
+  elevation field        ─────────►     embark tile elevation, temperature lapse
+  rainfall field         ─────────►     rain event frequency (fortress)
+  (post-orographic)      ─────────►     cloud type probability (adventure)
+  temperature field      ─────────►     rain-vs-snow decision
+                         ─────────►     seasonal pattern selection
+  biome classification   ─────────►     evil cloud / evil rain pick
+  latitude (tile index)  ─────────►     E-W wind band (adventure)
+  drainage (≥ 50 gate)   ─────────►     [indirect via rainfall field]
+```
+
+The architectural pattern — **"worldgen scalar field as runtime probability parameter"** — is the key takeaway for systems that want weather without simulating atmosphere at runtime. DF demonstrates this works in a shipped game at 256×256 scale: a single static float per region drives coherent runtime precipitation that *feels* like climate because its spatial distribution already was climate. Islands does not currently have a runtime weather layer, but if one is ever added, the M.2 moisture field is the natural source.
+
 ### D5. Temperature
 
 Temperature is influenced by three factors in order of dominance:
@@ -693,7 +730,7 @@ DF's **generate-and-test** approach — creating worlds, checking them against p
 
 ## H. Open questions and poorly documented areas
 
-**1. Rain shadow wind direction.** Adams described the orographic effect conceptually but never specified how wind direction is determined. Is it always from the nearest ocean? A fixed prevailing direction? Computed from some atmospheric model? This is the most significant algorithmic gap in the documented pipeline.
+**1. Rain shadow wind direction (partially resolved).** Adams described the orographic effect conceptually but never specified how the worldgen pass determines wind direction. However, evidence from the **runtime side** closes part of this gap: adventure mode implements a **latitude-banded East-West wind field** modeled loosely on real atmospheric circulation (trade winds → westerlies → polar easterlies), with values tabulated per latitude and confirmed by Toady One in a Future of the Fortress thread ("the directions alternate over the latitudes and depend on the pole settings"). The strongest remaining hypothesis is that worldgen rainshadow uses the same latitude-banded model rather than a single global prevailing direction — it would be architecturally strange for runtime to have a structured wind model that worldgen ignores. PerfectWorldDF's single "Wind Direction" parameter (which regenerates the rainshadow map when changed) complicates this slightly and could indicate that worldgen uses a single global direction while runtime overlays the latitudinal bands on top. What remains unconfirmed: whether worldgen's rainshadow sweep is (a) single global direction, (b) latitude-banded alternating, or (c) something else. Confidence: **medium** for latitude-banded hypothesis; **high** that a structured (not random per-cell) model is used. See §D4.1 for the runtime wind model.
 
 **2. Non-linear parabola details.** Adams mentioned applying "a non-linear parabola so the mountains are bent to look more realistic" but never specified the function. Is it a power curve (elevation^k)? A piecewise function? The exact transfer function is unknown.
 

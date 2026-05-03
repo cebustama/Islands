@@ -1,6 +1,7 @@
 ﻿using Islands.PCG.Core;
 using Islands.PCG.Fields;
 using Islands.PCG.Grids;
+using Islands.PCG.Inspection;
 using Islands.PCG.Layout.Maps;
 using Islands.PCG.Layout.Maps.Stages;
 using Islands.PCG.Operators;
@@ -49,8 +50,10 @@ namespace Islands.PCG.Samples
     /// Phase N5.a: IslandShapeMode selector (Ellipse, Rectangle, NoShape, Custom).
     /// Phase N5.b: NoiseSettingsAsset slots. Refactored individual noise fields to embedded
     ///             TerrainNoiseSettings structs with IEquatable dirty-tracking.
+    /// Phase L: enableHydrologyStage toggle + Stage_Hydrology2D wiring.
+    ///          Rivers (13) and Lakes (14) added to layerPresetOnColors.
     /// </summary>
-    public sealed class PCGMapVisualization : Visualization
+    public sealed class PCGMapVisualization : Visualization, IMapContextSource
     {
         private static readonly int NoiseId = Shader.PropertyToID("_Noise");
         private static readonly int MaskOffColorId = Shader.PropertyToID("_MaskOffColor");
@@ -77,6 +80,7 @@ namespace Islands.PCG.Samples
         [SerializeField] private bool enableMorphologyStage = true;
         [SerializeField] private bool enableBiomeStage = true;
         [SerializeField] private bool enableRegionsStage = true;
+        [SerializeField] private bool enableHydrologyStage = false;
 
         [Header("Biome (Phase M)")]
         [SerializeField] private float biomeBaseTemperature = 0.7f;
@@ -124,6 +128,8 @@ namespace Islands.PCG.Samples
             new Color(0.30f, 0.75f, 0.30f, 1f),  // 10 LandInterior
             new Color(0.00f, 0.65f, 0.40f, 1f),  // 11 LandCore
             new Color(0.10f, 0.30f, 0.75f, 1f),  // 12 MidWater
+            new Color(0.20f, 0.55f, 0.90f, 1f),  // 13 Rivers
+            new Color(0.05f, 0.45f, 0.70f, 1f),  // 14 Lakes
         };
 
         // N5.a: shape mode
@@ -191,6 +197,25 @@ namespace Islands.PCG.Samples
         private int ctxResolution = -1;
         private bool dirty = true;
 
+        // Phase V.a: monotonic counter for IMapContextSource consumers.
+        private int _regenVersion;
+
+        // =====================================================================
+        // IMapContextSource (Phase V.a) — read-only inspection seam.
+        // The lantern viz renders to its own GPU surface (compute-shader-backed
+        // mesh), not a Unity Tilemap; Tilemap is null and TryWorldToCell always
+        // returns false. Phase V components no-op against this source gracefully
+        // (Phase_V_Design.md §4.4, §15.6).
+        // =====================================================================
+        MapContext2D IMapContextSource.Context => ctx;
+        UnityEngine.Tilemaps.Tilemap IMapContextSource.Tilemap => null;
+        bool IMapContextSource.FlipY => false;
+        int IMapContextSource.RegenerationVersion => _regenVersion;
+        bool IMapContextSource.TryWorldToCell(Vector3 world, out int x, out int y)
+        {
+            x = 0; y = 0; return false;
+        }
+
         // ---- Dirty-tracking cache ----
         private MapGenerationPreset _lastPreset;
         private uint lastSeed;
@@ -201,6 +226,7 @@ namespace Islands.PCG.Samples
         private bool lastEnableMorphologyStage;
         private bool lastEnableBiomeStage;
         private bool lastEnableRegionsStage;
+        private bool lastEnableHydrologyStage;
         private PCGViewMode lastViewMode;
         private MapLayerId lastViewLayer;
         private MapFieldId lastViewField;
@@ -238,7 +264,12 @@ namespace Islands.PCG.Samples
         private Stage_Morphology2D morphologyStage;
         private Stage_Biome2D biomeStage;
         private Stage_Regions2D regionsStage;
+        private Stage_Hydrology2D hydrologyStage;
         private IMapStage2D[] stagesF2;
+        private IMapStage2D[] stagesL;
+        private IMapStage2D[] stagesLM;
+        private IMapStage2D[] stagesLM2a;
+        private IMapStage2D[] stagesLM2b;
         private IMapStage2D[] stagesF3;
         private IMapStage2D[] stagesF4;
         private IMapStage2D[] stagesF5;
@@ -266,6 +297,7 @@ namespace Islands.PCG.Samples
             morphologyStage = new Stage_Morphology2D();
             biomeStage = new Stage_Biome2D();
             regionsStage = new Stage_Regions2D();
+            hydrologyStage = new Stage_Hydrology2D();
 
             stagesF2 = new IMapStage2D[1] { baseStage };
             stagesF3 = new IMapStage2D[2] { baseStage, hillsStage };
@@ -276,6 +308,10 @@ namespace Islands.PCG.Samples
             stagesM = new IMapStage2D[7] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage, biomeStage };
             stagesM2a = new IMapStage2D[7] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage };
             stagesM2b = new IMapStage2D[8] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage, regionsStage };
+            stagesL = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage, hydrologyStage };
+            stagesLM = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage, hydrologyStage, biomeStage };
+            stagesLM2a = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, hydrologyStage, biomeStage, vegetationStage };
+            stagesLM2b = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, hydrologyStage, biomeStage, vegetationStage, regionsStage };
 
             CacheParams();
             dirty = true;
@@ -307,7 +343,12 @@ namespace Islands.PCG.Samples
             morphologyStage = null;
             biomeStage = null;
             regionsStage = null;
+            hydrologyStage = null;
             stagesF2 = null;
+            stagesL = null;
+            stagesLM = null;
+            stagesLM2a = null;
+            stagesLM2b = null;
             stagesF3 = null;
             stagesF4 = null;
             stagesF5 = null;
@@ -383,10 +424,15 @@ namespace Islands.PCG.Samples
                     domain: new GridDomain2D(resolution, resolution),
                     tunables: eTun);
 
-                var stages = (enableBiomeStage && eVeg && enableRegionsStage) ? stagesM2b
-                           : (enableBiomeStage && eVeg) ? stagesM2a
-                           : enableBiomeStage ? stagesM
-                           : eMorph ? stagesG
+                bool eHydro = enableHydrologyStage;
+                hydrologyStage.epsilon = 1e-5f;
+                hydrologyStage.riverThresholdFraction = 0.02f;
+                hydrologyStage.minLakeArea = 0;
+
+                var stages = (enableBiomeStage && eVeg && enableRegionsStage) ? (eHydro ? stagesLM2b : stagesM2b)
+                           : (enableBiomeStage && eVeg) ? (eHydro ? stagesLM2a : stagesM2a)
+                           : enableBiomeStage ? (eHydro ? stagesLM : stagesM)
+                           : eMorph ? (eHydro ? stagesL : stagesG)
                            : eTrav ? stagesF6
                            : eVeg ? stagesF5
                            : eShore ? stagesF4
@@ -407,6 +453,7 @@ namespace Islands.PCG.Samples
                 MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: eClear);
 
                 dirty = false;
+                _regenVersion++; // Phase V.a — invalidates IMapContextSource consumer caches.
             }
 
             // --- display ---
@@ -576,6 +623,7 @@ namespace Islands.PCG.Samples
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
             lastEnableBiomeStage = enableBiomeStage;
             lastEnableRegionsStage = enableRegionsStage;
+            lastEnableHydrologyStage = enableHydrologyStage;
             lastViewMode = viewMode;
             lastViewLayer = viewLayer;
             lastViewField = viewField;
@@ -618,6 +666,7 @@ namespace Islands.PCG.Samples
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
                 || enableBiomeStage != lastEnableBiomeStage
                 || enableRegionsStage != lastEnableRegionsStage
+                || enableHydrologyStage != lastEnableHydrologyStage
                 || viewMode != lastViewMode
                 || viewLayer != lastViewLayer
                 || viewField != lastViewField

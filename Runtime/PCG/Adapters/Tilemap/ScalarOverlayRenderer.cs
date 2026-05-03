@@ -17,9 +17,12 @@ namespace Islands.PCG.Adapters.Tilemap
     /// Performance: one <see cref="Texture2D.Apply"/> call per overlay update replaces
     /// the previous N×N <c>SetTile</c> calls (e.g. 65,536 calls at 256×256).
     ///
-    /// Phase N6. Internal to the tilemap adapter package.
+    /// Phase N6. Phase V.b: promoted from internal to public so
+    /// <c>Islands.PCG.Inspection.PCGRuntimeOverlay</c> can own its own instance,
+    /// and gained <see cref="SetDataDirect"/> for pre-quantized color buffers
+    /// (discrete palette overlays, per Phase_V_Design.md §6.3.2).
     /// </summary>
-    internal sealed class ScalarOverlayRenderer : System.IDisposable
+    public sealed class ScalarOverlayRenderer : System.IDisposable
     {
         private GameObject _go;
         private SpriteRenderer _sr;
@@ -88,8 +91,14 @@ namespace Islands.PCG.Adapters.Tilemap
             _sr.color = c;
         }
 
+        /// <summary>Adjust sorting order at runtime (e.g. to layer V.b above existing slots).</summary>
+        public void SetSortingOrder(int sortingOrder)
+        {
+            if (_sr != null) _sr.sortingOrder = sortingOrder;
+        }
+
         // =====================================================================
-        // Data Upload
+        // Data Upload — gradient
         // =====================================================================
 
         /// <summary>
@@ -136,6 +145,47 @@ namespace Islands.PCG.Adapters.Tilemap
                 {
                     float v = Mathf.Clamp01((values[srcRow + x] - min) * invRange);
                     _colors[dstRow + x] = (Color32)Color.Lerp(colorLow, colorHigh, v);
+                }
+            }
+
+            _tex.SetPixels32(_colors);
+            _tex.Apply(updateMipmaps: false, makeNoLongerReadable: false);
+        }
+
+        // =====================================================================
+        // Data Upload — direct (Phase V.b)
+        // =====================================================================
+
+        /// <summary>
+        /// Fill the overlay texture from a pre-quantized <see cref="Color32"/> buffer.
+        /// Bypasses the gradient interpolation in <see cref="SetData"/>; intended for
+        /// discrete-palette overlays where the consumer has already resolved per-cell
+        /// colors (e.g. biome → palette lookup, region ID → hash-derived color).
+        ///
+        /// Follows the same row-iteration + single-<see cref="Texture2D.Apply"/> pattern
+        /// as <see cref="SetData"/>. flipY semantics are identical.
+        ///
+        /// Phase V.b. Spec: planning/active/Phase_V_Design.md §6.3.2.
+        /// </summary>
+        /// <param name="colors">Per-cell colors, length == width × height, row-major (same convention as <see cref="SetData"/>).</param>
+        /// <param name="width">Grid width (columns).</param>
+        /// <param name="height">Grid height (rows).</param>
+        /// <param name="flipY">Mirror vertically to match tilemap flipY.</param>
+        public void SetDataDirect(Color32[] colors, int width, int height, bool flipY)
+        {
+            if (colors == null) return;
+            if (colors.Length != width * height) return;
+
+            EnsureTexture(width, height);
+
+            for (int y = 0; y < height; y++)
+            {
+                int srcY = flipY ? (height - 1 - y) : y;
+                int srcRow = srcY * width;
+                int dstRow = y * width;
+                for (int x = 0; x < width; x++)
+                {
+                    _colors[dstRow + x] = colors[srcRow + x];
                 }
             }
 

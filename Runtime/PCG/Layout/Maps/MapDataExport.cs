@@ -35,7 +35,7 @@ namespace Islands.PCG.Layout.Maps
         /// <summary>
         /// Internal constructor. Use <see cref="MapExporter2D.Export"/> to produce instances.
         /// </summary>
-        internal MapDataExport(int width, int height, uint seed, bool[][] layers, float[][] fields)
+        public MapDataExport(int width, int height, uint seed, bool[][] layers, float[][] fields)
         {
             if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width));
             if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height));

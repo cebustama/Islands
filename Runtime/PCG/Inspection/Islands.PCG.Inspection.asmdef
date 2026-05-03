@@ -1,0 +1,17 @@
+{
+    "name": "Islands.PCG.Inspection",
+    "rootNamespace": "Islands.PCG.Inspection",
+    "references": [
+        "Islands.PCG.Runtime",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

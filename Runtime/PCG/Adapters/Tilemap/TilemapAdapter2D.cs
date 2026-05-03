@@ -150,6 +150,136 @@ namespace Islands.PCG.Adapters.Tilemap
             }
         }
 
+        // ------------------------------------------------------------------
+        // Phase Q — Biome-aware overloads
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Biome-aware variant of <see cref="Apply"/>. Per-cell tile resolution consults
+        /// <paramref name="biomeOverride"/> before falling through to the base
+        /// <paramref name="priorityTable"/> tile.
+        ///
+        /// When <paramref name="biomeOverride"/> is null OR the export lacks
+        /// <see cref="MapFieldId.Biome"/>, output is identical to <see cref="Apply"/>.
+        ///
+        /// Resolution per cell, per matching layer (low→high priority scan):
+        ///   1. biomeOverride.Resolve(biome, layerId)  → non-null → override tile wins.
+        ///   2. null override                           → base entry tile.
+        ///   3. base entry tile also null               → fallbackTile.
+        ///   4. fallbackTile null                       → cell left empty.
+        ///
+        /// Adapters-last invariant: read-only consumer of <see cref="MapDataExport"/>.
+        ///
+        /// Phase Q.
+        /// </summary>
+        public static void ApplyBiomeAware(
+            MapDataExport export,
+            UnityEngine.Tilemaps.Tilemap tilemap,
+            TilemapLayerEntry[] priorityTable,
+            BiomeTileOverride biomeOverride,
+            TileBase fallbackTile = null,
+            bool clearFirst = true,
+            bool flipY = false)
+        {
+            if (export == null) throw new ArgumentNullException(nameof(export));
+            if (tilemap == null) throw new ArgumentNullException(nameof(tilemap));
+            if (priorityTable == null) throw new ArgumentNullException(nameof(priorityTable));
+
+            // Fast path: no override → delegate to existing Apply().
+            if (biomeOverride == null)
+            {
+                Apply(export, tilemap, priorityTable, fallbackTile, clearFirst, flipY);
+                return;
+            }
+
+            if (clearFirst)
+                tilemap.ClearAllTiles();
+
+            int entryCount = priorityTable.Length;
+
+            // Pre-fetch biome field. Null when biome stage is disabled.
+            float[] biomeField = export.HasField(MapFieldId.Biome)
+                ? export.GetField(MapFieldId.Biome)
+                : null;
+
+            // Pre-fetch layer arrays (same pattern as Apply).
+            bool[][] cachedLayers = new bool[entryCount][];
+            TileBase[] cachedTiles = new TileBase[entryCount];
+            MapLayerId[] cachedLayerIds = new MapLayerId[entryCount];
+            for (int e = 0; e < entryCount; e++)
+            {
+                MapLayerId id = priorityTable[e].LayerId;
+                TileBase tile = priorityTable[e].Tile;
+                cachedLayerIds[e] = id;
+                if (tile != null && export.HasLayer(id))
+                    cachedLayers[e] = export.GetLayer(id);
+                cachedTiles[e] = tile;
+            }
+
+            int width = export.Width;
+            int height = export.Height;
+
+            for (int y = 0; y < height; y++)
+            {
+                int tileY = flipY ? (height - 1 - y) : y;
+                int rowBase = y * width;
+
+                for (int x = 0; x < width; x++)
+                {
+                    int idx = rowBase + x;
+
+                    // Read biome once per cell. Default 0 = Unclassified.
+                    int biomeId = biomeField != null ? (int)biomeField[idx] : 0;
+                    BiomeType biome = (BiomeType)biomeId;
+
+                    TileBase winner = fallbackTile;
+
+                    // Scan low→high priority; last match overwrites.
+                    for (int e = 0; e < entryCount; e++)
+                    {
+                        bool[] layer = cachedLayers[e];
+                        if (layer != null && layer[idx])
+                        {
+                            // Try biome override first; fall through to base tile.
+                            TileBase overrideTile = biomeOverride.Resolve(biome, cachedLayerIds[e]);
+                            winner = overrideTile ?? cachedTiles[e];
+                        }
+                    }
+
+                    if (winner != null)
+                        tilemap.SetTile(new Vector3Int(x, tileY, 0), winner);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Biome-aware variant of <see cref="ApplyLayered"/>. Passes
+        /// <paramref name="biomeOverride"/> to each group via
+        /// <see cref="ApplyBiomeAware"/>. Null override is safe — each group
+        /// delegates to <see cref="Apply"/> in that case.
+        ///
+        /// Phase Q.
+        /// </summary>
+        public static void ApplyLayeredBiomeAware(
+            MapDataExport export,
+            TilemapLayerGroup[] groups,
+            BiomeTileOverride biomeOverride)
+        {
+            if (export == null) throw new ArgumentNullException(nameof(export));
+            if (groups == null) throw new ArgumentNullException(nameof(groups));
+
+            for (int i = 0; i < groups.Length; i++)
+            {
+                TilemapLayerGroup g = groups[i];
+                if (g == null || g.Tilemap == null || g.PriorityTable == null)
+                    continue;
+
+                ApplyBiomeAware(
+                    export, g.Tilemap, g.PriorityTable, biomeOverride,
+                    g.FallbackTile, g.ClearFirst, g.FlipY);
+            }
+        }
+
         /// <summary>
         /// Ensures the <see cref="UnityEngine.Tilemaps.Tilemap"/> GameObject has the
         /// components required for physics collision:

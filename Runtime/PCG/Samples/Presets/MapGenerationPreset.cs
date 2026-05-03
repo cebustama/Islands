@@ -34,6 +34,8 @@ namespace Islands.PCG.Samples
     ///             migrated (semantic change); existing presets fall back to new defaults.
     /// Phase M: enableBiomeStage toggle for Climate &amp; Biome Classification.
     /// M-fix.a: 10 biome climate tunables promoted to Inspector. Moisture defaults adjusted (M-fix.c folded in).
+    /// Phase L–M: 2 river moisture tunables added (biomeRiverMoistureBonus, biomeRiverFlowNorm).
+    ///            Active only when Stage_Hydrology2D runs before Stage_Biome2D.
     /// </summary>
     [CreateAssetMenu(
         fileName = "MapGenerationPreset",
@@ -138,6 +140,18 @@ namespace Islands.PCG.Samples
         [Min(1)]
         [Tooltip("Moisture noise cell size. 4–8× lower frequency than terrain noise.")]
         public int biomeMoistureNoiseCellSize = 32;
+
+        [Range(0f, 1f)]
+        [Tooltip("Maximum moisture bonus for cells at or above the river flow threshold.\n" +
+                 "Active only when Stage_Hydrology2D is in the pipeline (Phase L).\n" +
+                 "0 = no river enrichment. Default 0.4.")]
+        public float biomeRiverMoistureBonus = 0.4f;
+
+        [Min(0f)]
+        [Tooltip("Flow accumulation normalization divisor.\n" +
+                 "0 = auto (totalLandCells × 0.02, matching Phase L river threshold).\n" +
+                 "Override with an explicit value when using a non-default river threshold.")]
+        public float biomeRiverFlowNorm = 0f;
 
         // ==================================================================
         // Island Shape (N5.a)

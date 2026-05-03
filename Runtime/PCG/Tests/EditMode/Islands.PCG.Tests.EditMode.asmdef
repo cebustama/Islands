@@ -5,6 +5,7 @@
         "Islands.Runtime",
         "Islands.PCG.Runtime",
         "Islands.PCG.Adapters.Tilemap",
+        "Islands.PCG.Inspection",
         "Islands.PCG.Samples.Shared",
         "Islands.PCG.Samples",
         "Unity.Mathematics",

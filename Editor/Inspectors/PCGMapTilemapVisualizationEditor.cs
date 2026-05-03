@@ -21,12 +21,16 @@ namespace Islands.PCG.Editor
     /// Phase H8: Mega-tile toggle + rules array (always visible, conditional children).
     /// Phase M: enableBiomeStage toggle for Climate &amp; Biome Classification.
     /// M-fix.a: 10 biome climate tunables promoted to Inspector.
+    /// Phase L+M: enableHydrologyStage toggle + 3 hydrology tunables + 2 river moisture tunables.
+    /// Phase Q: biomeTileOverride field (hidden when procedural tiles active).
     /// </summary>
     [CustomEditor(typeof(PCGMapTilemapVisualization))]
     public sealed class PCGMapTilemapVisualizationEditor : UnityEditor.Editor
     {
         // Always visible
         private SerializedProperty tilemap, preset, tilesetConfig;
+        // Phase Q: biome tile override (hidden when procedural tiles active)
+        private SerializedProperty biomeTileOverride;
         private SerializedProperty flipY;
         private SerializedProperty enableMultiLayer, overlayTilemap, colliderTilemap, colliderTile, enableColliderAutoSetup;
         // H8: mega-tiles (always visible)
@@ -44,10 +48,16 @@ namespace Islands.PCG.Editor
         private SerializedProperty enableHillsStage, enableShoreStage, enableVegetationStage, enableTraversalStage, enableMorphologyStage;
         private SerializedProperty enableBiomeStage;
         private SerializedProperty enableRegionsStage;
+        // Phase L: hydrology toggle
+        private SerializedProperty enableHydrologyStage;
         // M-fix.a: biome climate tunables
         private SerializedProperty biomeBaseTemperature, biomeLapseRate, biomeLatitudeEffect;
         private SerializedProperty biomeCoastModerationStrength, biomeTempNoiseAmplitude, biomeTempNoiseCellSize;
         private SerializedProperty biomeCoastalMoistureBonus, biomeCoastDecayRate, biomeMoistureNoiseAmplitude, biomeMoistureNoiseCellSize;
+        // Phase L+M: river moisture tunables
+        private SerializedProperty biomeRiverMoistureBonus, biomeRiverFlowNorm;
+        // Phase L: hydrology tunables
+        private SerializedProperty hydroEpsilon, hydroRiverThresholdFraction, hydroMinLakeArea;
         // N5.a: shape mode
         private SerializedProperty shapeMode;
         private SerializedProperty islandRadius01, islandAspectRatio, warpAmplitude01, islandSmoothFrom01, islandSmoothTo01;
@@ -74,6 +84,8 @@ namespace Islands.PCG.Editor
             tilemap = serializedObject.FindProperty("tilemap");
             preset = serializedObject.FindProperty("preset");
             tilesetConfig = serializedObject.FindProperty("tilesetConfig");
+            // Phase Q
+            biomeTileOverride = serializedObject.FindProperty("biomeTileOverride");
             seed = serializedObject.FindProperty("seed");
             resolution = serializedObject.FindProperty("resolution");
             enableHillsStage = serializedObject.FindProperty("enableHillsStage");
@@ -83,6 +95,8 @@ namespace Islands.PCG.Editor
             enableMorphologyStage = serializedObject.FindProperty("enableMorphologyStage");
             enableBiomeStage = serializedObject.FindProperty("enableBiomeStage");
             enableRegionsStage = serializedObject.FindProperty("enableRegionsStage");
+            // Phase L: hydrology toggle
+            enableHydrologyStage = serializedObject.FindProperty("enableHydrologyStage");
             // M-fix.a: biome climate tunables
             biomeBaseTemperature = serializedObject.FindProperty("biomeBaseTemperature");
             biomeLapseRate = serializedObject.FindProperty("biomeLapseRate");
@@ -94,6 +108,13 @@ namespace Islands.PCG.Editor
             biomeCoastDecayRate = serializedObject.FindProperty("biomeCoastDecayRate");
             biomeMoistureNoiseAmplitude = serializedObject.FindProperty("biomeMoistureNoiseAmplitude");
             biomeMoistureNoiseCellSize = serializedObject.FindProperty("biomeMoistureNoiseCellSize");
+            // Phase L+M: river moisture tunables
+            biomeRiverMoistureBonus = serializedObject.FindProperty("biomeRiverMoistureBonus");
+            biomeRiverFlowNorm = serializedObject.FindProperty("biomeRiverFlowNorm");
+            // Phase L: hydrology tunables
+            hydroEpsilon = serializedObject.FindProperty("hydroEpsilon");
+            hydroRiverThresholdFraction = serializedObject.FindProperty("hydroRiverThresholdFraction");
+            hydroMinLakeArea = serializedObject.FindProperty("hydroMinLakeArea");
             // N5.a
             shapeMode = serializedObject.FindProperty("shapeMode");
             islandRadius01 = serializedObject.FindProperty("islandRadius01");
@@ -169,6 +190,10 @@ namespace Islands.PCG.Editor
 
             EditorGUILayout.PropertyField(tilesetConfig); // draws [Header("Tileset Config")]
 
+            // Phase Q: biome override (hidden when procedural tiles active)
+            if (!useProceduralTiles.boolValue)
+                EditorGUILayout.PropertyField(biomeTileOverride); // draws [Header("Biome Tile Override (Phase Q)")]
+
             // --- Preset-controlled (hidden when preset assigned) ---
             if (!hasPreset)
             {
@@ -183,6 +208,7 @@ namespace Islands.PCG.Editor
                 EditorGUILayout.PropertyField(enableMorphologyStage);
                 EditorGUILayout.PropertyField(enableBiomeStage);
                 EditorGUILayout.PropertyField(enableRegionsStage);
+                EditorGUILayout.PropertyField(enableHydrologyStage); // Phase L
 
                 EditorGUILayout.PropertyField(shapeMode);          // N5.a
                 EditorGUILayout.PropertyField(islandRadius01);     // draws [Header("Island Shape")]
@@ -250,6 +276,17 @@ namespace Islands.PCG.Editor
                     EditorGUILayout.PropertyField(biomeCoastDecayRate);
                     EditorGUILayout.PropertyField(biomeMoistureNoiseAmplitude);
                     EditorGUILayout.PropertyField(biomeMoistureNoiseCellSize);
+                    // Phase L+M: river moisture tunables (shown under biome when hydrology also on)
+                    EditorGUILayout.PropertyField(biomeRiverMoistureBonus); // draws [Header("River Moisture (Phase L+M)")]
+                    EditorGUILayout.PropertyField(biomeRiverFlowNorm);
+                }
+
+                // Phase L: hydrology tunables (visible when hydrology stage enabled)
+                if (enableHydrologyStage.boolValue)
+                {
+                    EditorGUILayout.PropertyField(hydroEpsilon);                  // draws [Header("Hydrology (Phase L)")]
+                    EditorGUILayout.PropertyField(hydroRiverThresholdFraction);
+                    EditorGUILayout.PropertyField(hydroMinLakeArea);
                 }
 
                 EditorGUILayout.PropertyField(heightRemapCurve);             // draws [Header("Height Remap (N2)")]

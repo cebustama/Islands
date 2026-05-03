@@ -166,7 +166,7 @@ namespace Islands.PCG.Fields
             return new ScalarSpline(ins, outs);
         }
 
-#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_ANDROID || UNITY_IOS
+#if UNITY_EDITOR || UNITY_STANDALONE || UNITY_ANDROID || UNITY_IOS || UNITY_WEBGL
         /// <summary>
         /// Samples a Unity AnimationCurve at evenly spaced points to produce a ScalarSpline.
         /// Returns <see cref="Identity"/> if the curve is null or has fewer than 2 keys.

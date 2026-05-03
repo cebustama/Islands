@@ -1,6 +1,6 @@
 # Current State
 
-Status date: 2026-04-10 (M2.b resolved)
+Status date: 2026-04-26 (Phase V.b complete — Phase V done)
 
 ## What is active now
 - The Islands documentation migration was handled as Tier L and is now materially closed for the reviewed snapshot corpus.
@@ -10,7 +10,7 @@ Status date: 2026-04-10 (M2.b resolved)
 
 ## What is implemented now (confirmed for documentation authority purposes)
 - New PCG runtime direction: grid-first, deterministic, adapters-last.
-- Map Pipeline by Layers implemented slice: **F0–N6 + Phase M + M-fix.a/c + M2.a + M2.b (all golden-captured)**.
+- Map Pipeline by Layers implemented slice: **F0–N6 + Phase M + M-fix.a/c + M2.a + M2.b + Phase L + L→M + L-fix.a (revised) + Phase V (read-only inspection tooling: V.a + V.b) (all golden-captured where applicable)**.
 - Layout strategies are an implemented, test-gated support surface under PCG.
 - GraphLibrary runtime is a real implemented surface, but it is **not** promoted subsystem authority.
 - Noise runtime is real and coherent, but it is currently a governed reference / staged support surface, not a promoted subsystem SSoT.
@@ -19,7 +19,109 @@ Status date: 2026-04-10 (M2.b resolved)
 - Shader assets and HLSL helpers are active support artifacts, but not a promoted subsystem SSoT.
 
 ## What current package development just resolved
-- M2.b — Contiguous Region Detection + Naming.
+- **Phase V.a — Runtime Hover Tooltip + IMapContextSource interface.**
+  Read-only inspection tooling. New `Islands.PCG.Inspection` asmdef hosts the
+  `IMapContextSource` interface (5-member contract: `Context`, `Tilemap`, `FlipY`,
+  `RegenerationVersion`, `TryWorldToCell`) and the `PCGHoverTooltip` MonoBehaviour
+  (TMP-based, auto-canvas, [ExecuteAlways], pull-based refresh on
+  `RegenerationVersion` change). All three viz classes
+  (`PCGMapTilemapVisualization`, `PCGMapCompositeVisualization`, `PCGMapVisualization`)
+  implement `IMapContextSource`; the two non-tilemap variants return Tilemap=null
+  and TryWorldToCell=false so V.a no-ops gracefully against them. New sample-side
+  free-cam (`MapCameraController2D`) added to `PCG Map Tilemap` scene as smoke-test
+  rig — also consumes `IMapContextSource` for auto-framing on map bounds.
+  No new `MapLayerId`, `MapFieldId`, stage, or pipeline change. No golden break.
+  No determinism gate. No SSoT promotion (Phase V is planning-authority only).
+  4 unit tests in `IMapContextSourceTryWorldToCellTests.cs` (round-trip flipY=true/false,
+  out-of-bounds rejection, regen monotonicity). Smoke test §10 acceptance: green.
+  3 asmdef edits added `Islands.PCG.Inspection` reference (Adapters.Tilemap, Samples,
+  Tests.EditMode).
+  See `planning/active/design/Phase_V_Design.md` for design contracts.
+  V.a smoke surfaced and validated the L-fix.a routing patch below as concrete
+  value-of-tooling evidence.
+- **Phase V.b — Per-Cell Overlay System. DONE.**
+  `PCGRuntimeOverlay` MonoBehaviour with two independent display modes:
+  - **Color overlay:** per-cell discrete color from `BiomeColorPalette` SO (Biome
+    field) or deterministic FNV-1a hash-color (BiomeRegionId). Uses an owned
+    `ScalarOverlayRenderer` instance via `SetDataDirect` (promoted to public in
+    `Adapters.Tilemap`).
+  - **Text overlay:** per-cell numeric label for pipeline fields (Height, CoastDist,
+    Moisture, Temperature, Biome, BiomeRegionId, FlowAccumulation). World-space
+    Canvas + TextMeshProUGUI for URP 2D compatibility (TextMeshPro 3D MeshRenderer
+    is invisible under URP 2D Renderer — see V-DD-5 implementation note in
+    `Phase_V_Design.md`). View-aware: only emits glyphs for the camera-visible cell
+    rect. Hard cap 64×64 visible cells (vertex budget guard). α decision: noise/
+    derived preview sources log once per regen and render nothing.
+  Files: `PCGRuntimeOverlay.cs` (Inspection), `BiomeColorPalette.cs` (Inspection),
+  `BiomeColorPaletteTests.cs` (Tests.EditMode), `ScalarOverlayRenderer.cs`
+  (Adapters.Tilemap, modified — `SetDataDirect` added).
+  `BiomeColorPalette-Default.asset` created via Populate Defaults context menu.
+  `PCGRuntimeOverlay` lives in `Islands.PCG.Inspection` namespace.
+  `ScalarOverlayRenderer` moved from internal to public in `Adapters.Tilemap`.
+  `Adapters.Tilemap.asmdef` gained `Unity.TextMeshPro` reference.
+  No new `MapLayerId`, `MapFieldId`, stage, or pipeline change. No golden break.
+  No determinism gate. No SSoT promotion.
+  Smoke tests §11.2 (text overlay) and §11.3 (color overlay): all green.
+- **L-fix.a (revised) — Multi-layer routing partitions for Rivers and Lakes.**
+  `PCGMapTilemapVisualization.StampMultiLayer()` routes layers through three static
+  arrays (`s_baseLayers`, `s_overlayLayers`, `s_colliderLayers`) when
+  `enableMultiLayer = true`. Rivers and Lakes were absent from all three after Phase
+  L shipped, so they were silently dropped in multi-layer mode regardless of
+  `proceduralColorTable` or `TilesetConfig` configuration. A previously documented
+  L-fix.a entry described an alternative routing (Rivers as overlay, Lakes as base)
+  but was never committed. Surfaced again by V.a smoke testing 2026-04-15 — tooltip
+  reported `Rivers` set on cells where no river tile rendered.
+  **Implemented fix:** `MapLayerId.Lakes` and `MapLayerId.Rivers` appended to
+  `s_baseLayers` in that order (Rivers wins on confluence); `MapLayerId.Lakes`
+  added to `s_colliderLayers` (lakes block movement; rivers remain passable by
+  design). No golden break. No new stages, fields, or layers.
+  **Maintenance rule (re-affirmed):** any future phase that adds a new `MapLayerId`
+  must classify it against all three partition arrays in
+  `PCGMapTilemapVisualization` or the layer will be silently invisible and/or
+  non-collidable in multi-layer mode. See Visualization Maintenance Policy below.
+  1 file modified: `PCGMapTilemapVisualization.cs`.
+- **Vegetation overlap with Rivers and high mountain river-source visibility — by
+  design, art-side concern.** Phase L added Rivers/Lakes after Stage_Vegetation was
+  written; Stage_Vegetation does not exclude Rivers/Lakes from its eligibility set
+  (M2a-1..4 contracts unchanged). Cells with both `Vegetation` and `Rivers` set are
+  expected and represent fertile river valley ecology — vegetation tile sprites
+  should use alpha-channel transparency around grass tufts so the underlying river
+  tile shows through. Same pattern for high-elevation river sources where hill
+  sprites occlude river origins on a separate overlay tilemap — handled via sprite
+  alpha rather than a pipeline-stage or routing change. No `Stage_Vegetation`
+  contract modification. No golden change.
+- **Phase L — Hydrology (Priority-Flood → D8 → FlowAccumulation → Rivers + Lakes).** All golden-captured.
+  New registry entries: `MapLayerId.Rivers = 13`, `MapLayerId.Lakes = 14` (COUNT → 15);
+  `MapFieldId.FlowAccumulation = 6` (COUNT → 7).
+  New operator: `HeightFieldHydrologyOps2D` — 4 static deterministic methods:
+  `FillDepressions` (Priority-Flood+ε, SortedSet min-heap, coastal-cell seed),
+  `ComputeFlowDirectionsD8` (steepest 8-neighbor, water-neighbors at h=0),
+  `AccumulateFlow` (descending-height sort, downstream propagation),
+  `ExtractRivers` (fractional-of-land-cells threshold, resolution-auto-scaling).
+  New stage: `Stage_Hydrology2D` — runs L.1 (river gen) and L.2 (lake detection via
+  three-way boolean exclusion; optional BFS size filter). Zero RNG consumption.
+  Stage-local tunables: `epsilon = 1e-5f`, `riverThresholdFraction = 0.02f`,
+  `minLakeArea = 0` (filter disabled). Pipeline position: after Morphology, before Biome.
+  Invariants L-1..L-10 test-gated. Goldens captured: `StageHydrology2DTests.cs`,
+  `MapPipelineRunner2DGoldenLTests.cs`.
+  New files: `HeightFieldHydrologyOps2D.cs`, `Stage_Hydrology2D.cs`,
+  `HeightFieldHydrologyOps2DTests.cs`, `StageHydrology2DTests.cs`,
+  `MapPipelineRunner2DGoldenLTests.cs`.
+  Adapter updates: `MapIds2D.cs`, `ScalarOverlaySource.cs` (FlowAccumulation=6),
+  `PCGMapVisualization.cs` (Rivers/Lakes colors, enableHydrologyStage, stage arrays),
+  `PCGMapTilemapVisualization.cs` (enableHydrologyStage, 5 tunables, stagesL/LM/LM2a/LM2b),
+  `PCGMapTilemapVisualizationEditor.cs` (hydrology fields conditional),
+  `MapGenerationPreset.cs` (biomeRiverMoistureBonus, biomeRiverFlowNorm),
+  `TilesetConfig.cs` (Rivers+Lakes in priority order; ToLayerEntries() robust against
+  13-entry legacy assets; migration context menu).
+- **L→M integration — FlowAccumulation moisture enrichment in Stage_Biome2D.**
+  `riverMoistureBonus = 0.4f` and `riverFlowNorm = 0f` (auto) promoted from commented
+  stubs to active stage-local tunables. `hasFlowAccum = ctx.IsFieldCreated(FlowAccumulation)`
+  guard makes enrichment strictly optional: when Phase L is absent, `riverFactor = 0`
+  and output is bit-identical to the pre-L baseline. Existing M / M2a / M2b goldens
+  NOT broken. New goldens captured: `MapPipelineRunner2DGoldenLMTests.cs`.
+  1 file modified: `Stage_Biome2D.cs`.
+- Prior resolution: M2.b — Contiguous Region Detection + Naming.
   CCA over `Biome` field produces contiguous same-biome regions; specks merged into
   largest 4-adjacent neighbour (tie-break: lowest anchor row-major index).
   `MapFieldId.BiomeRegionId = 5` (COUNT → 6); 0 = water/Unclassified sentinel;
@@ -31,32 +133,7 @@ Status date: 2026-04-10 (M2.b resolved)
   entry and `ScalarOverlaySource.BiomeRegionId = 5` added.
   Full-pipeline golden captured: `MapPipelineRunner2DGoldenM2bTests.cs`.
 - Prior resolution: M2.a — Biome-Aware Vegetation Density.
-  Per-biome vegetation density via biome-aware per-cell threshold computed in
-  Stage_Vegetation2D from BiomeTable entries. Stage-local `moistureModulation`
-  default set to 0 (biome threshold is now the primary driver; moisture is
-  optional secondary modulation). Option A fallback when biome layer absent:
-  `LegacyThreshold = 0.40f` constant preserves pre-M2.a behavior for
-  biome-disabled pipelines. Pipeline reorder: vegetation now runs after biome
-  classification (was: vegetation before biome). Three visualization classes
-  (PCGMapTilemapVisualization, PCGMapCompositeVisualization, PCGMapVisualization)
-  gained `stagesM2a` lantern entry. StageVegetation2DTests adopts dual-golden
-  pattern (biome-on + biome-off paths). New `MapPipelineRunner2DGoldenM2Tests.cs`
-  captures full-pipeline M2.a goldens. Side effect: M-fix.a/c goldens
-  re-captured — 5 constants updated across `StageBiome2DTests.cs` and
-  `MapPipelineRunner2DGoldenMTests.cs`.
 - Prior resolution: M-fix.a + M-fix.c — Biome Tunables Inspector Wiring + Moisture Default Tuning.
-  10 biome climate tunables promoted from hardcoded Stage_Biome2D defaults to
-  Inspector-accessible serialized fields on PCGMapTilemapVisualization and
-  MapGenerationPreset. Follows shallowWaterDepth01 pattern (stage-local feeding,
-  not via MapTunables2D). Moisture defaults adjusted: coastalMoistureBonus 0.3→0.5,
-  coastDecayRate 0.15→0.3, moistureNoiseAmplitude 0.5→0.3 (coast gradient now visible).
-  Editor conditionally hides biome fields when enableBiomeStage is off.
-  Golden break — all M hashes must be re-captured.
-  4 files modified: Stage_Biome2D.cs, PCGMapTilemapVisualization.cs,
-  MapGenerationPreset.cs, PCGMapTilemapVisualizationEditor.cs.
-  No new stages, layers, or fields. Pure plumbing + default adjustment.
-  Note: 10 tunables wired, not 11 — beachMinTemperature lives on BiomeTable
-  as static readonly, not on Stage_Biome2D. Separate micro-fix if desired.
 - Prior resolution: Phase M — Climate & Biome Classification.
 - Prior resolution: Phase H8 — Mega-Tiles (2×2 Large Terrain Sprites).
 - Prior resolution: Phase N6 — Noise Preview Visualization.
@@ -95,54 +172,138 @@ Status date: 2026-04-10 (M2.b resolved)
 
 ## What is not settled yet
 - No unresolved migration batch remains for the reviewed snapshot corpus.
-- Open design questions recorded in the roadmap: river representation, lake modeling, biome output format — now all resolved as design decisions in the roadmap.
 - `MapLayerId.Paths` write ownership confirmed: Phase O.
 - Unity version target for `TilemapCollider2D.usedByComposite` deprecation: upgrade to
   `compositeOperation` if targeting Unity 2022.2+ exclusively (currently suppressed with `#pragma warning disable CS0618`).
-- **Hills threshold UX:** ~~Roadmapped as Phase N5.e — relative parameterization.~~
-  **Resolved by N5.e.** Hills threshold sliders reparameterized from raw Height [0,1] to
-  relative fractions [0,1]. `hillsL1` = fraction of land height range; `hillsL2` = fraction
-  of remaining range above L1. Remap computed in `MapTunables2D` constructor. Full slider
-  ranges are now usable. See changelog for details.
-- **Phase V** — scope defined: Runtime Inspection UI (V.a hover tooltip, V.b per-cell
-  overlay system). Planning only; design doc `Phase_V_Design.md` to be written when
-  phase activates after M2.b. See `PCG_Roadmap.md` Phase V section for full scope.
+- **Phase V** — V.a implemented (read-only inspection tooling — IMapContextSource
+  interface + PCGHoverTooltip + 3 viz-class impls + free-cam smoke rig). V.b
+  (per-cell text + discrete color overlay system) remains design-complete, planning
+  only. See `planning/active/design/Phase_V_Design.md` §6 for V.b contracts.
+- **Phase Q** — scope defined: Biome-Conditional Tile Selection. Pure adapter-side
+  consumer of `MapFieldId.Biome`. Closes the documented but unimplemented gap between
+  Phase M (biomes produced) and `TilesetConfig` (biomes ignored). Planning only; design
+  doc to be written when phase activates. See `PCG_Roadmap.md` Phase Q section.
+- **Phase Q2** — scope defined: Composite-Condition Tile Selection. Pure adapter-side
+  consumer of multi-`MapLayerId` boolean composition (e.g. waterfalls = `Rivers ∧
+  HillsL2`, bridges = `Rivers ∧ Paths`, fords, cliffs, wetlands). Mirrors Phase H8
+  `MegaTileRule` SO pattern with a new `CompositeTileRule` ScriptableObject system.
+  Sibling of Phase Q (independent of, can ship in either order; share architecture
+  flavor). Surfaced during V.a smoke testing 2026-04-15 from a discussion of
+  river-on-mountain visibility. Planning only; design doc to be written when phase
+  activates. See `PCG_Roadmap.md` Phase Q2 section.
+- **TilesetConfig .asset migration:** existing `TilesetConfig-8bit` and
+  `TilesetConfig-DragonWarrior` assets have 13-entry `layers` arrays. Use the
+  "Migrate to Phase L (add Rivers + Lakes)" context menu on each asset to extend
+  to 15 entries. Until migrated, `ToLayerEntries()` returns a valid 15-entry result
+  (via keyed lookup) but logs a warning and Rivers/Lakes tiles remain unassigned.
+- **`beachMinTemperature`** lives on BiomeTable as static readonly, not on Stage_Biome2D —
+  not yet Inspector-tunable.
+- **D8 grid artifacts:** diagonal-preference in flow direction can produce visible
+  horizontal/vertical river artifacts on flat terrain. Rho8 (stochastic D8) would
+  mitigate this but requires RNG, violating the no-RNG invariant. Deferred to a
+  potential Phase L2 refinement.
 
 ## Noted desired features (not yet roadmapped as phases)
-- **Extended noise type palette (post-N4 observation):** ~~The noise runtime supports several
-  additional types not yet exposed in TerrainNoiseType.~~ **Resolved by N5.c.** All
+- **Extended noise type palette (post-N4 observation):** Resolved by N5.c. All
   Worley metric × function combinations (12 total) are accessible via the parameterized
   `Worley` enum entry + `WorleyDistanceMetric` / `WorleyFunction` struct fields.
   CellAsIslands + SmoothEuclidean is available for archipelago generation (Phase J).
   Ridged multifractal is implemented in the noise runtime for all noise types.
+- **Phase L2 extensions (identified but not roadmapped):** Strahler ordering,
+  streams/brooks secondary threshold, river inlet/outlet modeling for lakes,
+  lake depth field. None required for Phase W.
+- **Local-zoom detail features:** Candidate features derived from existing
+  pipeline outputs whose visible effect is bounded to zoom scale. PCG-side
+  contribution is intentionally minimal; dynamic / runtime aspects live outside
+  the pipeline.
+  - *Intertidal band (mareas)* — static PCG mask in `[waterThreshold ±
+    tidalAmplitude]` derived from Height. Dynamic sea-level oscillation
+    (time-of-day tides) is runtime/adapter concern, out of PCG scope. Open
+    decision: PCG-side mask emission (new `MapLayerId.TidalBand`) vs. pure
+    runtime derivation from existing Height + waterThreshold.
+  - *Potholes / marmitas fluviales* — use case for Phase Q2
+    (`CompositeTileRule`): `Rivers ∧ HighFlow ∧ drop-proximity`. Prerequisite
+    candidate: slope/gradient field (possible Phase L2 addition, not required).
+- **Fractal coastline / fjord refinement (exploratory):** Mandelbrot/Julia
+  iteration or other fractal techniques (IFS, midpoint displacement, ridged
+  multifractal) as candidate generators for high-detail coastlines and
+  fjord-like inlets. Overlaps conceptually with three existing items: Phase N3
+  (ridged multifractal, PARTIAL — the standard PCG analogue for fjord ridges);
+  erosion simulation (tier 3 NONE in `technique_integration_matrix.md` — matches
+  real glacial fjord formation); Phase F2c (arbitrary shape input — candidate
+  integration point). Open decisions: fractal family (Mandelbrot boundaries are
+  mathematically distinctive but geologically artificial; ridged multifractal +
+  erosion is geologically grounded); pipeline placement (F2b shape-mask level
+  vs. F4-adjacent coastline post-refinement); scope (global silhouette
+  candidate for `IslandShapeMode` extension vs. local-zoom detail only).
+- **Atmospheric / weather features (exploratory):** Umbrella for four distinct
+  sub-problems commonly conflated as "PCG clouds":
+  - *Weather sim as static PCG output* — multi-pass simulation on Height +
+    CoastDist + (new) Wind emitting averaged `CloudCover` / `Rainfall` fields
+    after N iterations. Reference pattern: Nick McDonald 2018
+    (nickmcd.me/2018/07/10/procedural-weather-patterns). Candidate extension
+    of Phase M.2 (Moisture) or new stage post-M. Requires new `MapFieldId.Wind`
+    contract decision. Strongest PCG fit.
+  - *Dynamic weather sim (runtime)* — same simulation but as runtime loop.
+    Consumes PCG outputs; emits none. Out of PCG scope.
+  - *Cloud shadow mask* — parallel to intertidal band question: static PCG
+    mask vs. runtime-dynamic flip. Gameplay signal for stealth / lighting /
+    local moisture.
+  - *Cloud sprite generation* — pure adapter/visual concern (fBm on sprite
+    texture). Out of PCG scope.
+  Open decisions: F-family placement (extend F4 Climate & Biomes vs. new F9
+  Atmospheric Fields); Wind field contract (vector vs. magnitude+angle);
+  whether wind requires Phase W (world Y-axis for latitude-driven circulation)
+  or can operate locally. Comparators: (1) Dwarf Fortress — worldgen rainfall as static field, weather as separate runtime layer with E-W wind by latitude and three cloud layers; includes orographic rainshadow pass at worldgen. (2) RimWorld — minimal baseline: temperature and rainfall are independent Perlin×latitude fields (no wind field, no rainshadow at worldgen); local terrain gen ignores climate scalars entirely; runtime weather consumes them as event-sampling probability. Both validate the static-worldgen → runtime-probability split this umbrella proposes; RW establishes the lower-complexity bound, DF the upper.
 
 ## Visualization Maintenance Policy
 `PCGMapTilemapVisualization` is the primary testing surface. New tunables are wired into
 it during each phase implementation.
 
 `PCGMapVisualization` (GPU lantern) and `PCGMapCompositeVisualization` (Texture2D
-composite) are frozen at their current state (N5.d-complete feature set). They received
-compile-fix field renames in N5.e (hillsThresholdL1/L2 → hillsL1/L2) but no new feature
-wiring. They are updated at milestone boundaries only (e.g., after H8, after Phase M) via
-a single catch-up batch that wires all accumulated tunables. If a specific debugging need
-requires one of these components before the next milestone, the specific field is wired on
-demand.
+composite) are frozen at their current state. They are updated at milestone boundaries
+only via a single catch-up batch. If a specific debugging need requires one of these
+components before the next milestone, the specific field is wired on demand.
 
-This policy reduces per-phase touchpoints from 10 files to 7 and from 3 visualization
-components to 1. The lantern and composite remain functional for all tunables up to and
-including N5.d defaults.
+**Multi-layer stamping maintenance rule (established by L-fix.a, re-affirmed
+2026-04-15 after V.a smoke):** `PCGMapTilemapVisualization` uses three hardcoded
+static arrays to route layers in multi-layer mode: `s_baseLayers` (base tilemap,
+terrain surfaces), `s_overlayLayers` (overlay tilemap, decoration features), and
+`s_colliderLayers` (gameplay collision surface — layers that block movement).
+Any new `MapLayerId` added by a future phase MUST be classified against all three
+arrays or the layer will be silently invisible and/or non-collidable when
+`enableMultiLayer = true`. **Phase V.a's hover tooltip is the canonical debugging
+surface for this drift** — it iterates ALL `MapLayerId`s directly (V-DD-10),
+deliberately ignoring the partition arrays, so a routing omission appears as
+"tooltip says layer X is set, tilemap renders nothing." Canonical grouping after
+L-fix.a (revised):
+- `s_baseLayers`: terrain surfaces drawn on the base tilemap, in render order
+  (later entries paint over earlier) — DeepWater, MidWater, ShallowWater, Land,
+  LandCore, LandEdge, Lakes, Rivers
+- `s_overlayLayers`: decoration features painted on a separate overlay tilemap
+  above the base — Vegetation, HillsL1, HillsL2, Stairs
+- `s_colliderLayers`: layers that block movement on the collider tilemap —
+  DeepWater, MidWater, HillsL2, Lakes
 
 ## Immediate next focus
-M2.b complete and golden-captured. Next: **Phase L** — Hydrology (Priority-Flood → D8
-→ flow accumulation → river mask + lake CCA). Design complete in `Phase_L_Design.md`.
+Phase V complete (V.a + V.b), all smoke-validated. V.a value-proven (surfaced
+and validated the L-fix.a routing partition omission). V.b resolves the M2.a
+"biome IDs as continuous gradient is wrong" problem with discrete color overlay
+and adds per-cell text inspection for all pipeline fields.
 
-Confirmed next implementation sequence (toward Phase W):
-1. **Phase L** — Hydrology.
-2. **Phase P** — Pipeline Validation / World Rejection (recommended before W; can land any time after M).
+**Next batch:** Resume toward **Phase W** (world-to-local architecture). The
+previously documented Phase P → Phase W sequencing is paused (not cancelled).
+Adapter-track phases (T1, Q, Q2) remain independent and can be picked up at any
+time. Optional V.c quality-of-life items (e.g., `textMinCellScreenSize` readability
+threshold for text overlay) are logged but not blocking.
 
-Deferred / optional: H8b, T1, J, K, P (as before).
+Long-term target remains **Phase W**. The previously documented Phase P → Phase W
+sequencing is paused (not cancelled) pending Phase V completion.
 
-Long-term target: **Phase W**. Minimum path: M → W. Enriched: M → M2 → L → P → W.
+Deferred / optional: H8b, T1, J, K, P, Q, Q2, W.
+
+Minimum path to W: M → W. Enriched path: M → M2 → L → V → P → W.
+Adapter-side enrichment (independent of W path): Q (biome-conditional tiles), Q2 (composite-condition tiles).
 
 See `planning/active/PCG_Roadmap.md`.
 

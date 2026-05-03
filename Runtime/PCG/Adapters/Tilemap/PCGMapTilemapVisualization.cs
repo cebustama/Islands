@@ -7,6 +7,7 @@ using UnityEngine.Tilemaps;
 using Islands.PCG.Core;
 using Islands.PCG.Fields;
 using Islands.PCG.Grids;
+using Islands.PCG.Inspection;
 using Islands.PCG.Layout.Maps;
 using Islands.PCG.Layout.Maps.Stages;
 using Islands.PCG.Operators;
@@ -48,10 +49,15 @@ namespace Islands.PCG.Adapters.Tilemap
     /// Phase M: enableBiomeStage toggle + Stage_Biome2D wiring. Temperature/Biome overlay sources.
     /// M-fix.a: 10 biome climate tunables promoted to Inspector (serialized fields + dirty tracking).
     ///          Moisture defaults adjusted (M-fix.c folded in). Golden break.
+    /// Phase L: enableHydrologyStage toggle + Stage_Hydrology2D wiring. 3 tunables (epsilon,
+    ///          riverThresholdFraction, minLakeArea). FlowAccumulation overlay source.
+    ///          4 new stage arrays: stagesL, stagesLM, stagesLM2a, stagesLM2b.
+    /// Phase L+M: 2 river moisture tunables (biomeRiverMoistureBonus, biomeRiverFlowNorm) wired
+    ///            to Stage_Biome2D. Active only when Hydrology is in pipeline.
     /// </summary>
     [ExecuteAlways]
     [AddComponentMenu("Islands/PCG/Map Tilemap Visualization")]
-    public sealed class PCGMapTilemapVisualization : MonoBehaviour
+    public sealed class PCGMapTilemapVisualization : MonoBehaviour, IMapContextSource
     {
         // =====================================================================
         // Tilemap Target (always visible)
@@ -76,6 +82,13 @@ namespace Islands.PCG.Adapters.Tilemap
                  "Ignored when Use Procedural Tiles is enabled.")]
         [SerializeField] private TilesetConfig tilesetConfig;
 
+        [Header("Biome Tile Override (Phase Q)")]
+        [Tooltip("Optional: assign a BiomeTileOverride asset to vary tile art by biome.\n" +
+                 "When assigned and Procedural Tiles is disabled, tiles for biome-layer\n" +
+                 "pairs found in this override replace the base TilesetConfig tiles.\n" +
+                 "When null, all tiles come from TilesetConfig only (pre-Q behavior).")]
+        [SerializeField] private BiomeTileOverride biomeTileOverride;
+
         // =====================================================================
         // Preset-controlled fields (hidden when preset assigned)
         // Section names and field order match MapGenerationPreset exactly.
@@ -94,6 +107,7 @@ namespace Islands.PCG.Adapters.Tilemap
         [SerializeField] private bool enableMorphologyStage = true;
         [SerializeField] private bool enableBiomeStage = true;
         [SerializeField] private bool enableRegionsStage = true;
+        [SerializeField] private bool enableHydrologyStage = false;
 
         [Header("Island Shape")]
         [Range(0f, 1f)][SerializeField] private float islandRadius01 = 0.45f;
@@ -195,6 +209,25 @@ namespace Islands.PCG.Adapters.Tilemap
         [Tooltip("Moisture noise cell size. 4–8× lower frequency than terrain noise.")]
         [SerializeField] private int biomeMoistureNoiseCellSize = 32;
 
+        [Header("River Moisture (Phase L+M)")]
+        [Range(0f, 1f)]
+        [Tooltip("Maximum moisture bonus for cells at or above the river flow threshold.\nActive only when Enable Hydrology Stage is on. Default 0.4.")]
+        [SerializeField] private float biomeRiverMoistureBonus = 0.4f;
+        [Min(0f)]
+        [Tooltip("Flow accumulation normalization divisor.\n0 = auto (totalLandCells × 0.02). Override for non-default river threshold.")]
+        [SerializeField] private float biomeRiverFlowNorm = 0f;
+
+        [Header("Hydrology (Phase L)")]
+        [Tooltip("Priority-Flood+ε gradient increment.\nSmaller: preserves terrain detail. Larger: coarser ramps.\nDefault 1e-5 is within the recommended range.")]
+        [Range(1e-6f, 1e-3f)]
+        [SerializeField] private float hydroEpsilon = 1e-5f;
+        [Tooltip("River threshold as fraction of total Land cells.\nLower: more rivers. Higher: only major channels.\nAuto-scales with resolution. Default 0.02 (2%).")]
+        [Range(0.005f, 0.10f)]
+        [SerializeField] private float hydroRiverThresholdFraction = 0.02f;
+        [Tooltip("Minimum lake component size (cells). 0 = no filtering.\nRemoves noise-artifact puddles below this size.")]
+        [Min(0)]
+        [SerializeField] private int hydroMinLakeArea = 0;
+
         [Header("Run Behavior")]
         [SerializeField] private bool clearBeforeRun = true;
 
@@ -266,6 +299,32 @@ namespace Islands.PCG.Adapters.Tilemap
         private bool dirty = true;
         private int updateCalls;
 
+        // Phase V.a: monotonic counter for IMapContextSource consumers (PCGHoverTooltip,
+        // PCGRuntimeOverlay). Incremented at the end of each successful Update() pass.
+        private int _regenVersion;
+
+        // =====================================================================
+        // IMapContextSource (Phase V.a) — read-only inspection seam.
+        // Spec: planning/active/Phase_V_Design.md §4.
+        // =====================================================================
+        MapContext2D IMapContextSource.Context => ctx;
+        UnityEngine.Tilemaps.Tilemap IMapContextSource.Tilemap => tilemap;
+        bool IMapContextSource.FlipY => flipY;
+        int IMapContextSource.RegenerationVersion => _regenVersion;
+
+        bool IMapContextSource.TryWorldToCell(Vector3 world, out int x, out int y)
+        {
+            x = 0; y = 0;
+            if (ctx == null || tilemap == null) return false;
+            var cell = tilemap.WorldToCell(world);
+            int gx = cell.x, gy = cell.y;
+            int w = ctx.Domain.Width, h = ctx.Domain.Height;
+            if (gx < 0 || gy < 0 || gx >= w || gy >= h) return false;
+            x = gx;
+            y = flipY ? (h - 1 - gy) : gy;
+            return true;
+        }
+
         private BaseTerrainStage_Configurable baseStage;
         private Stage_Hills2D hillsStage;
         private Stage_Shore2D shoreStage;
@@ -274,8 +333,10 @@ namespace Islands.PCG.Adapters.Tilemap
         private Stage_Morphology2D morphologyStage;
         private Stage_Biome2D biomeStage;
         private Stage_Regions2D regionsStage;
+        private Stage_Hydrology2D hydrologyStage;
 
         private IMapStage2D[] stagesF2, stagesF3, stagesF4, stagesF5, stagesF6, stagesG, stagesM, stagesM2a, stagesM2b;
+        private IMapStage2D[] stagesL, stagesLM, stagesLM2a, stagesLM2b;
 
         // =====================================================================
         // Dirty tracking cache
@@ -289,6 +350,10 @@ namespace Islands.PCG.Adapters.Tilemap
         private float lastShallowWaterDepth01, lastMidWaterDepth01;
         private bool lastEnableVegetationStage, lastEnableTraversalStage, lastEnableMorphologyStage, lastEnableBiomeStage;
         private bool lastEnableRegionsStage;
+        private bool lastEnableHydrologyStage;
+        private float lastHydroEpsilon, lastHydroRiverThresholdFraction;
+        private int lastHydroMinLakeArea;
+        private float lastBiomeRiverMoistureBonus, lastBiomeRiverFlowNorm;
         private float lastIslandRadius01, lastWaterThreshold01;
         private float lastIslandSmoothFrom01, lastIslandSmoothTo01;
         private float lastIslandAspectRatio, lastWarpAmplitude01;
@@ -366,7 +431,9 @@ namespace Islands.PCG.Adapters.Tilemap
             vegetationStage = null; traversalStage = null; morphologyStage = null;
             biomeStage = null;
             regionsStage = null;
+            hydrologyStage = null;
             stagesF2 = stagesF3 = stagesF4 = stagesF5 = stagesF6 = stagesG = stagesM = stagesM2a = stagesM2b = null;
+            stagesL = stagesLM = stagesLM2a = stagesLM2b = null;
         }
 
         private void Update()
@@ -402,6 +469,7 @@ namespace Islands.PCG.Adapters.Tilemap
             bool eMorph = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
             bool eBiome = preset != null ? preset.enableBiomeStage : enableBiomeStage;
             bool eRegions = enableRegionsStage;
+            bool eHydro = enableHydrologyStage;
             bool eClear = preset != null ? preset.clearBeforeRun : clearBeforeRun;
 
             // N5.b: build tunables — preset handles its own asset resolution via ToTunables().
@@ -453,8 +521,21 @@ namespace Islands.PCG.Adapters.Tilemap
             biomeStage.moistureNoiseAmplitude = preset != null ? preset.biomeMoistureNoiseAmplitude : biomeMoistureNoiseAmplitude;
             biomeStage.moistureNoiseCellSize = preset != null ? preset.biomeMoistureNoiseCellSize : biomeMoistureNoiseCellSize;
 
+            // Phase L: wire hydrology tunables to stage instance.
+            hydrologyStage.epsilon = hydroEpsilon;
+            hydrologyStage.riverThresholdFraction = hydroRiverThresholdFraction;
+            hydrologyStage.minLakeArea = hydroMinLakeArea;
+
+            // Phase L+M: wire river moisture tunables to biome stage.
+            biomeStage.riverMoistureBonus = preset != null ? preset.biomeRiverMoistureBonus : biomeRiverMoistureBonus;
+            biomeStage.riverFlowNorm = preset != null ? preset.biomeRiverFlowNorm : biomeRiverFlowNorm;
+
             var inputs = new MapInputs(eSeed, new GridDomain2D(eRes, eRes), eTun);
-            var stages = (eBiome && eVeg && eRegions) ? stagesM2b : (eBiome && eVeg) ? stagesM2a : eBiome ? stagesM : eMorph ? stagesG : eTrav ? stagesF6 : eVeg ? stagesF5
+            var stages = (eBiome && eVeg && eRegions) ? (eHydro ? stagesLM2b : stagesM2b)
+                       : (eBiome && eVeg) ? (eHydro ? stagesLM2a : stagesM2a)
+                       : eBiome ? (eHydro ? stagesLM : stagesM)
+                       : eMorph ? (eHydro ? stagesL : stagesG)
+                       : eTrav ? stagesF6 : eVeg ? stagesF5
                        : eShore ? stagesF4 : eHills ? stagesF3 : stagesF2;
 
             MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: eClear);
@@ -484,10 +565,15 @@ namespace Islands.PCG.Adapters.Tilemap
             }
 
             // ---- Stamp ----
+            BiomeTileOverride activeOverride =
+                (!useProceduralTiles && biomeTileOverride != null) ? biomeTileOverride : null;
+
             if (enableMultiLayer)
-                StampMultiLayer(export, activeTable, activeFallback);
+                StampMultiLayerBiomeAware(export, activeTable, activeFallback, activeOverride);
             else
-                TilemapAdapter2D.Apply(export, tilemap, activeTable, activeFallback, true, flipY);
+                TilemapAdapter2D.ApplyBiomeAware(
+                    export, tilemap, activeTable, activeOverride,
+                    activeFallback, true, flipY);
 
             // ---- H8: Mega-tile post-pass ----
             if (enableMegaTiles && megaTileRules != null && megaTileRules.Length > 0)
@@ -510,11 +596,12 @@ namespace Islands.PCG.Adapters.Tilemap
             int stamped = CountStampedTiles(eRes);
             dirty = false;
             updateCalls++;
+            _regenVersion++; // Phase V.a — invalidates IMapContextSource consumer caches.
 
             Debug.Log(
                 $"[PCGMapTilemapVisualization] #{updateCalls} res={eRes} seed={eSeed} " +
                 $"shape={eTun.shapeMode} " +
-                $"hills={eHills} shore={eShore} veg={eVeg} trav={eTrav} morph={eMorph} biome={eBiome} " +
+                $"hills={eHills} shore={eShore} veg={eVeg} trav={eTrav} morph={eMorph} hydro={eHydro} biome={eBiome} " +
                 $"flipY={flipY} proc={useProceduralTiles} multi={enableMultiLayer} " +
                 $"mega={enableMegaTiles}({megaTileRules?.Length ?? 0}r) " +
                 $"overlay1={enableOverlay1}({overlaySource1}) overlay2={enableOverlay2}({overlaySource2}) " +
@@ -624,6 +711,10 @@ namespace Islands.PCG.Adapters.Tilemap
 
                 case ScalarOverlaySource.BiomeRegionId:
                     FillFromField(MapFieldId.BiomeRegionId, dst, res);
+                    break;
+
+                case ScalarOverlaySource.FlowAccumulation:
+                    FillFromField(MapFieldId.FlowAccumulation, dst, res);
                     break;
 
                 case ScalarOverlaySource.TerrainNoise:
@@ -812,6 +903,9 @@ namespace Islands.PCG.Adapters.Tilemap
                 case ScalarOverlaySource.BiomeRegionId:
                     min = 0f; max = 20f;
                     break;
+                case ScalarOverlaySource.FlowAccumulation:
+                    min = 0f; max = 500f;
+                    break;
             }
         }
 
@@ -855,6 +949,7 @@ namespace Islands.PCG.Adapters.Tilemap
             morphologyStage = new Stage_Morphology2D();
             biomeStage = new Stage_Biome2D();
             regionsStage = new Stage_Regions2D();
+            hydrologyStage = new Stage_Hydrology2D();
             stagesF2 = new IMapStage2D[] { baseStage };
             stagesF3 = new IMapStage2D[] { baseStage, hillsStage };
             stagesF4 = new IMapStage2D[] { baseStage, hillsStage, shoreStage };
@@ -865,6 +960,11 @@ namespace Islands.PCG.Adapters.Tilemap
             // M2.a: vegetation moves AFTER biome. Activated when both Biome and Vegetation toggles are on.
             stagesM2a = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage };
             stagesM2b = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, biomeStage, vegetationStage, regionsStage };
+            // Phase L: hydrology runs after morphology, before biome.
+            stagesL = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage, hydrologyStage };
+            stagesLM = new IMapStage2D[] { baseStage, hillsStage, shoreStage, vegetationStage, traversalStage, morphologyStage, hydrologyStage, biomeStage };
+            stagesLM2a = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, hydrologyStage, biomeStage, vegetationStage };
+            stagesLM2b = new IMapStage2D[] { baseStage, hillsStage, shoreStage, traversalStage, morphologyStage, hydrologyStage, biomeStage, vegetationStage, regionsStage };
         }
 
         // =====================================================================
@@ -909,6 +1009,12 @@ namespace Islands.PCG.Adapters.Tilemap
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
             lastEnableBiomeStage = preset != null ? preset.enableBiomeStage : enableBiomeStage;
             lastEnableRegionsStage = enableRegionsStage;
+            lastEnableHydrologyStage = enableHydrologyStage;
+            lastHydroEpsilon = hydroEpsilon;
+            lastHydroRiverThresholdFraction = hydroRiverThresholdFraction;
+            lastHydroMinLakeArea = hydroMinLakeArea;
+            lastBiomeRiverMoistureBonus = preset != null ? preset.biomeRiverMoistureBonus : biomeRiverMoistureBonus;
+            lastBiomeRiverFlowNorm = preset != null ? preset.biomeRiverFlowNorm : biomeRiverFlowNorm;
             lastIslandRadius01 = preset != null ? preset.islandRadius01 : islandRadius01;
             lastWaterThreshold01 = preset != null ? preset.waterThreshold01 : waterThreshold01;
             lastIslandSmoothFrom01 = preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01;
@@ -986,6 +1092,12 @@ namespace Islands.PCG.Adapters.Tilemap
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
                 || (preset != null ? preset.enableBiomeStage : enableBiomeStage) != lastEnableBiomeStage
                 || enableRegionsStage != lastEnableRegionsStage
+                || enableHydrologyStage != lastEnableHydrologyStage
+                || !Mathf.Approximately(hydroEpsilon, lastHydroEpsilon)
+                || !Mathf.Approximately(hydroRiverThresholdFraction, lastHydroRiverThresholdFraction)
+                || hydroMinLakeArea != lastHydroMinLakeArea
+                || !Mathf.Approximately(preset != null ? preset.biomeRiverMoistureBonus : biomeRiverMoistureBonus, lastBiomeRiverMoistureBonus)
+                || !Mathf.Approximately(preset != null ? preset.biomeRiverFlowNorm : biomeRiverFlowNorm, lastBiomeRiverFlowNorm)
                 || !Mathf.Approximately(preset != null ? preset.islandRadius01 : islandRadius01, lastIslandRadius01)
                 || !Mathf.Approximately(preset != null ? preset.waterThreshold01 : waterThreshold01, lastWaterThreshold01)
                 || !Mathf.Approximately(preset != null ? preset.islandSmoothFrom01 : islandSmoothFrom01, lastIslandSmoothFrom01)
@@ -1067,6 +1179,31 @@ namespace Islands.PCG.Adapters.Tilemap
                     h ^= layers[i].enabled ? 1UL : 0UL; h *= P;
                 }
             h ^= (ulong)(uint)(tilesetConfig.fallbackTile != null ? tilesetConfig.fallbackTile.GetInstanceID() : 0); h *= P;
+
+            // Phase Q: BiomeTileOverride content hash
+            if (biomeTileOverride != null)
+            {
+                h ^= (ulong)(uint)biomeTileOverride.GetInstanceID(); h *= P;
+                var btoGroups = biomeTileOverride.groups;
+                if (btoGroups != null)
+                {
+                    h ^= (ulong)(uint)btoGroups.Length; h *= P;
+                    for (int g = 0; g < btoGroups.Length; g++)
+                    {
+                        h ^= (ulong)(uint)(int)btoGroups[g].biome; h *= P;
+                        var slots = btoGroups[g].layers;
+                        if (slots != null)
+                            for (int s = 0; s < slots.Length; s++)
+                            {
+                                h ^= (ulong)(uint)(int)slots[s].layerId; h *= P;
+                                h ^= (ulong)(uint)(slots[s].tile != null ? slots[s].tile.GetInstanceID() : 0); h *= P;
+                                h ^= (ulong)(uint)(slots[s].animatedTile != null ? slots[s].animatedTile.GetInstanceID() : 0); h *= P;
+                                h ^= (ulong)(uint)(slots[s].ruleTile != null ? slots[s].ruleTile.GetInstanceID() : 0); h *= P;
+                            }
+                    }
+                }
+            }
+
             return h;
         }
 
@@ -1123,11 +1260,14 @@ namespace Islands.PCG.Adapters.Tilemap
         // =====================================================================
         private static readonly MapLayerId[] s_baseLayers = {
             MapLayerId.DeepWater, MapLayerId.MidWater, MapLayerId.ShallowWater,
-            MapLayerId.Land, MapLayerId.LandCore, MapLayerId.LandEdge };
+            MapLayerId.Land, MapLayerId.LandCore, MapLayerId.LandEdge,
+            MapLayerId.Lakes, MapLayerId.Rivers };
+        //   (later entries overwrite earlier in priority order)
         private static readonly MapLayerId[] s_overlayLayers = {
             MapLayerId.Vegetation, MapLayerId.HillsL1, MapLayerId.HillsL2, MapLayerId.Stairs };
         private static readonly MapLayerId[] s_colliderLayers = {
-            MapLayerId.DeepWater, MapLayerId.MidWater, MapLayerId.HillsL2 };
+            MapLayerId.DeepWater, MapLayerId.MidWater, MapLayerId.HillsL2,
+            MapLayerId.Lakes };
 
         private void StampMultiLayer(MapDataExport export, TilemapLayerEntry[] activeTable, TileBase activeFallback)
         {
@@ -1168,6 +1308,65 @@ namespace Islands.PCG.Adapters.Tilemap
             if (overlayGroup != null) groups[gi++] = overlayGroup;
             if (colliderGroup != null) groups[gi++] = colliderGroup;
             TilemapAdapter2D.ApplyLayered(export, groups);
+        }
+
+        /// <summary>
+        /// Biome-aware variant of <see cref="StampMultiLayer"/>. Passes
+        /// <paramref name="biomeOverride"/> through to all groups via
+        /// <see cref="TilemapAdapter2D.ApplyLayeredBiomeAware"/>.
+        /// When override is null, delegates to the non-biome path.
+        ///
+        /// Phase Q.
+        /// </summary>
+        private void StampMultiLayerBiomeAware(
+            MapDataExport export,
+            TilemapLayerEntry[] activeTable,
+            TileBase activeFallback,
+            BiomeTileOverride biomeOverride)
+        {
+            if (biomeOverride == null)
+            {
+                StampMultiLayer(export, activeTable, activeFallback);
+                return;
+            }
+
+            var baseGroup = new TilemapLayerGroup
+            {
+                Tilemap = tilemap,
+                PriorityTable = FilterTable(activeTable, s_baseLayers),
+                FallbackTile = activeFallback,
+                ClearFirst = true,
+                FlipY = flipY
+            };
+            TilemapLayerGroup overlayGroup = null;
+            if (overlayTilemap != null)
+                overlayGroup = new TilemapLayerGroup
+                {
+                    Tilemap = overlayTilemap,
+                    PriorityTable = FilterTable(activeTable, s_overlayLayers),
+                    FallbackTile = null,
+                    ClearFirst = true,
+                    FlipY = flipY
+                };
+            TilemapLayerGroup colliderGroup = null;
+            if (colliderTilemap != null && colliderTile != null)
+            {
+                if (enableColliderAutoSetup) TilemapAdapter2D.SetupCollider(colliderTilemap);
+                colliderGroup = new TilemapLayerGroup
+                {
+                    Tilemap = colliderTilemap,
+                    PriorityTable = BuildColliderTable(colliderTile, s_colliderLayers),
+                    FallbackTile = null,
+                    ClearFirst = true,
+                    FlipY = flipY
+                };
+            }
+            int count = 1 + (overlayGroup != null ? 1 : 0) + (colliderGroup != null ? 1 : 0);
+            var groups = new TilemapLayerGroup[count]; int gi = 0;
+            groups[gi++] = baseGroup;
+            if (overlayGroup != null) groups[gi++] = overlayGroup;
+            if (colliderGroup != null) groups[gi++] = colliderGroup;
+            TilemapAdapter2D.ApplyLayeredBiomeAware(export, groups, biomeOverride);
         }
 
         private static TilemapLayerEntry[] FilterTable(TilemapLayerEntry[] source, MapLayerId[] ids)

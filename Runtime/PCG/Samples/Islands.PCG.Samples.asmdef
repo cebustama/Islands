@@ -4,6 +4,7 @@
     "references": [
         "Islands.Runtime",
         "Islands.PCG.Runtime",
+        "Islands.PCG.Inspection",
         "Islands.PCG.Samples.Shared",
         "Unity.Mathematics",
         "Unity.Collections",

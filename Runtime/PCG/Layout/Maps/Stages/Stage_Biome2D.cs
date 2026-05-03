@@ -16,10 +16,11 @@ namespace Islands.PCG.Layout.Maps.Stages
     ///   M.3 — Biome classification (Whittaker 4×4 lookup + Beach override).
     ///
     /// Reads (read-only):
-    ///   <see cref="MapFieldId.Height"/>    — lapse rate (M.1)
-    ///   <see cref="MapFieldId.CoastDist"/> — coast moderation (M.1), coastal moisture (M.2)
-    ///   <see cref="MapLayerId.Land"/>      — water sentinel (M.3)
-    ///   <see cref="MapLayerId.LandEdge"/>  — Beach override (M.3)
+    ///   <see cref="MapFieldId.Height"/>           — lapse rate (M.1)
+    ///   <see cref="MapFieldId.CoastDist"/>        — coast moderation (M.1), coastal moisture (M.2)
+    ///   <see cref="MapFieldId.FlowAccumulation"/> — river moisture enrichment (M.2, optional — Phase L)
+    ///   <see cref="MapLayerId.Land"/>             — water sentinel (M.3)
+    ///   <see cref="MapLayerId.LandEdge"/>         — Beach override (M.3)
     ///
     /// Writes (authoritative):
     ///   <see cref="MapFieldId.Temperature"/> — [0,1] for all cells
@@ -33,13 +34,19 @@ namespace Islands.PCG.Layout.Maps.Stages
     ///   M-4: Temperature range [0, 1].
     ///   M-5: Moisture range [0, 1].
     ///   M-6: Beach consistency (warm LandEdge cells → Beach).
-    ///   M-7: No-mutate (Height, CoastDist, Land, LandEdge unchanged).
+    ///   M-7: No-mutate (Height, CoastDist, Land, LandEdge, FlowAccumulation unchanged).
     ///   M-8: Valid biome range (all Land biome values are valid BiomeType enum values).
+    ///
+    /// Phase L backward compatibility:
+    ///   When <see cref="MapFieldId.FlowAccumulation"/> is absent (Phase L not in pipeline),
+    ///   <see cref="riverMoistureBonus"/> has no effect and M-1..M-8 produce bit-identical
+    ///   output to the pre-Phase-L baseline.  Existing M / M2a / M2b goldens remain valid.
     ///
     /// RNG: Zero ctx.Rng consumption. All noise via <see cref="MapNoiseBridge2D.FillNoise01"/>
     /// coordinate hashing with stage salt 0xB10E.
     ///
     /// Pipeline position: after Stage_Morphology2D (G), before Phase M2.
+    /// When Phase L is active: after Stage_Hydrology2D (L), before Phase M2.
     /// </summary>
     public sealed class Stage_Biome2D : IMapStage2D
     {
@@ -91,10 +98,29 @@ namespace Islands.PCG.Layout.Maps.Stages
         /// <summary>Moisture noise cell size. 4–8× lower frequency than terrain noise to prevent biome fragmentation.</summary>
         public int moistureNoiseCellSize = 32;
 
-        // Phase L enrichment tunables — unused until FlowAccumulation field exists.
-        // Kept as documentation of the future interface; see Phase_L_Design.md.
-        // public float riverMoistureBonus = 0.4f;
-        // public float riverFlowNorm     = 50.0f;
+        // =================================================================
+        // M.2 Phase L enrichment tunables (active when FlowAccumulation exists)
+        // =================================================================
+
+        /// <summary>
+        /// Maximum moisture bonus applied to cells at or above the river flow threshold.
+        /// [0, 1]. Default 0.4.
+        ///
+        /// Applied only when <see cref="MapFieldId.FlowAccumulation"/> exists in the context
+        /// (i.e. Stage_Hydrology2D ran before Stage_Biome2D).  When Phase L is absent,
+        /// this tunable has zero effect and produces bit-identical output to pre-Phase-L runs.
+        /// </summary>
+        public float riverMoistureBonus = 0.4f;
+
+        /// <summary>
+        /// Flow accumulation normalization divisor.  0 (default) = auto-compute as
+        /// <c>totalLandCells × 0.02f</c>, matching Phase L's default riverThresholdFraction.
+        /// At the threshold, <c>riverFactor == riverMoistureBonus</c>; below it, proportionally less.
+        ///
+        /// Override with an explicit positive value when using a non-default
+        /// <see cref="Stage_Hydrology2D.riverThresholdFraction"/> in the same pipeline.
+        /// </summary>
+        public float riverFlowNorm = 0f;
 
         // =================================================================
         // Execute
@@ -112,6 +138,18 @@ namespace Islands.PCG.Layout.Maps.Stages
             ref MaskGrid2D land = ref ctx.GetLayer(MapLayerId.Land);
             ref MaskGrid2D landEdge = ref ctx.GetLayer(MapLayerId.LandEdge);
 
+            // ---- Phase L: optional FlowAccumulation enrichment ----
+            // IsFieldCreated returns false when Phase L is not in the active stage set.
+            // When false, riverFactor == 0 throughout M.2 → bit-identical output to pre-L baseline.
+            bool hasFlowAccum = ctx.IsFieldCreated(MapFieldId.FlowAccumulation);
+            // Capture by value (copies the NativeArray header — safe for read-only use in M.2).
+            ScalarField2D flowAccumSnapshot = hasFlowAccum
+                ? ctx.GetField(MapFieldId.FlowAccumulation)
+                : default;
+            // Auto riverFlowNorm: when hasFlowAccum, compute totalLandCells × 0.02f once.
+            // CountOnes() is an O(N) scan — called at most once per Execute.
+            int landCount = hasFlowAccum ? land.CountOnes() : 0;
+
             // ---- Outputs ----
             ref ScalarField2D temperature = ref ctx.EnsureField(MapFieldId.Temperature);
             ref ScalarField2D moisture = ref ctx.EnsureField(MapFieldId.Moisture);
@@ -122,9 +160,10 @@ namespace Islands.PCG.Layout.Maps.Stages
                 ref temperature, in height, in coastDist,
                 in d, inputs.Seed, w, h);
 
-            // ---- M.2 Moisture ----
+            // ---- M.2 Moisture (+ optional Phase L river enrichment) ----
             ComputeMoisture(
                 ref moisture, in coastDist,
+                flowAccumSnapshot, hasFlowAccum, landCount,
                 in d, inputs.Seed, w, h);
 
             // ---- M.3 Biome Classification ----
@@ -177,8 +216,6 @@ namespace Islands.PCG.Layout.Maps.Stages
                         float cd = coastDist.Values[idx];
 
                         // Coast moderation: 1/(1+max(cd,0)) — strongest at coast, negligible inland.
-                        // For water cells (cd < 0), max(cd, 0) = 0 → maximum moderation.
-                        // This keeps water-cell temperatures moderate for visual continuity.
                         float coastMod = coastModerationStrength / (1.0f + math.max(cd, 0f));
 
                         float tempRaw = baseTemperature
@@ -201,9 +238,18 @@ namespace Islands.PCG.Layout.Maps.Stages
         // M.2 — Moisture Field
         // =================================================================
 
+        /// <param name="flowAccum">
+        /// Copy of the FlowAccumulation field (by value).  Ignored when
+        /// <paramref name="hasFlowAccum"/> is false.
+        /// </param>
+        /// <param name="hasFlowAccum">True when Phase L ran before this stage.</param>
+        /// <param name="landCount">Total Land cell count (for auto riverFlowNorm).</param>
         private void ComputeMoisture(
             ref ScalarField2D moisture,
             in ScalarField2D coastDist,
+            ScalarField2D flowAccum,
+            bool hasFlowAccum,
+            int landCount,
             in GridDomain2D domain,
             uint seed,
             int w, int h)
@@ -222,11 +268,18 @@ namespace Islands.PCG.Layout.Maps.Stages
                 };
                 MapNoiseBridge2D.FillNoise01(in domain, moistNoise, seed, MoistNoiseSalt, in noiseSettings);
 
-                // Phase L enrichment: when FlowAccumulation field exists, river proximity
-                // contributes to moisture. Not yet implemented — Phase L adds the field
-                // and this stage gains a ctx.IsFieldCreated check + accumulation read.
-                // See Phase_L_Design.md § "Contract between L and M".
+                // ── Phase L river enrichment setup ──────────────────────────
+                // effectiveFlowNorm: the accumulation value that maps to riverMoistureBonus × 1.0.
+                // Recommended: same fraction as Phase L's riverThresholdFraction (default 0.02),
+                // so cells AT the river threshold get the full river moisture bonus.
+                // Auto-computed when riverFlowNorm == 0; explicit value overrides.
+                float effectiveFlowNorm = 0f;
+                if (hasFlowAccum)
+                    effectiveFlowNorm = riverFlowNorm > 0f
+                        ? riverFlowNorm
+                        : math.max(1f, landCount * 0.02f);
 
+                // ── Main moisture loop ───────────────────────────────────────
                 for (int y = 0; y < h; y++)
                 {
                     int row = y * w;
@@ -241,8 +294,19 @@ namespace Islands.PCG.Layout.Maps.Stages
                         float coastFactor = coastalMoistureBonus
                                           / (1.0f + math.max(cd, 0f) * coastDecayRate);
 
+                        // River proximity factor (Phase L enrichment).
+                        // riverFactor = 0 when Phase L absent — no change to existing output.
+                        float riverFactor = 0f;
+                        if (hasFlowAccum)
+                        {
+                            float fa = flowAccum.Values[idx];
+                            riverFactor = riverMoistureBonus
+                                        * math.saturate(fa / effectiveFlowNorm);
+                        }
+
                         float moistRaw = moistureNoiseAmplitude * moistNoise[idx]
-                                       + coastFactor;
+                                       + coastFactor
+                                       + riverFactor;
 
                         moisture.Values[idx] = math.saturate(moistRaw);
                     }

@@ -3,8 +3,9 @@
     /// <summary>
     /// Data sources available for scalar overlay visualization on the tilemap.
     ///
-    /// Pipeline field sources (Height, CoastDist, Moisture, Temperature, Biome) are
-    /// read directly from <see cref="Islands.PCG.Core.MapContext2D"/> after the pipeline runs.
+    /// Pipeline field sources (Height, CoastDist, Moisture, Temperature, Biome,
+    /// BiomeRegionId, FlowAccumulation) are read directly from
+    /// <see cref="Islands.PCG.Core.MapContext2D"/> after the pipeline runs.
     ///
     /// Noise preview sources (TerrainNoise, WarpNoiseX/Y, HillsNoise) are computed
     /// on-demand via <see cref="Islands.PCG.Layout.Maps.MapNoiseBridge2D.FillNoise01"/>
@@ -14,6 +15,8 @@
     ///
     /// Phase N6. Adapter-side only — not a pipeline contract. No new MapFieldId entries.
     /// Phase M: Temperature (3) and Biome (4) added to the reserved pipeline-field range.
+    /// Phase M2.b: BiomeRegionId (5) added.
+    /// Phase L: FlowAccumulation (6) added. Noise previews shifted to start at 10.
     /// </summary>
     public enum ScalarOverlaySource : byte
     {
@@ -50,10 +53,16 @@
         /// the expected region count for the map size.</summary>
         BiomeRegionId = 5,
 
+        /// <summary>Flow accumulation field (raw upstream cell count). Phase L —
+        /// shows blank (zeros) if Stage_Hydrology2D is not in the active stage set.
+        /// Values are raw counts: 0f for non-Land, ≥1f for Land; peaks at river
+        /// mouths. Recommended overlay range: Min=0, Max=500 for 64×64 maps;
+        /// scale Max proportionally with resolution² for larger maps.</summary>
+        FlowAccumulation = 6,
+
         // =============================================================
         // Noise previews — on-demand via MapNoiseBridge2D
-        // Gap in numbering reserves 6–9 for future pipeline fields
-        // without colliding.
+        // Gap 7–9 reserved for future pipeline fields.
         // =============================================================
 
         /// <summary>Raw terrain height noise [0,1] before shape mask, redistribution,

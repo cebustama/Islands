@@ -59,7 +59,7 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase J: later (planning only)
 - Phase J2: later (planning only — new)
 - Phase K: later (planning / exploratory only)
-- Phase L: confirmed (after M2, design complete)
+- Phase L: done
 - Phase M: done
 - M-fix.a: done (Biome Tunables Inspector Wiring + M-fix.c folded in)
 - M-fix.b: resolved (deferred by design — no downstream consumer needs EffectiveElevation)
@@ -70,7 +70,9 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase P: later (planning only — new)
 - Phase T1: planning (design complete — adapter track)
 - Phase W: later (planning / exploratory only)
-- Phase V: planning only (scope defined — Runtime Inspection UI; design doc pending after M2.b)
+- Phase V: done (V.a + V.b — read-only inspection tooling, all smoke-validated)
+- Phase Q: planning (next focus — adapter-side biome-conditional tile selection)
+- Phase Q2: planning (sibling of Q — composite-condition tile selection; adapter track)
 
 ## Documentary note on Layout Strategies
 Layout strategies are currently treated as a governed deep reference / staged support surface under PCG.
@@ -103,6 +105,7 @@ to its design doc if one exists. The design doc contains the implementation-dept
 | Phase L | [`Phase_L_Design.md`](design/Phase_L_Design.md) | Complete |
 | Phase T1 | [`Phase_T1_Design.md`](design/Phase_T1_Design.md) | Complete |
 | Phase H8 | [`Phase_H8_Design.md`](design/Phase_H8_Design.md) | Complete (implemented) |
+| Phase V | [`Phase_V_Design.md`](design/Phase_V_Design.md) | Complete (V.a + V.b implemented) |
 
 ## Resolved design decisions (2026-04-06)
 
@@ -795,15 +798,55 @@ Planning / exploratory only.
   each injected via MapShapeInput (F2c).
 
 ### Phase L — Hydrology (Rivers & Lakes)
-**Confirmed (after M2). Design complete.**
-**See [`Phase_L_Design.md`](design/Phase_L_Design.md) for detailed design.**
+**Done.** Implemented, test-gated, golden hashes captured, visual smoke tests 1–4 passed.
+**See [`Phase_L_Design.md`](design/Phase_L_Design.md) for detailed design and post-delivery notes (§17).**
 
-- Fills height depressions via Priority-Flood.
-- D8 steepest-descent flow routing.
-- Flow accumulation scalar field (`MapFieldId.FlowAccumulation`).
-- River mask by thresholding (`MapLayerId.Rivers`).
-- Lake detection by CCA on non-land, non-DeepWater cells (`MapLayerId.Lakes`).
+Single `IMapStage2D` (`Stage_Hydrology2D`) with two sub-stages: L.1 Rivers (Priority-Flood
+depression fill → D8 flow direction → flow accumulation → fractional-threshold extraction)
+and L.2 Lakes (three-way boolean exclusion of non-Land, non-DeepWater, non-River cells;
+optional BFS size filter). New registry entries: `MapLayerId.Rivers=13`, `MapLayerId.Lakes=14`
+(COUNT→15); `MapFieldId.FlowAccumulation=6` (COUNT→7). New operator `HeightFieldHydrologyOps2D`
+(four static deterministic methods: `FillDepressions`, `ComputeFlowDirectionsD8`,
+`AccumulateFlow`, `ExtractRivers`). Zero RNG. Stage gated by `enableHydrologyStage`
+(default = false, opt-in only). Pipeline position: after Morphology, before Biome.
+L→M moisture coupling via `riverMoistureBonus` + `riverFlowNorm` is active when the
+hydrology gate is enabled and bit-identical to the pre-L baseline when disabled.
+
 - Depends on: F2 (Height field). Optional dependency on Phase K (elevation).
+- Goldens: `StageHydrology2DTests.cs`, `MapPipelineRunner2DGoldenLTests.cs`,
+  `MapPipelineRunner2DGoldenLMTests.cs`.
+
+### L-fix.a (revised) — Multi-layer Routing Partitions for Rivers and Lakes
+**Done.** No golden break. No new stages, fields, or layers. Implementation surfaced
+and validated by Phase V.a smoke testing 2026-04-15.
+
+`PCGMapTilemapVisualization.StampMultiLayer()` routes layers through three static
+arrays (`s_baseLayers`, `s_overlayLayers`, `s_colliderLayers`). Rivers and Lakes
+were absent from all three after Phase L shipped, so they were silently dropped in
+multi-layer mode. A previously documented L-fix.a entry described an alternative
+routing (Rivers as overlay, Lakes as base) but was never committed.
+
+**Implemented fix:** `MapLayerId.Lakes` and `MapLayerId.Rivers` appended to
+`s_baseLayers` in that order — both render on the base tilemap, with Rivers
+winning on confluence (later-entry-paints-over rule). `MapLayerId.Lakes` added to
+`s_colliderLayers` — lakes block movement; rivers remain passable by design (no
+bridges/fords required). `s_overlayLayers` unchanged.
+
+1 file modified: `PCGMapTilemapVisualization.cs`. Maintenance rule re-affirmed for
+future phases adding new `MapLayerId` entries — see `CURRENT_STATE.md`
+Visualization Maintenance Policy section.
+
+**By design (not a defect):** Stage_Vegetation does not exclude Rivers/Lakes from
+its eligibility set. Cells with both `Vegetation` and `Rivers` set represent
+fertile river-valley ecology and are addressed at the sprite-asset layer
+(transparency around grass tufts so the river tile shows through). Same approach
+for high-elevation river-source visibility through hill overlay sprites. No
+`Stage_Vegetation` contract change. No pipeline-stage change.
+
+**Deferred (non-blocking):** the same routing-omission bug class may exist in
+`PCGMapVisualization.cs` (non-tilemap GPU lantern variant) — it does not host a
+Tilemap and does not consume the partition arrays, but its layer color tables
+should be audited for the same Rivers/Lakes coverage.
 
 ### Phase M — Climate & Biome Classification
 **Done.** Implemented, test-gated, golden hashes captured, smoke test passed.
@@ -885,41 +928,188 @@ moistureNoiseAmplitude 0.5→0.3.
 - Depends on: Phase M, F5.
 
 ### Phase V — Runtime Inspection UI
-**Planning only.** Sequenced after Phase M2.b, before Phase N.
+**Done (V.a + V.b). All smoke-validated.**
+**See [`Phase_V_Design.md`](design/Phase_V_Design.md) for detailed design.**
 
 Runtime inspection overlay for the PCG pipeline. Read-only sample/tooling phase — produces
 no authored data, does not participate in golden tests or determinism gates. Does not replace
 edit-mode visualizations (`PCGMapVisualization`, `PCGMapCompositeVisualization`,
 `PCGMapTilemapVisualization`) — runs alongside them.
 
-**V.a — Hover Tooltip.** Mouse hover over the rendered tilemap → live readout of grid
-coordinates, layer membership, and all authored scalar fields (Height, CoastDist,
-Temperature, Moisture, Biome name + ID, BiomeRegionId if present, etc.). UI displays in a
-screen-space canvas panel. Uses a small `IMapContextSource` interface so any existing
-visualization can expose its live `MapContext2D`. Requires a one-line interface
+**V.a — Hover Tooltip. ✅ Implemented 2026-04-15.** Mouse hover over the rendered tilemap
+→ live readout of grid coordinates, layer membership, and all authored scalar fields
+(Height, CoastDist, Temperature, Moisture, Biome name + ID, BiomeRegionId if present, etc.).
+UI displays in a screen-space canvas panel. Uses a small `IMapContextSource` interface so
+any existing visualization can expose its live `MapContext2D`. One-line interface
 implementation added to each existing viz class.
+- New asmdef: `Islands.PCG.Inspection`.
+- New files: `IMapContextSource.cs`, `PCGHoverTooltip.cs`, `MapCameraController2D.cs`
+  (sample-side smoke-rig free-cam, also consumes `IMapContextSource`).
+- Tests: 4 unit tests in `IMapContextSourceTryWorldToCellTests.cs` (round-trip flipY=
+  true/false, out-of-bounds rejection, regen monotonicity). All green.
+- Smoke test §10 acceptance per `Phase_V_Design.md` §11.1: green.
+- Surfaced and validated the L-fix.a routing partition omission as concrete
+  value-of-tooling evidence.
 
-**V.b — Per-Cell Overlay System.** `PCGRuntimeOverlay` MonoBehaviour with two modes:
-- **Text overlay** — numeric label per cell from a chosen scalar field. Soft cap at
-  128×128 domains.
-- **Discrete color overlay** — per-cell color from a lookup palette indexed by an
-  integer-valued field. Primary use cases: biome color visualization (resolves the
-  "continuous scalar is the wrong tool for discrete IDs" problem identified during M2.a
-  visual smoke testing) and region visualization for M2.b named regions.
+**V.b — Per-Cell Overlay System. ✅ Implemented 2026-04-26.** `PCGRuntimeOverlay`
+MonoBehaviour with two independent display modes:
+- **Color overlay** — per-cell discrete color from `BiomeColorPalette` SO (Biome) or
+  deterministic FNV-1a hash-color (BiomeRegionId). Uses an owned
+  `ScalarOverlayRenderer` instance via `SetDataDirect`.
+- **Text overlay** — per-cell numeric label for pipeline fields (Height, CoastDist,
+  Moisture, Temperature, Biome, BiomeRegionId, FlowAccumulation). World-space Canvas +
+  TextMeshProUGUI (URP 2D compatible). View-aware with 64×64 hard cap. α decision:
+  noise/derived sources render nothing.
 
-**Expected files:** `PCGHoverTooltip.cs`, `IMapContextSource.cs`, `PCGRuntimeOverlay.cs`,
-`BiomeColorPalette.cs`, plus a one-line `IMapContextSource` implementation on each existing
-viz class.
-
-**Dependencies:** None hard. Softly benefits from Phase M (climate fields to display) and
-M2.a/M2.b (vegetation density and named regions to display).
-
-**Non-goals:** No authoring (read-only). No persistence. No golden coverage. No determinism
-gates.
+V.b files: `PCGRuntimeOverlay.cs`, `BiomeColorPalette.cs`, `BiomeColorPaletteTests.cs`,
+`ScalarOverlayRenderer.cs` (modified — `SetDataDirect`, promoted to public).
+`BiomeColorPalette-Default.asset` via context menu. `Adapters.Tilemap.asmdef` gained
+`Unity.TextMeshPro` reference. No new asmdef.
+Smoke tests §11.2 (text) and §11.3 (color): all green.
 
 Authority note: Phase V is roadmap-scoped only. It is **not** implementation authority and
-**not** a governed surface. Design document `Phase_V_Design.md` to be written when the phase
-activates (after M2.b closes). Do not promote into SSoTs until designed.
+**not** a governed surface. Detailed contracts live in `Phase_V_Design.md` (planning
+authority for the phase).
+
+### Phase Q — Biome-Conditional Tile Selection
+**Planning only. Sequenced on adapter track. Independent of Phase N/O/P/W path.**
+
+Closes the documented but unimplemented gap between Phase M (produces `MapFieldId.Biome`
+per cell) and the tilemap adapter (currently ignores it). `Phase_M_Design.md` §9 and
+`Phase_M2_Design.md` §7 both list `TilesetConfig` as a `Biome` consumer ("biome-conditional
+tile entries"); `Resolved design decisions` Decision 1 references `BiomeDef[]` carrying a
+"tile palette" property. Today `TilesetConfig.LayerEntry` and `TilemapAdapter2D` contain
+zero biome references — the field is produced and ignored. Phase Q wires the consumer.
+
+**Intent.** Per-cell tile selection that varies by biome:
+- Snow / ice ground tiles in `Snow` and `Tundra` cells.
+- Sand / rock ground in `SubtropicalDesert`, `TemperateDesert`.
+- Grass / lush ground in `TemperateForest`, `Grassland`, `TropicalRainforest`.
+- Snowy mountain peaks in cold-biome `HillsL2` cells.
+- Vegetation sprite variety: pines in boreal, palms in tropical, cacti in desert,
+  broadleaf in temperate — driven from the existing single `MapLayerId.Vegetation`
+  mask, no layer split.
+
+**Scope.** Pure adapter-side. No new `MapLayerId`. No new `MapFieldId`. No pipeline
+stage. No `MapPipelineRunner2D` modification. The adapter reads the existing `Biome`
+field and routes layer→tile resolution through a biome-aware `TilesetConfig` extension.
+
+**Open mechanism choices** (resolved in `Phase_Q_Design.md` when phase activates):
+- Extend `TilesetConfig.LayerEntry` with optional `BiomeType[]` filter + per-biome tile
+  arrays, vs. parallel `BiomeTilesetOverride` ScriptableObject wrapping a base
+  `TilesetConfig`, vs. multiple `TilesetConfig` assets selected by a `BiomeTilesetSelector`.
+- Per-layer scope: which `MapLayerId` values participate (likely `Land`, `LandInterior`,
+  `LandCore`, `Vegetation`, `HillsL1`, `HillsL2`; not `Walkable`, `Paths`).
+- Fallback when biome has no entry: use base layer tile (recommended) vs. magenta sentinel.
+
+**Soft dependency: biome transition blending.** Currently a Tier 1 unbuilt item per
+`technique_integration_matrix.md` ("Biome transition blending — NONE"). Without it,
+biome boundaries produce sharp tile changes. Phase Q ships acceptably without it
+(hard transitions match the current `Biome` field's hard-boundary nature); blending
+is a separate later refinement that improves Q's visual output.
+
+**Expected files:** `Phase_Q_Design.md` (when activated). Extension to `TilesetConfig.cs`
+or new `BiomeTilesetOverride.cs` (mechanism choice deferred). Extension to
+`TilemapAdapter2D.cs` to consult biome at tile resolution time. Possibly a starter
+`BiomeTilesetOverride-Default.asset`.
+
+**Dependencies:** Phase M (done). No others required.
+
+**Non-goals:** No new pipeline contract. No new field or layer. No biome blending
+(separate future work). No vegetation layer split. No region-aware tile selection
+(M2.b's `BiomeRegionId` is not consumed here — region is a different axis).
+
+Authority note: Phase Q is roadmap-scoped only. It is **not** implementation authority
+and **not** a governed surface. Design document `Phase_Q_Design.md` to be written when
+the phase activates. Do not promote into SSoTs until designed.
+
+### Phase Q2 — Composite-Condition Tile Selection
+**Planning only. Sequenced on adapter track. Independent of Phase N/O/P/W path. Sibling of Phase Q (can ship in either order; share architecture flavor, do not depend on each other).**
+
+Closes the gap surfaced during V.a smoke testing (2026-04-15): some visually meaningful
+tile types are derived from the **simultaneous presence of two or more `MapLayerId`s at
+a cell**, not from any single layer or biome. The pipeline already produces all the
+truth needed; the adapter has no system to consume layer combinations.
+
+**Worked examples (catalog of likely consumers):**
+
+| Composite | Condition | Notes |
+|---|---|---|
+| Waterfall / rapids | `Rivers ∧ HillsL2` | Originating motivation. River dropping over a high cliff. |
+| Potholes / marmitas | `Rivers ∧ HighFlow ∧ drop-proximity` | Fluvial erosion features. Prereq candidate: slope/gradient field (possible L2). |
+| Bridge | `Rivers ∧ Paths` | Phase O dependency. River + path = crossing structure. |
+| Ford | `Rivers ∧ ShallowWater` (or `Rivers ∧ low FlowAccumulation`) | Shallow river crossing. |
+| Cliff | `LandEdge ∧ HillsL2` | High coastal terrain. |
+| Wetland | `Vegetation ∧ adjacent_to(Rivers ∨ Lakes)` | Future ecology pass. Adjacency adds scope. |
+| River mouth | `Rivers ∧ ShallowWater` | River meeting sea. |
+
+Five-plus likely consumers within already-roadmapped work. Justifies a real system
+rather than per-feature hardcoding.
+
+**Scope.** Pure adapter-side. **No new `MapLayerId`. No new `MapFieldId`. No pipeline
+stage. No `MapPipelineRunner2D` modification. No golden break.** A composite tile is a
+*derived view* over existing layer truth; promoting derived values to `MapLayerId` would
+mean unnecessary golden recapture and partition-array updates for every new composite.
+
+**Design pattern (deferred to `Phase_Q2_Design.md` when activated):** mirror the Phase
+H8 `MegaTileRule` ScriptableObject pattern. Sketch:
+
+```csharp
+[CreateAssetMenu(menuName = "Islands/PCG/Composite Tile Rule")]
+public sealed class CompositeTileRule : ScriptableObject
+{
+    public string label;                  // "Waterfall"
+    public MapLayerId[] requireAll;       // {Rivers, HillsL2}
+    public MapLayerId[] requireNone;      // optional: {Lakes}
+    public TileBase tile;                 // sprite to stamp
+    public CompositeTargetTilemap target; // enum: BaseOverride / Overlay / CompositeOverlay
+    public bool addCollider;              // optional opt-in
+}
+```
+
+Plus `CompositeTileScanner` + `CompositeTileStamper` mirroring H8's `MegaTileScanner` /
+`MegaTileStamper`. Runs as an adapter post-pass after the existing
+`StampMultiLayer` and any H8 mega-tile pass. Wired via a new `compositeRules:
+CompositeTileRule[]` field on `PCGMapTilemapVisualization` plus a new
+`compositeOverlayTilemap` slot.
+
+**Open design questions** (resolved in `Phase_Q2_Design.md` when activated):
+
+1. **Render order / target tilemap.** Composite tiles likely want their own tilemap to
+   draw on top of the overlay tilemap (so a waterfall is visible above hills).
+   `CompositeTargetTilemap` enum vs. explicit `Tilemap` reference per rule.
+2. **Collider opt-in.** Bridges affect walkability; cliffs may block; waterfalls don't.
+   Per-rule `addCollider` flag with optional `compositeColliderTilemap` slot.
+3. **Suppression.** Should a waterfall cell suppress vegetation rendering on the overlay
+   tilemap underneath? Per-rule `suppressOverlayLayers: MapLayerId[]` field, or accept
+   visual stacking and rely on sprite alpha (consistent with the river-valley ecology
+   approach from the L-fix.a session).
+4. **Adjacency conditions.** "Wetland" needs `adjacent_to(Rivers ∨ Lakes)`, not just
+   "is Rivers". Either restrict Q2 to per-cell-only conditions and defer adjacency to
+   a Phase Q3, or include a `requireAdjacency: AdjacencyCondition[]` field at extra
+   complexity cost.
+5. **Multi-rule precedence.** What if both "Bridge" and "Waterfall" match a cell?
+   Rule order in the array (last wins / first wins / explicit priority).
+6. **V.a tooltip integration.** Composite tiles aren't `MapLayerId`s. Should the
+   tooltip show "would render as: Waterfall"? Probably out of scope for Q2; consider
+   for a later V.c.
+
+**Expected files:** `Phase_Q2_Design.md` (when activated). New
+`CompositeTileRule.cs`, `CompositeTileScanner.cs`, `CompositeTileStamper.cs` under
+`Adapters/Tilemap/`. Extension to `PCGMapTilemapVisualization.cs` for the rules array,
+the new tilemap slot, and the post-pass invocation. Possibly starter rule assets
+(`CompositeTileRule-Waterfall.asset`, etc.) under `PCG Map Tilemap/CompositeRules/`.
+
+**Dependencies:** None hard. Softly benefits from Phase L (rivers/lakes) and Phase H8
+(mega-tile pattern reference). Independent of Phase Q (biome-conditional) — they share
+architecture-flavor but operate on different axes (layer composition vs. biome lookup).
+
+**Non-goals:** No new pipeline contract. No new field or layer. No golden coverage
+(adapter-side, derived view). No determinism gate.
+
+Authority note: Phase Q2 is roadmap-scoped only. It is **not** implementation authority
+and **not** a governed surface. Design document `Phase_Q2_Design.md` to be written when
+the phase activates. Do not promote into SSoTs until designed.
 
 ### Phase N — World-Site / POI Placement
 Planning only.
@@ -951,3 +1141,59 @@ Planning / exploratory only. Not implementation authority.
 ## Legacy relationship
 Legacy map-generation documents are conceptual reference only for the new pipeline.
 The active authoritative direction is masks/fields + adapters-last + deterministic headless stages.
+
+---
+
+## Parking Lot — Speculative Ideas
+
+Items below are not planned work. They are design seeds worth preserving for when their parent phase activates.
+
+### PL-1 — Tectonic-line archipelago distribution (Phase W)
+**Date:** 2026-04-25  
+**Idea:** When distributing multiple islands on a world map, trace fracture/fault lines using noised splines across the grid and seed island origins along those lines. This produces geologically plausible archipelago chains (Ring-of-Fire pattern, mid-ocean ridges) instead of uniform random scatter.  
+**Reference:** Real-world earthquake distribution maps show that volcanic island chains (Indonesia, Japan, Philippines, Hawaii) cluster along tectonic plate boundaries.  
+**Relevance:** Phase W world-map generation — island placement strategy.  
+**Status:** Unvalidated seed. No implementation work.
+
+### PL-2 — Moisture-driven vegetation oasis clustering (Phase V / Vegetation)
+**Date:** 2026-04-25  
+**Idea:** In arid biomes, vegetation should cluster tightly around water sources (rivers, lakes, springs) rather than scattering uniformly. Use the moisture/hydrology field as an attraction mask: high moisture → dense vegetation, low moisture → barren. The transition should be sharp, not gradual — real oases have an abrupt green-to-sand edge driven by root reach to the water table.  
+**Technique sketch:** Threshold the moisture field at a biome-dependent cutoff. Feed the thresholded mask as a density multiplier into vegetation scatter. Optionally erode/dilate the mask by 1–2 cells to control fringe width.  
+**Reference:** Sahara desert oases — aerial photography shows palm clusters forming tight linear or blob shapes along wadis and spring-fed pools, with near-zero vegetation beyond 20–50m of the water edge.  
+**Relevance:** `Stage_Vegetation2D` density modulation, `Stage_Hydrology2D` moisture field consumption. Potentially Phase V (vegetation refinement) or Phase L (lakes as oasis seeds).  
+**Status:** Unvalidated seed. No implementation work.
+
+### PL-3 — Salt flat (salar) biome with mineral deposit patterns (Phase M / Biome)
+**Date:** 2026-04-26  
+**Idea:** Add a salt flat / salar biome type for arid islands or world-map regions. Unlike sand deserts (dune-dominated, height-driven), salares are defined by near-zero elevation variance and rich surface texture variation: salt crust, mineral pools, sulfur deposits, shallow brine channels. The visual identity comes from color and pattern, not topology.  
+**Key patterns to model:**  
+- **Mineral blobs:** Organic-looking deposits that grow outward from nucleation points. Could use cellular automata growth or Voronoi-seeded radial expansion with noised edges. The yellow/green sulfur formations at Salar de Gorbea exhibit lobular shapes with concentric color rings (core → edge → water fringe).  
+- **Salt channels:** Thin meandering paths through flat crust, much narrower than rivers. Could reuse hydrology flow-trace at very low gradient with a width cap of 1–2 cells.  
+- **Endorheic pools:** Shallow water bodies with no outlet — water collects and evaporates, leaving mineral rings. Seed as local minima in a nearly-flat heightfield, color by mineral type.  
+- **Abrupt color banding:** Transitions between salt, sulfur, water, and mineral zones are sharp (1–3 cell edges), not blended. Biome-transition blending should be suppressed or minimal within a salar.  
+**Reference:** Salar de Gorbea and Salar de Atacama, Chile — aerial photography showing sulfur blob formations, brine channels, and mineral pool systems at high altitude.  
+**Relevance:** `BiomeType` extension, `Stage_Biome2D` terrain-texture assignment, potentially `Stage_Vegetation2D` (salares are nearly vegetation-free — acts as a vegetation suppression zone). Phase M biome palette or a future "exotic biomes" pass.  
+**Status:** Unvalidated seed. No implementation work.
+
+### PL-4 — Glacial features: ice tongues, floating ice, fjords (Phase M / Biome + Shore)
+**Date:** 2026-04-26  
+**Idea:** Support glacial/subpolar island archetypes with three interrelated features:  
+1. **Glacier tongues:** Above a biome-dependent snow line, cells are ice/snow. Where valleys descend below the snow line, extend ice downslope as "glacier tongue" masks — flood-fill or flow-trace from the snow cap following steepest-descent until elevation drops below a melt threshold or reaches water. Width narrows as it descends (1–3 cells at terminus).  
+2. **Floating ice scatter:** In water cells adjacent to glacier termini, scatter ice chunk objects with density inversely proportional to distance from the glacier front. Could use a simple distance field from glacier-water boundary cells as a density mask, with Poisson-disk or jittered placement.  
+3. **Fjord coastline shaping:** Glacial islands have narrow steep-walled inlets rather than smooth beaches. Could be achieved by carving thin channels into the coastline during `Stage_Shore2D` or `Stage_Morphology2D` — erode 1–2 cell wide cuts perpendicular to the coast at select points, then deepen them.  
+**Supporting effects:**  
+- **Elevation-band biomes:** Forest → bare rock → snow/ice as strict altitude bands. The snow line threshold becomes a biome parameter.  
+- **Glacial water color:** Water cells near glacier termini get a "silty" tag or separate field value, enabling the tilemap adapter to use milky turquoise tiles instead of deep blue.  
+- **Moraine sediment fans:** At glacier-water contact points, a small fan of sediment/gravel extends into the water (1–3 cells), creating small islets or shoals.  
+**Reference:** Patagonian glaciers (Golfo Elefantes, Strait of Magellan) — glacier tongues calving into fjords, floating ice fields, turquoise glacial water, forest-to-ice elevation banding.  
+**Relevance:** `BiomeType` snow/ice extension, `Stage_Hills2D` or `Stage_Morphology2D` for fjord carving, `Stage_Vegetation2D` suppression above snow line, object scatter for floating ice. Likely a late-stage "climate archetype" feature after core biomes are stable.  
+**Status:** Unvalidated seed. No implementation work.
+
+### PL-5 — Terrain terracing and stepped cliffs (Phase J2 / Noise Composition)
+**Date:** 2026-04-26  
+**Idea:** Add a "terracing" or "posterization" post-process to the height field that quantizes continuous elevation into discrete steps, producing flat plateaus separated by sharp vertical drops. This creates the layered basalt-cliff look seen in Icelandic landscapes (Dynjandi, Westfjords) and volcanic islands.  
+**Technique sketch:** After fBm height generation but before land threshold, apply `floor(height * N) / N` where N controls the number of terrace levels. Alternatively, use a staircase spline via `ScalarSpline` (already implemented in Phase N2) with flat segments connected by steep ramps. The spline approach gives artistic control over where steps fall and how sharp the edges are. Could be biome-gated — only apply in volcanic/basalt biome regions.  
+**Interaction with Q2 waterfalls:** Terraced terrain + rivers = natural waterfall sites at every terrace edge. Phase Q2's `Rivers ∧ HillsL2` composite condition would fire more frequently and more plausibly on terraced terrain than on smooth gradients.  
+**Reference:** Dynjandi waterfall, Iceland — cascading falls over horizontally layered basalt producing staircase topography. Also: Giant's Causeway, Iguazú Falls, tepui mesa formations.  
+**Relevance:** `Stage_BaseTerrain2D` or a new post-terrain shaping pass. Could leverage existing `ScalarSpline` infrastructure (N2). Feeds directly into Phase Q2 waterfall visual quality.  
+**Status:** Unvalidated seed. No implementation work.

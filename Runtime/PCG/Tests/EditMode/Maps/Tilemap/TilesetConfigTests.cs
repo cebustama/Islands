@@ -11,21 +11,26 @@ using Islands.PCG.Layout.Maps;
 [TestFixture]
 public class TilesetConfigTests
 {
+    // Phase L: order updated to 15 entries — Lakes inserted after DeepWater,
+    // Rivers inserted between HillsL2 and Stairs (matches s_defaultPriorityOrder
+    // in TilesetConfig.cs).
     private static readonly MapLayerId[] ExpectedDefaultOrder =
     {
-        MapLayerId.DeepWater,
-        MapLayerId.MidWater,        // F4c
-        MapLayerId.ShallowWater,
-        MapLayerId.Land,
-        MapLayerId.LandInterior,
-        MapLayerId.LandCore,
-        MapLayerId.Vegetation,
-        MapLayerId.HillsL1,
-        MapLayerId.HillsL2,
-        MapLayerId.Stairs,
-        MapLayerId.LandEdge,
-        MapLayerId.Walkable,
-        MapLayerId.Paths,
+        MapLayerId.DeepWater,       // 0
+        MapLayerId.Lakes,           // 1 — Phase L
+        MapLayerId.MidWater,        // 2 — F4c
+        MapLayerId.ShallowWater,    // 3
+        MapLayerId.Land,            // 4
+        MapLayerId.LandInterior,    // 5
+        MapLayerId.LandCore,        // 6
+        MapLayerId.Vegetation,      // 7
+        MapLayerId.HillsL1,         // 8
+        MapLayerId.HillsL2,         // 9
+        MapLayerId.Rivers,          // 10 — Phase L
+        MapLayerId.Stairs,          // 11
+        MapLayerId.LandEdge,        // 12
+        MapLayerId.Walkable,        // 13
+        MapLayerId.Paths,           // 14
     };
 
     private TilesetConfig _config;
@@ -144,9 +149,13 @@ public class TilesetConfigTests
     [Test]
     public void DefaultLayers_LayerIdIsExplicit_NotDerivedFromPosition()
     {
+        // Phase L: positional layout updated. New positions:
+        //   0=DeepWater, 1=Lakes, 2=MidWater, 3=ShallowWater, 4=Land, ...
         Assert.AreEqual(MapLayerId.DeepWater, _config.layers[0].layerId, "Position 0 should be DeepWater.");
-        Assert.AreEqual(MapLayerId.MidWater, _config.layers[1].layerId, "Position 1 should be MidWater.");
-        Assert.AreEqual(MapLayerId.Vegetation, _config.layers[6].layerId, "Position 6 should be Vegetation.");
+        Assert.AreEqual(MapLayerId.Lakes, _config.layers[1].layerId, "Position 1 should be Lakes (Phase L).");
+        Assert.AreEqual(MapLayerId.MidWater, _config.layers[2].layerId, "Position 2 should be MidWater.");
+        Assert.AreEqual(MapLayerId.Vegetation, _config.layers[7].layerId, "Position 7 should be Vegetation.");
+        Assert.AreEqual(MapLayerId.Rivers, _config.layers[10].layerId, "Position 10 should be Rivers (Phase L).");
     }
 
     // ------------------------------------------------------------------
@@ -168,10 +177,15 @@ public class TilesetConfigTests
     [Test]
     public void ToLayerEntries_LayerIdsMatchExplicitEntryLayerIds()
     {
+        // Phase L: ToLayerEntries() returns an array indexed by (int)MapLayerId,
+        // NOT by _config.layers[i] position. So the contract is:
+        //   entries[(int)id].LayerId == id  for every id in 0..COUNT.
+        // This guarantees a layer's tile is always findable by its enum value,
+        // regardless of how the layers array is ordered or sized.
         TilemapLayerEntry[] entries = _config.ToLayerEntries();
         for (int i = 0; i < entries.Length; i++)
-            Assert.AreEqual(_config.layers[i].layerId, entries[i].LayerId,
-                $"Entry {i}: output LayerId must match layers[{i}].layerId.");
+            Assert.AreEqual((MapLayerId)i, entries[i].LayerId,
+                $"Entry {i}: output LayerId must equal (MapLayerId){i}.");
     }
 
     // ------------------------------------------------------------------
@@ -234,6 +248,8 @@ public class TilesetConfigTests
     [Test]
     public void ToLayerEntries_AnimatedTileWinsOverStaticTile()
     {
+        // Phase L: entries are indexed by (int)MapLayerId, so use the enum
+        // value directly to look up the result — NOT the position in _config.layers.
         Tile staticTile = ScriptableObject.CreateInstance<Tile>();
         Tile animatedTile = ScriptableObject.CreateInstance<Tile>();
         try
@@ -242,7 +258,7 @@ public class TilesetConfigTests
             _config.layers[idx].tile = staticTile;
             _config.layers[idx].animatedTile = animatedTile;
             _config.layers[idx].enabled = true;
-            Assert.AreSame(animatedTile, _config.ToLayerEntries()[idx].Tile,
+            Assert.AreSame(animatedTile, _config.ToLayerEntries()[(int)MapLayerId.DeepWater].Tile,
                 "animatedTile must take precedence over tile.");
         }
         finally { Object.DestroyImmediate(staticTile); Object.DestroyImmediate(animatedTile); }
@@ -258,7 +274,7 @@ public class TilesetConfigTests
             _config.layers[idx].tile = staticTile;
             _config.layers[idx].animatedTile = null;
             _config.layers[idx].enabled = true;
-            Assert.AreSame(staticTile, _config.ToLayerEntries()[idx].Tile,
+            Assert.AreSame(staticTile, _config.ToLayerEntries()[(int)MapLayerId.DeepWater].Tile,
                 "When animatedTile is null, static tile must be used.");
         }
         finally { Object.DestroyImmediate(staticTile); }
@@ -281,7 +297,7 @@ public class TilesetConfigTests
             _config.layers[idx].animatedTile = a;
             _config.layers[idx].ruleTile = r;
             _config.layers[idx].enabled = true;
-            Assert.AreSame(r, _config.ToLayerEntries()[idx].Tile,
+            Assert.AreSame(r, _config.ToLayerEntries()[(int)MapLayerId.ShallowWater].Tile,
                 "ruleTile must take precedence over animatedTile and tile.");
         }
         finally { Object.DestroyImmediate(s); Object.DestroyImmediate(a); Object.DestroyImmediate(r); }
@@ -299,7 +315,7 @@ public class TilesetConfigTests
             _config.layers[idx].animatedTile = a;
             _config.layers[idx].ruleTile = null;
             _config.layers[idx].enabled = true;
-            Assert.AreSame(a, _config.ToLayerEntries()[idx].Tile,
+            Assert.AreSame(a, _config.ToLayerEntries()[(int)MapLayerId.ShallowWater].Tile,
                 "When ruleTile is null, animatedTile must win.");
         }
         finally { Object.DestroyImmediate(s); Object.DestroyImmediate(a); }

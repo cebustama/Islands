@@ -1,0 +1,106 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f9297941e9dd00a45a49617287a3a01a, type: 3}
+  m_Name: TilesetConfig_Winlu
+  m_EditorClassIdentifier: Islands.PCG.Adapters.Tilemap::Islands.PCG.Adapters.Tilemap.TilesetConfig
+  layers:
+  - label: DeepWater
+    layerId: 1
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 11400000, guid: 66a2a43bd271d6242a673046ce07a886, type: 2}
+    enabled: 1
+  - label: Lakes
+    layerId: 14
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: MidWater
+    layerId: 12
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: ShallowWater
+    layerId: 2
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: Land
+    layerId: 0
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: LandInterior
+    layerId: 10
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: LandCore
+    layerId: 11
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: Vegetation
+    layerId: 7
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: HillsL1
+    layerId: 3
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: HillsL2
+    layerId: 4
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: Rivers
+    layerId: 13
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: Stairs
+    layerId: 6
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: LandEdge
+    layerId: 9
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: Walkable
+    layerId: 8
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: Paths
+    layerId: 5
+    tile: {fileID: 0}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  fallbackTile: {fileID: 0}

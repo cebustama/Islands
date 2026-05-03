@@ -1,0 +1,231 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6f8c0342065c414f812b235a7de292d, type: 3}
+  m_Name: TestBiomeTileOverride
+  m_EditorClassIdentifier: Islands.PCG.Adapters.Tilemap::Islands.PCG.Adapters.Tilemap.BiomeTileOverride
+  groups:
+  - biome: 1
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 2
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 3
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 4
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 5
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 6
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 7
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 8
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 9
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 10
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 11
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+  - biome: 12
+    layers:
+    - layerId: 0
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 7
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 3
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}
+    - layerId: 4
+      tile: {fileID: 0}
+      animatedTile: {fileID: 0}
+      ruleTile: {fileID: 0}

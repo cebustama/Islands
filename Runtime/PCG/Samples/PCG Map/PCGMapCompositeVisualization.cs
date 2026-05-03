@@ -5,6 +5,7 @@ using UnityEngine;
 using Islands.PCG.Core;
 using Islands.PCG.Fields;
 using Islands.PCG.Grids;
+using Islands.PCG.Inspection;
 using Islands.PCG.Layout.Maps;
 using Islands.PCG.Layout.Maps.Stages;
 using Islands.PCG.Operators;
@@ -27,7 +28,7 @@ namespace Islands.PCG.Samples
     ///             TerrainNoiseSettings structs with IEquatable dirty-tracking.
     /// </summary>
     [ExecuteAlways]
-    public sealed class PCGMapCompositeVisualization : MonoBehaviour
+    public sealed class PCGMapCompositeVisualization : MonoBehaviour, IMapContextSource
     {
         // -------------------------------------------------------------------------
         // CompositeLayerSlot
@@ -187,6 +188,24 @@ namespace Islands.PCG.Samples
         private MaterialPropertyBlock mpb;
         private bool dirty = true;
         private int updateCalls;
+
+        // Phase V.a: monotonic counter for IMapContextSource consumers.
+        private int _regenVersion;
+
+        // =====================================================================
+        // IMapContextSource (Phase V.a) — read-only inspection seam.
+        // The composite viz renders to a Texture2D, not a Tilemap; Tilemap is null
+        // and TryWorldToCell always returns false. Phase V components no-op against
+        // this source gracefully (Phase_V_Design.md §4.4, §15.6).
+        // =====================================================================
+        MapContext2D IMapContextSource.Context => ctx;
+        UnityEngine.Tilemaps.Tilemap IMapContextSource.Tilemap => null;
+        bool IMapContextSource.FlipY => false;
+        int IMapContextSource.RegenerationVersion => _regenVersion;
+        bool IMapContextSource.TryWorldToCell(Vector3 world, out int x, out int y)
+        {
+            x = 0; y = 0; return false;
+        }
 
         private BaseTerrainStage_Configurable baseStage;
         private Stage_Hills2D hillsStage;
@@ -398,6 +417,7 @@ namespace Islands.PCG.Samples
 
             dirty = false;
             updateCalls++;
+            _regenVersion++; // Phase V.a — invalidates IMapContextSource consumer caches.
 
             Debug.Log(
                 $"[PCGMapCompositeVisualization] Update #{updateCalls} res={eRes} seed={eSeed} " +

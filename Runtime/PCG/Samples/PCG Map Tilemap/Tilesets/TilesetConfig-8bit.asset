@@ -91,4 +91,16 @@ MonoBehaviour:
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 0}
     enabled: 1
+  - label: Rivers
+    layerId: 13
+    tile: {fileID: 11400000, guid: 1c1903108de27e545801fa09b849f03f, type: 2}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
+  - label: Lakes
+    layerId: 14
+    tile: {fileID: 11400000, guid: 1c1903108de27e545801fa09b849f03f, type: 2}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
+    enabled: 1
   fallbackTile: {fileID: 11400000, guid: 79265ec2f68a7a746bffb731ce381711, type: 2}

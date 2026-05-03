@@ -702,3 +702,126 @@ additional interface or handoff struct is needed — the scalar field IS the int
 - **No Strahler ordering.** River hierarchy (stream order 1, 2, 3...) is not computed.
   FlowAccumulation serves as a continuous proxy for river importance. Strahler ordering
   is a potential Phase L2 extension if discrete river hierarchy is needed.
+
+---
+
+## 17. Post-delivery fixes and design notes
+
+Observations and corrections recorded after Phase L shipped and visual smoke tests
+1–4 passed. Captures what was learned during test authoring and visual validation;
+does not alter the Phase L contract.
+
+---
+
+### 17.1 L-fix.a — Multi-layer partition arrays bug in `PCGMapTilemapVisualization`
+
+**Symptom:** Visual smoke test T2 showed no rivers rendering in multi-layer mode,
+despite the Rivers mask containing correct cell data (verified via scalar overlay
+and field hash).
+
+**Root cause:** Static arrays `s_baseLayers`, `s_overlayLayers`, and
+`s_colliderLayers` (declared around lines 1196–1204) were hardcoded to the
+pre-Phase-L layer set. `FilterTable()` uses these arrays to route layers to the
+correct tilemap in multi-layer mode; any `MapLayerId` absent from all three is
+silently dropped.
+
+**Fix applied:**
+- `MapLayerId.Lakes` added to `s_baseLayers`, positioned before `MidWater` so the
+  coastal ShallowWater ring paints over lake-adjacent water cells.
+- `MapLayerId.Rivers` added to `s_overlayLayers` as the last entry, giving rivers
+  highest priority on the overlay tilemap.
+- `s_colliderLayers` unchanged — lakes currently do not block movement
+  (consistent with gameplay intent; revisit if lake traversal rules change).
+
+**Action item (non-blocking):** The same bug class may exist in
+`PCGMapVisualization.cs` (the non-tilemap GPU lantern variant), which has its own
+layer partitioning. Not in scope for L-fix.a, but flagged for the
+adapter/visualization hardening pass.
+
+**Maintenance rule:** Recorded in `CURRENT_STATE.md` — any new `MapLayerId` MUST
+be classified against all three arrays or the layer will be silently invisible
+and/or non-collidable in multi-layer mode.
+
+---
+
+### 17.2 L-8 invariant — corrected formulation
+
+The originally documented L-8 invariant was mathematically wrong and has been
+superseded.
+
+**Original (incorrect):**
+
+```
+sum(flowAccum over Land) == landCount
+```
+
+**Corrected:**
+
+```
+sum(flowAccum over Land) ≥ landCount
+AND every Land cell has flowAccum ≥ 1
+```
+
+**Rationale:** `AccumulateFlow` propagates each cell's accumulated value to its
+downstream neighbor without subtracting from upstream cells. For a linear chain
+of length N the total mass summed across all cells is `N + (N-1) + … + 1 =
+N(N+1)/2`, not N. Generally:
+
+```
+sum(flowAccum over Land) = landCount + Σ path_lengths
+```
+
+which is bounded below by `landCount` and exceeds it whenever any cell has a
+downstream successor. Exact mass conservation (total outflow = land cell count)
+holds only at outlet cells — these are stage-internal and not exposed as an
+invariant.
+
+---
+
+### 17.3 Priority-Flood coastal-cell subtlety (test-design note)
+
+`FillDepressions` seeds the priority queue with **every coastal land cell** (any
+land cell with a non-Land or out-of-bounds 8-neighbor), each at its own original
+height, and marks them visited. The flood loop only raises *unvisited* cells.
+Therefore **coastal cells are never raised**, by design — they are assumed to
+drain to ocean already.
+
+**Consequence for test authoring:** A "depression" placed in a thin land strip
+whose cells all touch water or an OOB edge will never be filled, because all
+cells qualify as coastal seeds and are visited from the start.
+
+**Test construction rule:** For `FillDepressions` assertions to be meaningful,
+the depression must sit in an all-land 8-neighborhood. Use a ≥ 5×5 grid with
+land walls (not water borders) so the depression cell is strictly interior.
+Thin-strip topologies are not valid test beds for this operator.
+
+---
+
+### 17.4 Plateau strategy for D8 chain tests (test-design note)
+
+D8 chain tests need predictable flow routing along a known path. Two failure
+modes arise from naive test grid construction:
+
+- **Problem 1 — Water-border coastal-cliff routing.** If chain cells border
+  water (h=0), each land cell's steepest neighbor is the water cell, not the
+  next chain cell. The chain "leaks" off to the coast instead of following the
+  intended path.
+- **Problem 2 — Plateau interior contamination.** All-land plateaus avoid
+  Problem 1 but introduce a new issue: interior plateau cells (no OOB neighbor
+  in any direction) have no drain available and route diagonally to the lowest
+  visible chain/confluence cell, polluting downstream accumulation counts.
+
+**Resolutions used in `HeightFieldHydrologyOps2DTests`:**
+
+- **Top/bottom-row plateau with h=3.** Place plateau rows on the grid's top or
+  bottom border so every plateau cell has an OOB neighbor with slope ≈ h,
+  draining straight off the map. Used by `AccumulateFlow_LinearDrainage` and
+  `ExtractRivers_ThresholdAt50pct`.
+- **Bounded-contamination assertions.** Where geometry forces ≥ 1 stranded
+  interior plateau cell (e.g., the inter-arm cell in a two-tributary Y-shape),
+  accept `+1` per stranded cell and assert a *range*: `≥ sum-of-arms` and
+  `≤ sum-of-arms + N`, where N is the count of structurally unavoidable
+  stranded cells. Used by `AccumulateFlow_TwoTributaries`.
+
+These patterns are mandatory for future D8 test additions; see the referenced
+tests for reference implementations.

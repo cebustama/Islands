@@ -32,6 +32,7 @@ the deep game × technique cross-check treatment (same pattern as noise_cross_re
 | NMS terrain archetypes | Open (low priority) | — |
 | DF river classification criteria | Open (low priority) | — |
 | DF lake growth algorithm | Open (low priority) | — |
+| Atmospheric / weather as 9th technique family | Open (exploratory) | — |
 
 ## Batch updates applied to technique_integration_matrix.md
 

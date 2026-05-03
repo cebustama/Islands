@@ -20,6 +20,9 @@ namespace Islands.PCG.Adapters.Tilemap
     /// Phase H4: animatedTile slot.
     /// Phase H6: ruleTile slot (context-aware neighbor-matching).
     /// Phase F4c: MidWater added to default priority order.
+    /// Phase L: Rivers and Lakes added. ToLayerEntries() made robust against
+    ///          pre-Phase-L assets (13-entry arrays still resolve correctly for
+    ///          the layers they cover). Migration context menu added.
     /// </summary>
     [CreateAssetMenu(
         fileName = "TilesetConfig",
@@ -33,18 +36,20 @@ namespace Islands.PCG.Adapters.Tilemap
         private static readonly MapLayerId[] s_defaultPriorityOrder =
         {
             MapLayerId.DeepWater,     // 0 — base ocean (deepest)
-            MapLayerId.MidWater,      // 1 — intermediate depth (F4c; overwrites DeepWater)
-            MapLayerId.ShallowWater,  // 2 — coastal water (overwrites MidWater)
-            MapLayerId.Land,          // 3 — grass base
-            MapLayerId.LandInterior,  // 4 — interior tint (coast-edge excluded)
-            MapLayerId.LandCore,      // 5 — deep interior tint (eroded, Phase G)
-            MapLayerId.Vegetation,    // 6 — forest (overwrites interior land)
-            MapLayerId.HillsL1,       // 7 — hills (overwrites vegetation)
-            MapLayerId.HillsL2,       // 8 — mountain peaks (overwrites hills)
-            MapLayerId.Stairs,        // 9 — mountain passes (overwrites HillsL1 edge)
-            MapLayerId.LandEdge,      // 10 — coast highlight (high priority)
-            MapLayerId.Walkable,      // 11 — traversal (usually no tile; informational)
-            MapLayerId.Paths,         // 12 — path network (reserved; Phase O)
+            MapLayerId.Lakes,         // 1 — inland water bodies (Phase L; overwrites DeepWater)
+            MapLayerId.MidWater,      // 2 — intermediate depth (F4c; overwrites DeepWater)
+            MapLayerId.ShallowWater,  // 3 — coastal water (overwrites MidWater)
+            MapLayerId.Land,          // 4 — grass base
+            MapLayerId.LandInterior,  // 5 — interior tint (coast-edge excluded)
+            MapLayerId.LandCore,      // 6 — deep interior tint (eroded, Phase G)
+            MapLayerId.Vegetation,    // 7 — forest (overwrites interior land)
+            MapLayerId.HillsL1,       // 8 — hills (overwrites vegetation)
+            MapLayerId.HillsL2,       // 9 — mountain peaks (overwrites hills)
+            MapLayerId.Rivers,        // 10 — rivers (Phase L; overwrites land)
+            MapLayerId.Stairs,        // 11 — mountain passes (overwrites HillsL1 edge)
+            MapLayerId.LandEdge,      // 12 — coast highlight (high priority)
+            MapLayerId.Walkable,      // 13 — traversal (usually no tile; informational)
+            MapLayerId.Paths,         // 14 — path network (reserved; Phase O)
         };
 
         // ------------------------------------------------------------------
@@ -98,37 +103,59 @@ namespace Islands.PCG.Adapters.Tilemap
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Converts this config to a <see cref="TilemapLayerEntry"/> array.
-        /// H6 tile resolution: ruleTile > animatedTile > tile.
+        /// Converts this config to a <see cref="TilemapLayerEntry"/> array suitable
+        /// for <see cref="TilemapAdapter2D"/>.
+        ///
+        /// Phase L: now resolves entries by <see cref="MapLayerId"/> key rather than
+        /// array index, so pre-Phase-L assets (13-entry arrays) continue to work for
+        /// the layers they cover.  Missing layers (Rivers, Lakes) simply produce no
+        /// tile stamp — the fallback tile applies to unmatched cells as before.
+        ///
+        /// Returns null only when the layers array is null or empty.
         /// </summary>
         public TilemapLayerEntry[] ToLayerEntries()
         {
-            if (layers == null || layers.Length != (int)MapLayerId.COUNT)
+            if (layers == null || layers.Length == 0)
             {
                 Debug.LogWarning(
-                    $"[TilesetConfig] '{name}': layers.Length ({layers?.Length ?? 0}) " +
-                    $"!= MapLayerId.COUNT ({(int)MapLayerId.COUNT}). " +
+                    $"[TilesetConfig] '{name}': layers array is null or empty. " +
                     "Falling back to component's inline array.");
                 return null;
             }
 
-            var result = new TilemapLayerEntry[(int)MapLayerId.COUNT];
-            for (int i = 0; i < result.Length; i++)
+            int count = (int)MapLayerId.COUNT;
+
+            if (layers.Length != count)
             {
+                // Warn but continue — build a keyed lookup from whatever entries exist.
+                Debug.LogWarning(
+                    $"[TilesetConfig] '{name}': layers.Length ({layers.Length}) " +
+                    $"!= MapLayerId.COUNT ({count}). " +
+                    "Some layers may be missing. Use 'Migrate to Phase L' context menu " +
+                    "to add Rivers and Lakes without losing existing tile assignments.");
+            }
+
+            // Build lookup by layerId (robust against any array length or order).
+            var lookup = new System.Collections.Generic.Dictionary<MapLayerId, LayerEntry>(layers.Length);
+            foreach (var entry in layers)
+                lookup[entry.layerId] = entry;
+
+            var result = new TilemapLayerEntry[count];
+            for (int i = 0; i < count; i++)
+            {
+                var layerId = (MapLayerId)i;
                 TileBase entryTile = null;
-                if (layers[i].enabled)
+
+                if (lookup.TryGetValue(layerId, out LayerEntry e) && e.enabled)
                 {
-                    if (layers[i].ruleTile != null)
-                        entryTile = layers[i].ruleTile;
-                    else if (layers[i].animatedTile != null)
-                        entryTile = layers[i].animatedTile;
-                    else if (layers[i].tile != null)
-                        entryTile = layers[i].tile;
+                    if (e.ruleTile != null) entryTile = e.ruleTile;
+                    else if (e.animatedTile != null) entryTile = e.animatedTile;
+                    else if (e.tile != null) entryTile = e.tile;
                 }
 
                 result[i] = new TilemapLayerEntry
                 {
-                    LayerId = layers[i].layerId,
+                    LayerId = layerId,
                     Tile = entryTile,
                 };
             }
@@ -158,5 +185,65 @@ namespace Islands.PCG.Adapters.Tilemap
             }
             return arr;
         }
+
+        // ------------------------------------------------------------------
+        // Migration — context menu (Editor only)
+        // ------------------------------------------------------------------
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// Appends missing Phase L layers (Rivers, Lakes) to an existing
+        /// 13-entry TilesetConfig without wiping any existing tile assignments.
+        ///
+        /// Safe to run multiple times — already-present layers are skipped.
+        /// Run this on every existing TilesetConfig asset after updating to Phase L.
+        /// </summary>
+        [ContextMenu("Migrate to Phase L (add Rivers + Lakes)")]
+        private void MigrateToPhaseL()
+        {
+            var phaseL = new[] { MapLayerId.Rivers, MapLayerId.Lakes };
+
+            // Collect which layerIds are already present.
+            var present = new System.Collections.Generic.HashSet<MapLayerId>();
+            if (layers != null)
+                foreach (var e in layers) present.Add(e.layerId);
+
+            bool anyAdded = false;
+            foreach (var id in phaseL)
+            {
+                if (present.Contains(id)) continue;
+
+                var newEntry = new LayerEntry
+                {
+                    label = id.ToString(),
+                    layerId = id,
+                    tile = null,
+                    animatedTile = null,
+                    ruleTile = null,
+                    enabled = true,
+                };
+
+                // Append to array.
+                int oldLen = layers?.Length ?? 0;
+                var next = new LayerEntry[oldLen + 1];
+                if (layers != null) System.Array.Copy(layers, next, oldLen);
+                next[oldLen] = newEntry;
+                layers = next;
+                anyAdded = true;
+
+                Debug.Log($"[TilesetConfig] '{name}': added entry for {id}.");
+            }
+
+            if (!anyAdded)
+            {
+                Debug.Log($"[TilesetConfig] '{name}': already up to date — no entries added.");
+                return;
+            }
+
+            UnityEditor.EditorUtility.SetDirty(this);
+            UnityEditor.AssetDatabase.SaveAssets();
+            Debug.Log($"[TilesetConfig] '{name}': migration complete. layers.Length = {layers.Length}.");
+        }
+#endif
     }
 }

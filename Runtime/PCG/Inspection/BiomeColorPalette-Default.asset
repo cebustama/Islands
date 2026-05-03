@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9be78f2e49ba15d4fa81dff54c584a17, type: 3}
+  m_Name: BiomeColorPalette-Default
+  m_EditorClassIdentifier: Islands.PCG.Inspection::Islands.PCG.Inspection.BiomeColorPalette
+  entries:
+  - biome: 0
+    color: {r: 0.33333334, g: 0.53333336, b: 0.6666667, a: 1}
+  - biome: 1
+    color: {r: 0.9607843, g: 0.9607843, b: 1, a: 1}
+  - biome: 2
+    color: {r: 0.754717, g: 0.55891776, b: 0.55891776, a: 1}
+  - biome: 3
+    color: {r: 0.18431373, g: 0.30980393, b: 0.20784314, a: 1}
+  - biome: 4
+    color: {r: 0.7882353, g: 0.72156864, b: 0.5411765, a: 1}
+  - biome: 5
+    color: {r: 0.65882355, g: 0.627451, b: 0.39607844, a: 1}
+  - biome: 6
+    color: {r: 0.2901961, g: 0.4862745, b: 0.26666668, a: 1}
+  - biome: 7
+    color: {r: 0.18431373, g: 0.40784314, b: 0.25882354, a: 1}
+  - biome: 8
+    color: {r: 0.9019608, g: 0.7882353, b: 0.5372549, a: 1}
+  - biome: 9
+    color: {r: 0.72156864, g: 0.7764706, b: 0.41568628, a: 1}
+  - biome: 10
+    color: {r: 0.36078432, g: 0.59607846, b: 0.2509804, a: 1}
+  - biome: 11
+    color: {r: 0.12156863, g: 0.45882353, b: 0.20784314, a: 1}
+  - biome: 12
+    color: {r: 0.9411765, g: 0.8980392, b: 0.6901961, a: 1}
+  fallbackColor: {r: 1, g: 0, b: 1, a: 1}

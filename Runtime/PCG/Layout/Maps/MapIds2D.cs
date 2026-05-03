@@ -1,4 +1,4 @@
-namespace Islands.PCG.Layout.Maps
+﻿namespace Islands.PCG.Layout.Maps
 {
     /// <summary>
     /// Stable, index-based registry IDs for MaskGrid2D layers in the Map Pipeline.
@@ -26,7 +26,11 @@ namespace Islands.PCG.Layout.Maps
         // Phase F4c append-only additions (do not reorder existing IDs)
         MidWater = 12,
 
-        COUNT = 13
+        // Phase L append-only additions (do not reorder existing IDs)
+        Rivers = 13,
+        Lakes = 14,
+
+        COUNT = 15
     }
 
     /// <summary>
@@ -46,9 +50,14 @@ namespace Islands.PCG.Layout.Maps
 
         // Phase M2.b append-only additions (do not reorder existing IDs)
         // Named BiomeRegionId (not RegionId) to reserve namespace for future overlay
-        // regions (factions, sacred ground, cross-biome territories) � D6.
+        // regions (factions, sacred ground, cross-biome territories) — D6.
         BiomeRegionId = 5,
 
-        COUNT = 6
+        // Phase L append-only additions (do not reorder existing IDs)
+        // Raw upstream cell count. 0f for non-Land, ≥1f for all Land cells.
+        // Normalized by Phase M via its own riverFlowNorm tunable.
+        FlowAccumulation = 6,
+
+        COUNT = 7
     }
 }
