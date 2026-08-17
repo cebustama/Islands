@@ -413,6 +413,14 @@ namespace Islands.PCG.Editor
                 }
             }
 
+            // W-aux.a: map statistics dump. Reads the live context via the component's
+            // public API — no rebuild, no reflection. Not a serialized field, so the
+            // strict-whitelist binding rule does not apply (nothing to bind).
+            if (GUILayout.Button("Log Map Stats (JSON to Console)"))
+            {
+                ((PCGMapTilemapVisualization)target).LogMapStats();
+            }
+
             serializedObject.ApplyModifiedProperties();
         }
     }

@@ -678,6 +678,32 @@ namespace Islands.PCG.Adapters.Tilemap
             return h;
         }
 
+        // =====================================================================
+        // Phase W-aux.a — on-demand map statistics (button-driven)
+        // =====================================================================
+
+        /// <summary>
+        /// Exports the current context and logs a JSON statistics snapshot to the
+        /// Console. Button-driven only (O(cells) per field/layer) — never wired
+        /// into the per-rebuild path. No rebuild is triggered; reads the map as
+        /// last built.
+        /// </summary>
+        public void LogMapStats()
+        {
+            if (ctx == null)
+            {
+                Debug.LogWarning(
+                    "[PCGMapTilemapVisualization] No map context — enable the " +
+                    "component and let it build once before logging stats.", this);
+                return;
+            }
+            MapDataExport statsExport = MapExporter2D.Export(ctx);
+            Debug.Log(
+                $"[PCGMapTilemapVisualization] mapstats seed={statsExport.Seed} " +
+                $"res={statsExport.Width}x{statsExport.Height}\n" +
+                MapStatsExporter2D.ToJson(statsExport), this);
+        }
+
         private static ulong GoldenFnvMixU64(ulong h, ulong value, ulong fnvPrime)
         {
             h ^= (byte)(value); h *= fnvPrime;
