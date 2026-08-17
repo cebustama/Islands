@@ -202,7 +202,13 @@ namespace Islands.PCG.Adapters.Tilemap
                 ? export.GetField(MapFieldId.Biome)
                 : null;
 
-            // Pre-fetch layer arrays (same pattern as Apply).
+            // Pre-fetch layer arrays.
+            //
+            // Q-fix.a (Q-BUG-1): unlike Apply(), entries with a null base tile are NOT
+            // skipped here — a biome override may supply a tile for a layer that has no
+            // base art at all (e.g. per-biome vegetation with an empty base slot).
+            // The null-winner guard in the per-cell scan below preserves Apply() parity:
+            // a layer that resolves to nothing never overwrites a lower-priority winner.
             bool[][] cachedLayers = new bool[entryCount][];
             TileBase[] cachedTiles = new TileBase[entryCount];
             MapLayerId[] cachedLayerIds = new MapLayerId[entryCount];
@@ -211,7 +217,7 @@ namespace Islands.PCG.Adapters.Tilemap
                 MapLayerId id = priorityTable[e].LayerId;
                 TileBase tile = priorityTable[e].Tile;
                 cachedLayerIds[e] = id;
-                if (tile != null && export.HasLayer(id))
+                if (export.HasLayer(id))
                     cachedLayers[e] = export.GetLayer(id);
                 cachedTiles[e] = tile;
             }
@@ -229,7 +235,11 @@ namespace Islands.PCG.Adapters.Tilemap
                     int idx = rowBase + x;
 
                     // Read biome once per cell. Default 0 = Unclassified.
-                    int biomeId = biomeField != null ? (int)biomeField[idx] : 0;
+                    // Q-fix.a (Q-BUG-3): RoundToInt, matching the float→int convention used
+                    // by PCGHoverTooltip (V.a) and PCGRuntimeOverlay (V.b). Those are the
+                    // cross-check tools for this feature; a divergent convention would let
+                    // painted tile and displayed biome disagree at the edges.
+                    int biomeId = biomeField != null ? Mathf.RoundToInt(biomeField[idx]) : 0;
                     BiomeType biome = (BiomeType)biomeId;
 
                     TileBase winner = fallbackTile;
@@ -241,8 +251,12 @@ namespace Islands.PCG.Adapters.Tilemap
                         if (layer != null && layer[idx])
                         {
                             // Try biome override first; fall through to base tile.
-                            TileBase overrideTile = biomeOverride.Resolve(biome, cachedLayerIds[e]);
-                            winner = overrideTile ?? cachedTiles[e];
+                            TileBase resolved =
+                                biomeOverride.Resolve(biome, cachedLayerIds[e]) ?? cachedTiles[e];
+
+                            // Q-fix.a (Q-BUG-1): a layer that resolves to nothing must not
+                            // erase a lower-priority winner — matches Apply() semantics.
+                            if (resolved != null) winner = resolved;
                         }
                     }
 
@@ -258,7 +272,14 @@ namespace Islands.PCG.Adapters.Tilemap
         /// <see cref="ApplyBiomeAware"/>. Null override is safe — each group
         /// delegates to <see cref="Apply"/> in that case.
         ///
-        /// Phase Q.
+        /// CALLER RESPONSIBILITY (Q-fix.a, Q-BUG-2): every group passed here becomes
+        /// biome-aware, including sentinel groups. Collider groups must NOT be passed
+        /// to this method — stamp them separately with <see cref="ApplyLayered"/>.
+        /// Otherwise a biome override on a layer that also appears in the collider
+        /// priority table (HillsL2 and Lakes, in the stock configuration) replaces the
+        /// collider sentinel tile with biome art on the collider tilemap.
+        ///
+        /// Phase Q. Q-fix.a: contract clarified.
         /// </summary>
         public static void ApplyLayeredBiomeAware(
             MapDataExport export,

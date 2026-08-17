@@ -36,6 +36,10 @@ namespace Islands.PCG.Samples
     /// M-fix.a: 10 biome climate tunables promoted to Inspector. Moisture defaults adjusted (M-fix.c folded in).
     /// Phase L–M: 2 river moisture tunables added (biomeRiverMoistureBonus, biomeRiverFlowNorm).
     ///            Active only when Stage_Hydrology2D runs before Stage_Biome2D.
+    /// Phase W-aux.a: ToJson() + "Log Preset (JSON)" context menu for shareable
+    ///            parameter dumps. Includes a derived block with the N5.e effective
+    ///            hills thresholds and the resolved noise source per slot, since
+    ///            neither is visible in the Inspector. Read-only; no pipeline effect.
     /// </summary>
     [CreateAssetMenu(
         fileName = "MapGenerationPreset",
@@ -402,5 +406,187 @@ namespace Islands.PCG.Samples
                 ? hillsNoiseAsset.Settings
                 : hillsNoiseSettings,
             shapeMode: shapeMode);
+
+        // ==================================================================
+        // W-aux.a — JSON dump (diagnostics only)
+        // ==================================================================
+
+        /// <summary>
+        /// Logs this preset as JSON to the console. Right-click the asset header
+        /// (or use the gear menu) and pick "Log Preset (JSON)".
+        /// </summary>
+        [ContextMenu("Log Preset (JSON)")]
+        private void LogPresetJson()
+        {
+            Debug.Log($"[MapGenerationPreset] {name}\n{ToJson()}", this);
+        }
+
+        /// <summary>
+        /// Serializes every pipeline-driving field to JSON, plus a "derived" block
+        /// holding values the pipeline actually consumes but the Inspector never shows:
+        /// the N5.e effective hills thresholds and which noise source won per slot.
+        ///
+        /// Hand-built rather than JsonUtility so that (a) derived values can be
+        /// included, (b) AnimationCurve keys serialize readably, and (c) the output
+        /// is stable and diffable across runs. Read-only: calling this cannot change
+        /// generation output.
+        /// </summary>
+        public string ToJson()
+        {
+            var t = ToTunables();
+            var sb = new System.Text.StringBuilder(2048);
+
+            sb.Append("{\n");
+            sb.Append($"  \"asset\": {Q(name)},\n");
+
+            sb.Append("  \"runInputs\": {\n");
+            sb.Append($"    \"seed\": {seed},\n");
+            sb.Append($"    \"resolution\": {resolution}\n");
+            sb.Append("  },\n");
+
+            sb.Append("  \"stageToggles\": {\n");
+            sb.Append($"    \"hills\": {B(enableHillsStage)},\n");
+            sb.Append($"    \"shore\": {B(enableShoreStage)},\n");
+            sb.Append($"    \"vegetation\": {B(enableVegetationStage)},\n");
+            sb.Append($"    \"traversal\": {B(enableTraversalStage)},\n");
+            sb.Append($"    \"morphology\": {B(enableMorphologyStage)},\n");
+            sb.Append($"    \"biome\": {B(enableBiomeStage)}\n");
+            sb.Append("  },\n");
+            sb.Append("  \"stageTogglesNote\": \"regions + hydrology are component-scoped; "
+                      + "this asset does not carry them\",\n");
+
+            sb.Append("  \"islandShape\": {\n");
+            sb.Append($"    \"shapeMode\": {Q(shapeMode.ToString())},\n");
+            sb.Append($"    \"islandRadius01\": {F(islandRadius01)},\n");
+            sb.Append($"    \"islandAspectRatio\": {F(islandAspectRatio)},\n");
+            sb.Append($"    \"warpAmplitude01\": {F(warpAmplitude01)},\n");
+            sb.Append($"    \"islandSmoothFrom01\": {F(islandSmoothFrom01)},\n");
+            sb.Append($"    \"islandSmoothTo01\": {F(islandSmoothTo01)}\n");
+            sb.Append("  },\n");
+
+            sb.Append("  \"waterAndShore\": {\n");
+            sb.Append($"    \"waterThreshold01\": {F(waterThreshold01)},\n");
+            sb.Append($"    \"shallowWaterDepth01\": {F(shallowWaterDepth01)},\n");
+            sb.Append($"    \"midWaterDepth01\": {F(midWaterDepth01)}\n");
+            sb.Append("  },\n");
+
+            sb.Append("  \"height\": {\n");
+            sb.Append($"    \"heightQuantSteps\": {heightQuantSteps},\n");
+            sb.Append($"    \"heightRedistributionExponent\": {F(heightRedistributionExponent)},\n");
+            sb.Append($"    \"heightRemapCurve\": {CurveJson(heightRemapCurve)}\n");
+            sb.Append("  },\n");
+
+            sb.Append("  \"hills\": {\n");
+            sb.Append($"    \"hillsL1_fraction\": {F(hillsL1)},\n");
+            sb.Append($"    \"hillsL2_fraction\": {F(hillsL2)},\n");
+            sb.Append($"    \"hillsNoiseBlend\": {F(hillsNoiseBlend)}\n");
+            sb.Append("  },\n");
+
+            sb.Append("  \"biomeClimate\": {\n");
+            sb.Append($"    \"baseTemperature\": {F(biomeBaseTemperature)},\n");
+            sb.Append($"    \"lapseRate\": {F(biomeLapseRate)},\n");
+            sb.Append($"    \"latitudeEffect\": {F(biomeLatitudeEffect)},\n");
+            sb.Append($"    \"coastModerationStrength\": {F(biomeCoastModerationStrength)},\n");
+            sb.Append($"    \"tempNoiseAmplitude\": {F(biomeTempNoiseAmplitude)},\n");
+            sb.Append($"    \"tempNoiseCellSize\": {biomeTempNoiseCellSize},\n");
+            sb.Append($"    \"coastalMoistureBonus\": {F(biomeCoastalMoistureBonus)},\n");
+            sb.Append($"    \"coastDecayRate\": {F(biomeCoastDecayRate)},\n");
+            sb.Append($"    \"moistureNoiseAmplitude\": {F(biomeMoistureNoiseAmplitude)},\n");
+            sb.Append($"    \"moistureNoiseCellSize\": {biomeMoistureNoiseCellSize},\n");
+            sb.Append($"    \"riverMoistureBonus\": {F(biomeRiverMoistureBonus)},\n");
+            sb.Append($"    \"riverFlowNorm\": {F(biomeRiverFlowNorm)}\n");
+            sb.Append("  },\n");
+
+            sb.Append("  \"noise\": {\n");
+            sb.Append($"    \"terrain\": {NoiseJson(terrainNoiseAsset, terrainNoiseSettings)},\n");
+            sb.Append($"    \"warp\": {NoiseJson(warpNoiseAsset, warpNoiseSettings)},\n");
+            sb.Append($"    \"hills\": {NoiseJson(hillsNoiseAsset, hillsNoiseSettings)}\n");
+            sb.Append("  },\n");
+
+            sb.Append("  \"runBehavior\": {\n");
+            sb.Append($"    \"clearBeforeRun\": {B(clearBeforeRun)}\n");
+            sb.Append("  },\n");
+
+            // Derived: what the pipeline actually consumes. The hills thresholds are
+            // relative fractions in the Inspector but absolute Height-space values here.
+            sb.Append("  \"derived\": {\n");
+            sb.Append($"    \"hillsThresholdL1_effective\": {F(t.hillsThresholdL1)},\n");
+            sb.Append($"    \"hillsThresholdL2_effective\": {F(t.hillsThresholdL2)},\n");
+            sb.Append("    \"hillsRemapFormula\": \"L1 = water + f1*(1-water); L2 = L1 + f2*(1-L1)\"\n");
+            sb.Append("  }\n");
+
+            sb.Append("}");
+            return sb.ToString();
+        }
+
+        // ---- JSON formatting helpers (invariant culture: no comma decimals) ----
+
+        private static string F(float v) =>
+            v.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture);
+
+        private static string B(bool v) => v ? "true" : "false";
+
+        private static string Q(string s) =>
+            s == null ? "null" : $"\"{s.Replace("\\", "\\\\").Replace("\"", "\\\"")}\"";
+
+        private static string NoiseJson(NoiseSettingsAsset asset, TerrainNoiseSettings inline)
+        {
+            bool fromAsset = asset != null;
+            TerrainNoiseSettings n = fromAsset ? asset.Settings : inline;
+            string source = fromAsset ? "asset:" + asset.name : "inline";
+            return "{ "
+                 + $"\"source\": {Q(source)}, "
+                 + $"\"noiseType\": {Q(n.noiseType.ToString())}, "
+                 + $"\"frequency\": {n.frequency}, "
+                 + $"\"octaves\": {n.octaves}, "
+                 + $"\"lacunarity\": {n.lacunarity}, "
+                 + $"\"persistence\": {F(n.persistence)}, "
+                 + $"\"amplitude\": {F(n.amplitude)}, "
+                 + $"\"fractalMode\": {Q(EnumFieldToString(n, "fractalMode"))}, "
+                 + $"\"worleyDistanceMetric\": {Q(n.worleyDistanceMetric.ToString())}, "
+                 + $"\"worleyFunction\": {Q(n.worleyFunction.ToString())}, "
+                 + $"\"ridgedOffset\": {F(n.ridgedOffset)}, "
+                 + $"\"ridgedGain\": {F(n.ridgedGain)}"
+                 + " }";
+        }
+
+        /// <summary>
+        /// Reads an enum field of <see cref="TerrainNoiseSettings"/> by name and returns
+        /// its string form.
+        ///
+        /// Needed for "fractalMode" only: that enum (Islands.FractalMode) was migrated to
+        /// Noise.cs in N5.c and lives in the Islands.Runtime assembly, which
+        /// Islands.PCG.Samples does not reference. Writing n.fractalMode directly is
+        /// CS0012 — naming the type requires the assembly reference even though the
+        /// containing struct is reachable. Reflection reads the value without a
+        /// compile-time type reference.
+        ///
+        /// Trade-off: a field rename is not caught at compile time; the dump degrades to
+        /// "unknown" instead of failing. Acceptable for a diagnostics dump. The
+        /// alternative — adding an asmdef reference from Samples to Islands.Runtime — is
+        /// a dependency-graph decision, not a diagnostics decision.
+        /// </summary>
+        private static string EnumFieldToString(TerrainNoiseSettings settings, string fieldName)
+        {
+            var f = typeof(TerrainNoiseSettings).GetField(fieldName);
+            object v = f?.GetValue(settings);
+            return v != null ? v.ToString() : "unknown";
+        }
+
+        private static string CurveJson(AnimationCurve curve)
+        {
+            if (curve == null || curve.length == 0) return "null";
+            var sb = new System.Text.StringBuilder(128);
+            sb.Append("[");
+            for (int i = 0; i < curve.length; i++)
+            {
+                var k = curve[i];
+                if (i > 0) sb.Append(", ");
+                sb.Append($"{{ \"t\": {F(k.time)}, \"v\": {F(k.value)}, "
+                          + $"\"inT\": {F(k.inTangent)}, \"outT\": {F(k.outTangent)} }}");
+            }
+            sb.Append("]");
+            return sb.ToString();
+        }
     }
 }

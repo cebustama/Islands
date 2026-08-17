@@ -23,6 +23,13 @@ namespace Islands.PCG.Editor
     /// M-fix.a: 10 biome climate tunables promoted to Inspector.
     /// Phase L+M: enableHydrologyStage toggle + 3 hydrology tunables + 2 river moisture tunables.
     /// Phase Q: biomeTileOverride field (hidden when procedural tiles active).
+    /// Phase W.a: logGoldenHashes diagnostics section (always visible, never preset-gated)
+    ///            + moved the five preset-orphan fields (enableRegionsStage,
+    ///            enableHydrologyStage, hydroEpsilon, hydroRiverThresholdFraction,
+    ///            hydroMinLakeArea) out of the preset-hidden block. The component reads
+    ///            those five from the inline fields unconditionally — MapGenerationPreset
+    ///            does not carry them — so hiding them behind a preset made live
+    ///            parameters unreachable in the Inspector.
     /// </summary>
     [CustomEditor(typeof(PCGMapTilemapVisualization))]
     public sealed class PCGMapTilemapVisualizationEditor : UnityEditor.Editor
@@ -43,20 +50,24 @@ namespace Islands.PCG.Editor
         private SerializedProperty enableOverlay2, overlaySource2, overlayMin2, overlayMax2;
         private SerializedProperty overlayColorLow2, overlayColorHigh2, overlayAlpha2;
 
+        // W.a: diagnostics (always visible — never preset-gated)
+        private SerializedProperty logGoldenHashes;
+
+        // W.a: preset-orphan stage toggles — the component reads these from the inline
+        // fields even when a preset is assigned, so they must stay visible.
+        private SerializedProperty enableRegionsStage, enableHydrologyStage;
+
         // Preset-controlled (hidden when preset assigned)
         private SerializedProperty seed, resolution;
         private SerializedProperty enableHillsStage, enableShoreStage, enableVegetationStage, enableTraversalStage, enableMorphologyStage;
         private SerializedProperty enableBiomeStage;
-        private SerializedProperty enableRegionsStage;
-        // Phase L: hydrology toggle
-        private SerializedProperty enableHydrologyStage;
         // M-fix.a: biome climate tunables
         private SerializedProperty biomeBaseTemperature, biomeLapseRate, biomeLatitudeEffect;
         private SerializedProperty biomeCoastModerationStrength, biomeTempNoiseAmplitude, biomeTempNoiseCellSize;
         private SerializedProperty biomeCoastalMoistureBonus, biomeCoastDecayRate, biomeMoistureNoiseAmplitude, biomeMoistureNoiseCellSize;
         // Phase L+M: river moisture tunables
         private SerializedProperty biomeRiverMoistureBonus, biomeRiverFlowNorm;
-        // Phase L: hydrology tunables
+        // Phase L: hydrology tunables — also preset-orphan (see note above).
         private SerializedProperty hydroEpsilon, hydroRiverThresholdFraction, hydroMinLakeArea;
         // N5.a: shape mode
         private SerializedProperty shapeMode;
@@ -88,6 +99,8 @@ namespace Islands.PCG.Editor
             biomeTileOverride = serializedObject.FindProperty("biomeTileOverride");
             seed = serializedObject.FindProperty("seed");
             resolution = serializedObject.FindProperty("resolution");
+            // W.a: diagnostics
+            logGoldenHashes = serializedObject.FindProperty("logGoldenHashes");
             enableHillsStage = serializedObject.FindProperty("enableHillsStage");
             enableShoreStage = serializedObject.FindProperty("enableShoreStage");
             enableVegetationStage = serializedObject.FindProperty("enableVegetationStage");
@@ -207,8 +220,8 @@ namespace Islands.PCG.Editor
                 EditorGUILayout.PropertyField(enableTraversalStage);
                 EditorGUILayout.PropertyField(enableMorphologyStage);
                 EditorGUILayout.PropertyField(enableBiomeStage);
-                EditorGUILayout.PropertyField(enableRegionsStage);
-                EditorGUILayout.PropertyField(enableHydrologyStage); // Phase L
+                // W.a: enableRegionsStage / enableHydrologyStage are NOT drawn here —
+                // the component ignores the preset for them. Drawn always-visible below.
 
                 EditorGUILayout.PropertyField(shapeMode);          // N5.a
                 EditorGUILayout.PropertyField(islandRadius01);     // draws [Header("Island Shape")]
@@ -281,16 +294,35 @@ namespace Islands.PCG.Editor
                     EditorGUILayout.PropertyField(biomeRiverFlowNorm);
                 }
 
-                // Phase L: hydrology tunables (visible when hydrology stage enabled)
-                if (enableHydrologyStage.boolValue)
-                {
-                    EditorGUILayout.PropertyField(hydroEpsilon);                  // draws [Header("Hydrology (Phase L)")]
-                    EditorGUILayout.PropertyField(hydroRiverThresholdFraction);
-                    EditorGUILayout.PropertyField(hydroMinLakeArea);
-                }
+                // W.a: hydrology tunables are NOT drawn here — the component ignores the
+                // preset for them. Drawn always-visible below.
 
                 EditorGUILayout.PropertyField(heightRemapCurve);             // draws [Header("Height Remap (N2)")]
                 EditorGUILayout.PropertyField(clearBeforeRun);               // draws [Header("Run Behavior")]
+            }
+
+            // --- W.a: Always visible — stages the preset does NOT carry ---
+            // MapGenerationPreset has no fields for these; PCGMapTilemapVisualization
+            // resolves them from the inline fields unconditionally
+            // (eRegions = enableRegionsStage; eHydro = enableHydrologyStage).
+            // Hiding them behind a preset made live parameters unreachable.
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Stages Not Covered By Preset", EditorStyles.boldLabel);
+            if (hasPreset)
+                EditorGUILayout.HelpBox(
+                    "These are read from the component, not from the preset asset.",
+                    MessageType.None);
+
+            EditorGUILayout.PropertyField(enableRegionsStage);
+            EditorGUILayout.PropertyField(enableHydrologyStage); // Phase L
+
+            if (enableHydrologyStage.boolValue)
+            {
+                EditorGUI.indentLevel++;
+                EditorGUILayout.PropertyField(hydroEpsilon);      // draws [Header("Hydrology (Phase L)")]
+                EditorGUILayout.PropertyField(hydroRiverThresholdFraction);
+                EditorGUILayout.PropertyField(hydroMinLakeArea);
+                EditorGUI.indentLevel--;
             }
 
             // --- Always visible: component-specific ---
@@ -351,6 +383,34 @@ namespace Islands.PCG.Editor
                 EditorGUILayout.PropertyField(overlayColorHigh2, new GUIContent("Color High"));
                 EditorGUILayout.PropertyField(overlayAlpha2, new GUIContent("Alpha"));
                 EditorGUI.indentLevel--;
+            }
+
+            // --- W.a: Diagnostics (always visible, never preset-gated) ---
+            // Golden capture must work with a world-scale preset assigned, which is
+            // exactly the case the preset-hidden block would have blocked.
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField("Diagnostics (Phase W.a)", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(logGoldenHashes, new GUIContent("Log Golden Hashes"));
+
+            if (logGoldenHashes.boolValue)
+            {
+                EditorGUILayout.HelpBox(
+                    "Hashes are written to the Console after each rebuild, using the same "
+                    + "FNV-1a scheme as the golden tests.\n\n"
+                    + "Toggling this flag does not itself trigger a rebuild — use the button "
+                    + "below, or change any tracked tunable.\n\n"
+                    + "Costs O(cells) per field on every rebuild. Turn it off after capturing.",
+                    MessageType.Info);
+
+                if (GUILayout.Button("Force Rebuild (capture goldens now)"))
+                {
+                    // Disable/enable cycles the component through OnDisable/OnEnable,
+                    // which disposes the context and sets dirty = true. Public API only —
+                    // no reflection into the component's private rebuild state.
+                    var comp = (PCGMapTilemapVisualization)target;
+                    comp.enabled = false;
+                    comp.enabled = true;
+                }
             }
 
             serializedObject.ApplyModifiedProperties();

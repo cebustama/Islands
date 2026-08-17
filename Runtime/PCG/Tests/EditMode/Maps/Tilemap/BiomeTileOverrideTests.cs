@@ -8,6 +8,9 @@
 //
 // Q-T-4 and Q-T-9 require InternalsVisibleTo on the layout assembly
 // to construct MapDataExport, plus a live Tilemap for stamping.
+//
+// Q-fix.a: three regression tests appended at the end of the fixture
+// (Q-BUG-1 null base tile, Apply() parity guard, Q-BUG-3 RoundToInt).
 
 using Islands.PCG.Adapters.Tilemap;
 using Islands.PCG.Layout.Maps;
@@ -64,6 +67,24 @@ namespace Islands.PCG.Tests.EditMode.Adapters.Tilemap
         {
             var layers = new bool[(int)MapLayerId.COUNT][];
             layers[(int)MapLayerId.Land] = landMask;
+
+            var fields = new float[(int)MapFieldId.COUNT][];
+            if (biomeField != null)
+                fields[(int)MapFieldId.Biome] = biomeField;
+
+            return new MapDataExport(w, h, /*seed*/ 1u, layers, fields);
+        }
+
+        /// <summary>
+        /// Builds a <see cref="MapDataExport"/> with an arbitrary set of masks plus an
+        /// optional Biome field. Q-fix.a helper.
+        /// </summary>
+        private static MapDataExport MakeExportWithLayers(
+            int w, int h, (MapLayerId id, bool[] mask)[] masks, float[] biomeField = null)
+        {
+            var layers = new bool[(int)MapLayerId.COUNT][];
+            foreach (var m in masks)
+                layers[(int)m.id] = m.mask;
 
             var fields = new float[(int)MapFieldId.COUNT][];
             if (biomeField != null)
@@ -602,6 +623,178 @@ namespace Islands.PCG.Tests.EditMode.Adapters.Tilemap
                     "Grassland cell (0,1) must fall through to base tile.");
                 Assert.AreSame(baseLand, tm.GetTile(new Vector3Int(1, 1, 0)),
                     "Grassland cell (1,1) must fall through to base tile.");
+            }
+            finally
+            {
+                Cleanup(baseLand, snowLand, bto);
+                Object.DestroyImmediate(gridGo);
+            }
+        }
+        // =================================================================
+        // Q-fix.a — regression tests for Q-BUG-1 / Q-BUG-2 / Q-BUG-3
+        // =================================================================
+
+        // -----------------------------------------------------------------
+        // Q-fix.a-T-1: override applies even when the base layer entry has no tile.
+        // Regression: Q-BUG-1. Before the fix, ApplyBiomeAware skipped caching any
+        // layer whose base Tile was null, so the override was never consulted.
+        // -----------------------------------------------------------------
+
+        [Test]
+        public void ApplyBiomeAware_NullBaseTile_OverrideStillApplies()
+        {
+            // 2x1 grid: both cells Vegetation, both Snow (1).
+            int w = 2, h = 1;
+            var vegMask = new bool[] { true, true };
+            var biomeField = new float[] { 1f, 1f };
+            var export = MakeExportWithLayers(
+                w, h, new[] { (MapLayerId.Vegetation, vegMask) }, biomeField);
+
+            var snowVeg = MakeTile("snow_vegetation");
+
+            // Base entry deliberately carries NO tile — the override is the only source.
+            var table = new TilemapLayerEntry[]
+            {
+                new TilemapLayerEntry { LayerId = MapLayerId.Vegetation, Tile = null }
+            };
+
+            var bto = MakeOverride(new BiomeTileOverride.BiomeGroup
+            {
+                biome = BiomeType.Snow,
+                layers = new[]
+                {
+                    new BiomeTileOverride.LayerSlot
+                    {
+                        layerId = MapLayerId.Vegetation,
+                        tile = snowVeg,
+                    }
+                }
+            });
+
+            var (gridGo, tm) = MakeTilemap("NullBaseTile");
+
+            try
+            {
+                TilemapAdapter2D.ApplyBiomeAware(export, tm, table, bto, null, true, false);
+
+                Assert.AreSame(snowVeg, tm.GetTile(new Vector3Int(0, 0, 0)),
+                    "Override must apply even when the base layer entry has a null tile.");
+                Assert.AreSame(snowVeg, tm.GetTile(new Vector3Int(1, 0, 0)),
+                    "Override must apply even when the base layer entry has a null tile.");
+            }
+            finally
+            {
+                Cleanup(snowVeg, bto);
+                Object.DestroyImmediate(gridGo);
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Q-fix.a-T-2: a layer that resolves to nothing must not erase a
+        // lower-priority winner. This is the parity guard that keeps the
+        // Q-BUG-1 fix equivalent to Apply().
+        // -----------------------------------------------------------------
+
+        [Test]
+        public void ApplyBiomeAware_NullBaseTile_NoOverride_DoesNotEraseLowerLayer()
+        {
+            // 1x1 grid: Land (has base tile) + Vegetation (no tile, no override) both ON.
+            int w = 1, h = 1;
+            var landMask = new bool[] { true };
+            var vegMask = new bool[] { true };
+            var biomeField = new float[] { 9f }; // Grassland — not covered by the override.
+            var export = MakeExportWithLayers(
+                w, h,
+                new[] { (MapLayerId.Land, landMask), (MapLayerId.Vegetation, vegMask) },
+                biomeField);
+
+            var baseLand = MakeTile("base_land");
+            var snowLand = MakeTile("snow_land");
+
+            // Vegetation sits ABOVE Land in priority but supplies no tile.
+            var table = new TilemapLayerEntry[]
+            {
+                new TilemapLayerEntry { LayerId = MapLayerId.Land, Tile = baseLand },
+                new TilemapLayerEntry { LayerId = MapLayerId.Vegetation, Tile = null },
+            };
+
+            // Override exists but covers a different biome — nothing resolves here.
+            var bto = MakeOverride(new BiomeTileOverride.BiomeGroup
+            {
+                biome = BiomeType.Snow,
+                layers = new[]
+                {
+                    new BiomeTileOverride.LayerSlot
+                    {
+                        layerId = MapLayerId.Land,
+                        tile = snowLand,
+                    }
+                }
+            });
+
+            var (gridGo, tm) = MakeTilemap("ParityGuard");
+
+            try
+            {
+                TilemapAdapter2D.ApplyBiomeAware(export, tm, table, bto, null, true, false);
+
+                Assert.AreSame(baseLand, tm.GetTile(new Vector3Int(0, 0, 0)),
+                    "A higher-priority layer with neither base tile nor override must not " +
+                    "erase the lower-priority winner (Apply() parity).");
+            }
+            finally
+            {
+                Cleanup(baseLand, snowLand, bto);
+                Object.DestroyImmediate(gridGo);
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Q-fix.a-T-3: biome field float -> int uses RoundToInt, matching the
+        // convention in PCGHoverTooltip (V.a) and PCGRuntimeOverlay (V.b).
+        // Regression: Q-BUG-3 (truncation would read 0.9999 as biome 0).
+        // -----------------------------------------------------------------
+
+        [Test]
+        public void ApplyBiomeAware_BiomeField_UsesRoundToIntConvention()
+        {
+            // Single cell whose biome value sits just below the exact integer.
+            int w = 1, h = 1;
+            var landMask = new bool[] { true };
+            var biomeField = new float[] { 0.9999f }; // must read as Snow (1), not Unclassified (0).
+            var export = MakeExportWithLayers(
+                w, h, new[] { (MapLayerId.Land, landMask) }, biomeField);
+
+            var baseLand = MakeTile("base_land");
+            var snowLand = MakeTile("snow_land");
+
+            var table = new TilemapLayerEntry[]
+            {
+                new TilemapLayerEntry { LayerId = MapLayerId.Land, Tile = baseLand }
+            };
+
+            var bto = MakeOverride(new BiomeTileOverride.BiomeGroup
+            {
+                biome = BiomeType.Snow,
+                layers = new[]
+                {
+                    new BiomeTileOverride.LayerSlot
+                    {
+                        layerId = MapLayerId.Land,
+                        tile = snowLand,
+                    }
+                }
+            });
+
+            var (gridGo, tm) = MakeTilemap("RoundToInt");
+
+            try
+            {
+                TilemapAdapter2D.ApplyBiomeAware(export, tm, table, bto, null, true, false);
+
+                Assert.AreSame(snowLand, tm.GetTile(new Vector3Int(0, 0, 0)),
+                    "Biome field must be read with RoundToInt, matching V.a/V.b. " +
+                    "Truncation would misread 0.9999 as Unclassified.");
             }
             finally
             {

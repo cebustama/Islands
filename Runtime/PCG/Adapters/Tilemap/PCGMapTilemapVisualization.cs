@@ -99,6 +99,11 @@ namespace Islands.PCG.Adapters.Tilemap
         [Min(4)]
         [SerializeField] private int resolution = 64;
 
+        [Tooltip("Phase W.a — log per-layer / per-field golden hashes to the console " +
+                 "after each rebuild. Off by default: hashing every field costs O(cells) " +
+                 "per field on every dirty-rebuild. Enable only to capture goldens.")]
+        [SerializeField] private bool logGoldenHashes = false;
+
         [Header("Stage Toggles")]
         [SerializeField] private bool enableHillsStage = true;
         [SerializeField] private bool enableShoreStage = true;
@@ -606,6 +611,84 @@ namespace Islands.PCG.Adapters.Tilemap
                 $"mega={enableMegaTiles}({megaTileRules?.Length ?? 0}r) " +
                 $"overlay1={enableOverlay1}({overlaySource1}) overlay2={enableOverlay2}({overlaySource2}) " +
                 $"tiles={stamped}/{eRes * eRes}");
+
+            // Phase W.a: golden hash capture line (editor console only).
+            // Uses the exact FNV-1a byte-wise scheme of the golden tests so console
+            // values are directly comparable with the locked test constants.
+            // Emitted only when logGoldenHashes is enabled (off by default: hashing
+            // every field on every dirty-rebuild is O(cells) per field).
+            if (logGoldenHashes)
+            {
+                Debug.Log(
+                    $"[PCGMapTilemapVisualization] goldens seed={eSeed} res={eRes} " +
+                    $"Land={GoldenLayerHash(MapLayerId.Land):X16} " +
+                    $"LandCore={GoldenLayerHash(MapLayerId.LandCore):X16} " +
+                    $"Rivers={GoldenLayerHash(MapLayerId.Rivers):X16} " +
+                    $"Lakes={GoldenLayerHash(MapLayerId.Lakes):X16} " +
+                    $"Height={GoldenFieldHash(MapFieldId.Height):X16} " +
+                    $"CoastDist={GoldenFieldHash(MapFieldId.CoastDist):X16} " +
+                    $"Temperature={GoldenFieldHash(MapFieldId.Temperature):X16} " +
+                    $"Moisture={GoldenFieldHash(MapFieldId.Moisture):X16} " +
+                    $"Biome={GoldenFieldHash(MapFieldId.Biome):X16} " +
+                    $"FlowAccum={GoldenFieldHash(MapFieldId.FlowAccumulation):X16}");
+            }
+        }
+
+        // =====================================================================
+        // Phase W.a — golden hash capture helpers
+        //
+        // These duplicate the FNV-1a scalar-field hash used by the golden tests
+        // (MapPipelineRunner2D golden suites). The duplication is deliberate and
+        // temporary: the canonical scalar-field hash has no home in core yet
+        // (MaskGrid2D.SnapshotHash64 exists; ScalarField2D has no counterpart).
+        // Consolidating both into core is queued as Phase W.b cleanup.
+        //
+        // If the test-side helper ever changes, this MUST change with it, or
+        // console-captured goldens stop being comparable with locked constants.
+        // =====================================================================
+
+        /// <summary>Snapshot hash of a mask layer, or 0 when the layer was not created.</summary>
+        private ulong GoldenLayerHash(MapLayerId id) =>
+            ctx.IsLayerCreated(id) ? ctx.GetLayer(id).SnapshotHash64(includeDimensions: true) : 0ul;
+
+        /// <summary>
+        /// FNV-1a hash of a scalar field (dimensions + raw float bits), or 0 when
+        /// the field was not created. Byte-wise mixing matches the golden tests exactly.
+        /// </summary>
+        private ulong GoldenFieldHash(MapFieldId id)
+        {
+            if (!ctx.IsFieldCreated(id)) return 0ul;
+
+            const ulong fnvOffset = 1469598103934665603UL;
+            const ulong fnvPrime = 1099511628211UL;
+
+            ref ScalarField2D field = ref ctx.GetField(id);
+
+            ulong h = fnvOffset;
+            h = GoldenFnvMixU64(h, (ulong)field.Domain.Width, fnvPrime);
+            h = GoldenFnvMixU64(h, (ulong)field.Domain.Height, fnvPrime);
+            h = GoldenFnvMixU64(h, (ulong)field.Domain.Length, fnvPrime);
+
+            for (int i = 0; i < field.Values.Length; i++)
+            {
+                uint bits = math.asuint(field.Values[i]);
+                h = GoldenFnvMixU64(h, (ulong)bits, fnvPrime);
+            }
+
+            return h;
+        }
+
+        private static ulong GoldenFnvMixU64(ulong h, ulong value, ulong fnvPrime)
+        {
+            h ^= (byte)(value); h *= fnvPrime;
+            h ^= (byte)(value >> 8); h *= fnvPrime;
+            h ^= (byte)(value >> 16); h *= fnvPrime;
+            h ^= (byte)(value >> 24); h *= fnvPrime;
+            h ^= (byte)(value >> 32); h *= fnvPrime;
+            h ^= (byte)(value >> 40); h *= fnvPrime;
+            h ^= (byte)(value >> 48); h *= fnvPrime;
+            h ^= (byte)(value >> 56); h *= fnvPrime;
+            return h;
         }
 
         // =====================================================================
@@ -1167,18 +1250,6 @@ namespace Islands.PCG.Adapters.Tilemap
         {
             const ulong O = 14695981039346656037UL; const ulong P = 1099511628211UL;
             ulong h = O;
-            if (tilesetConfig == null) return h;
-            var layers = tilesetConfig.layers;
-            if (layers != null)
-                for (int i = 0; i < layers.Length; i++)
-                {
-                    h ^= (ulong)(uint)(int)layers[i].layerId; h *= P;
-                    h ^= (ulong)(uint)(layers[i].tile != null ? layers[i].tile.GetInstanceID() : 0); h *= P;
-                    h ^= (ulong)(uint)(layers[i].animatedTile != null ? layers[i].animatedTile.GetInstanceID() : 0); h *= P;
-                    h ^= (ulong)(uint)(layers[i].ruleTile != null ? layers[i].ruleTile.GetInstanceID() : 0); h *= P;
-                    h ^= layers[i].enabled ? 1UL : 0UL; h *= P;
-                }
-            h ^= (ulong)(uint)(tilesetConfig.fallbackTile != null ? tilesetConfig.fallbackTile.GetInstanceID() : 0); h *= P;
 
             // Phase Q: BiomeTileOverride content hash
             if (biomeTileOverride != null)
@@ -1203,6 +1274,20 @@ namespace Islands.PCG.Adapters.Tilemap
                     }
                 }
             }
+
+            if (tilesetConfig == null) return h;
+
+            var layers = tilesetConfig.layers;
+            if (layers != null)
+                for (int i = 0; i < layers.Length; i++)
+                {
+                    h ^= (ulong)(uint)(int)layers[i].layerId; h *= P;
+                    h ^= (ulong)(uint)(layers[i].tile != null ? layers[i].tile.GetInstanceID() : 0); h *= P;
+                    h ^= (ulong)(uint)(layers[i].animatedTile != null ? layers[i].animatedTile.GetInstanceID() : 0); h *= P;
+                    h ^= (ulong)(uint)(layers[i].ruleTile != null ? layers[i].ruleTile.GetInstanceID() : 0); h *= P;
+                    h ^= layers[i].enabled ? 1UL : 0UL; h *= P;
+                }
+            h ^= (ulong)(uint)(tilesetConfig.fallbackTile != null ? tilesetConfig.fallbackTile.GetInstanceID() : 0); h *= P;
 
             return h;
         }
@@ -1348,6 +1433,12 @@ namespace Islands.PCG.Adapters.Tilemap
                     ClearFirst = true,
                     FlipY = flipY
                 };
+            // Q-fix.a (Q-BUG-2): the collider group is deliberately NOT biome-aware.
+            // s_colliderLayers contains HillsL2 and Lakes, both plausible biome-override
+            // targets; routing it through ApplyLayeredBiomeAware would replace the
+            // collider sentinel tile with biome art on the collider tilemap.
+            // Physics is unaffected (any non-null tile yields a shape) but the sentinel
+            // is user-visible whenever the collider tilemap carries a renderer.
             TilemapLayerGroup colliderGroup = null;
             if (colliderTilemap != null && colliderTile != null)
             {
@@ -1361,12 +1452,17 @@ namespace Islands.PCG.Adapters.Tilemap
                     FlipY = flipY
                 };
             }
-            int count = 1 + (overlayGroup != null ? 1 : 0) + (colliderGroup != null ? 1 : 0);
+
+            // Biome-aware pass: base + overlay only.
+            int count = 1 + (overlayGroup != null ? 1 : 0);
             var groups = new TilemapLayerGroup[count]; int gi = 0;
             groups[gi++] = baseGroup;
             if (overlayGroup != null) groups[gi++] = overlayGroup;
-            if (colliderGroup != null) groups[gi++] = colliderGroup;
             TilemapAdapter2D.ApplyLayeredBiomeAware(export, groups, biomeOverride);
+
+            // Plain pass: collider sentinel, never biome-varied.
+            if (colliderGroup != null)
+                TilemapAdapter2D.ApplyLayered(export, new[] { colliderGroup });
         }
 
         private static TilemapLayerEntry[] FilterTable(TilemapLayerEntry[] source, MapLayerId[] ids)
