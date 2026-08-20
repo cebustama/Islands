@@ -83,6 +83,11 @@ local maps regenerate identically at any time.
 | `MoistureLevel` | float | Phase M / Phase L hydrology | `MapFieldId.Moisture` (Phase M) |
 | `TemperatureLevel` | float | Phase M climate | `MapFieldId.Temperature` (Phase M) |
 
+Note (2026-08-09, per the shape-mask-derivation resolution in §9): `ShorelineMask` is not
+stored per tile as a pre-baked `MaskGrid2D`. The tile carries the 3×3 world land/water
+neighborhood samples; the local-resolution `MaskGrid2D` is derived at zoom-in time by the
+shape-mask builder (W.c) via bilinear interpolation + threshold.
+
 ### 3.1 Seed Derivation
 
 `LocalSeed` must be derived deterministically from world coordinates and the world seed.
@@ -132,11 +137,27 @@ as a 256×256 local map. The tunables differ (larger island radius, different no
 frequencies) but the contracts are identical.
 
 **What differs at world scale:**
+- `shapeMode = Ellipse` — confirmed by W.a observation (2026-08-09) and by user decision
+  (2026-08-18): the world is a single large island whose tiles zoom into local maps.
+  This is the canonical world identity for Phase W. Later shape-composition work
+  (archipelagos, where each island still reads as an island; volcanic/geological island
+  formation models) may add further influence layers on top, but the base world silhouette
+  is elliptical.
 - `islandRadius01` and `waterThreshold01` are tuned for continent-scale geometry.
 - Noise frequencies are lower (world-scale features, not local terrain detail).
 - The output fields (Height, Temperature, Moisture, Biome) become the source for
   `WorldTileContext` properties rather than direct rendering inputs.
 - Phase K (Plate Tectonics) may inject geological structure at this scale only.
+
+**Climate is not scale-invariant (W-aux.a finding, 2026-08-17).** `coastModerationStrength`,
+`coastDecayRate` and `coastalMoistureBonus` operate on `CoastDist` measured in **cells**,
+so a 64×64 world map and a higher-resolution local map do not agree on climate for the
+same tunables — higher resolution produces drier, more climatically varied interiors.
+This directly constrains Phase W: world-derived `MoistureLevel` and `TemperatureLevel`
+cannot be handed to a local map at a different resolution and be expected to reproduce
+the same climate. Whether the coast terms should be normalized by domain size is an open
+design question, not a bug to patch silently. See `CURRENT_STATE.md`, "Measured
+calibration baselines and climate reachability".
 
 ---
 
@@ -205,15 +226,15 @@ Implement zoom-in generation first without edge consistency; treat matching as P
 
 ---
 
-## 9. Open Design Questions
+## 9. Design Questions (Resolved 2026-08-09)
 
-| Question | Options | Notes |
-|----------|---------|-------|
-| World map resolution | 64×64, 128×128, or configurable | Affects world-tile granularity and total world size |
-| `WorldTileContext` delivery | Struct passed to `MapInputs` vs. new `IMapWorldContext` interface | Struct is simpler; interface is more extensible |
-| Phase W2 scope and timing | After Phase W, before or after Phase N | Not in scope for Phase W |
-| Ocean tile behavior | Not zoomable vs. generates ocean-only local map | Affects whether ocean tiles are selectable |
-| Shape mask derivation | Single-tile footprint vs. 3×3 neighborhood sampling | Neighborhood gives smoother coastlines |
+| Question | Resolution | Rationale |
+|----------|-----------|-----------|
+| World map resolution | Configurable (already is, by contract — `GridDomain2D` in `MapInputs`); default 64×64 via world-scale preset | The pipeline is resolution-agnostic; fixing a resolution in code would add a constraint no contract requires. Decision lives in data, not contracts. |
+| `WorldTileContext` delivery | Struct + deterministic translation builder → existing `MapInputs`; no new interface; `MapInputs` signature unchanged | Every property already has an entry point: `LocalSeed` → seed, shoreline → `MapShapeInput`, rest → `MapTunables2D`. `IMapWorldContext` would be speculative design for W2/streaming, both explicit non-goals. |
+| Ocean tile behavior | Zoomable; generates all-ocean local map (all-OFF F2c mask). "Not selectable" is client policy, not generator policy | Uniform invariant (every tile generates) beats a special-case branch; falls out of the F2c design for free; keeps layout headless. |
+| Shape mask derivation | 3×3 world land/water neighborhood + bilinear interpolation + threshold | Single-tile footprint cannot represent *where* the world coastline crosses the tile, which is §4's stated goal. Still purely local and deterministic (reads 9 world cells, no neighbor local maps — does not violate the no-boundary-matching non-goal). Produces plausible coasts, not matching edges; matching remains W2. |
+| Phase W2 scope and timing | Deferred; sequenced after Phase W DoD, with evidence from observed W worlds | W's only obligation toward W2: local generation stays a pure function of `(worldSeed, tileX, tileY, worldContext)` so edge constraints can later be added as input without breaking determinism. |
 
 ---
 
@@ -222,8 +243,8 @@ Implement zoom-in generation first without edge consistency; treat matching as P
 | Dependency | Status | Required? | Role |
 |------------|--------|-----------|------|
 | Phase F2c (MapShapeInput) | **Done** | Yes | Primary integration hook |
-| Phase M (Biome classification) | Planning | Yes | BiomeType, MoistureLevel, TemperatureLevel |
-| Phase L (Hydrology) | Planning | Optional | Enriched MoistureLevel |
+| Phase M (Biome classification) | **Done** | Yes | BiomeType, MoistureLevel, TemperatureLevel |
+| Phase L (Hydrology) | **Done** (incl. L→M moisture coupling) | Optional | Enriched MoistureLevel |
 | Phase K (Plate Tectonics) | Planning | Optional | ElevationEnvelope at geological scale |
 
 ## 11. Downstream

@@ -52,6 +52,64 @@ Purpose: Cross-cutting package contracts and governance-relevant technical rules
   output. These are enforced as hard invariants (see `StageVegetation2DTests` M2a-7 and
   M2a-8).
 
+## PCG calibration entry-point contracts (W-aux.f)
+
+### Calibration entry points for `waterThreshold01`
+
+Any change to the `Height` composition formula invalidates every calibrated water threshold.
+All of these must be updated together:
+
+1. `MapTunables2D.Default` — the struct default; what every EditMode fixture uses.
+2. `MapGenerationPreset` class field default — must equal (1), enforced by
+   `ToTunables_DefaultPreset_MatchesMapTunables2DDefault`.
+3–5. Serialized defaults on `PCGMapVisualization`, `PCGMapCompositeVisualization`,
+   `PCGMapTilemapVisualization`. Affect newly added components only; component instances
+   already saved in a scene keep their own values.
+6. Every `MapGenerationPreset` asset on disk, each with its own tuned value.
+
+The compensating factor is `(1 + terrainNoise.amplitude/2)^(−heightRedistributionExponent)`;
+it is applied by hand, never automatically, because a self-adjusting threshold would hide a
+recalibration from the goldens. Applied values for the 2026-08-20 recalibration are recorded
+in `CURRENT_STATE.md`; the composition contract itself lives in
+`systems/map-pipeline-by-layers-ssot.md` §F2.
+
+**Decoupled consumer (W-aux.g).** `Stage_Hills2D` used to be an indirect consumer of
+`waterThreshold01` through the N5.e remap, which built its thresholds on the interval
+`[waterThreshold01, 1.0]`. F3b′ replaced that remap with per-run area quantiles, so Hills
+no longer moves when the threshold is recalibrated. Hills is not on this list.
+
+Test fixtures that mean "Default but X" must derive the threshold from
+`MapTunables2D.Default.waterThreshold01` rather than copy the literal. Test fixtures that
+assert arithmetic over the threshold must set it explicitly instead of inheriting it. The
+general form of that requirement is the shadow-defaults rule below.
+
+### Shadow defaults in test fixtures (W-aux.f)
+
+A fixture that means "the defaults, but with X" and expresses it by copying the default
+values as literals is a **shadow default**. While nobody touches the real default, the copy
+agrees and nothing is visible. When the default is recalibrated, the fixture silently becomes
+a different configuration while still claiming to be the same one.
+
+The dangerous case is not the failing test — it is the symmetric one, where the copy drifts
+in a direction that happens not to change the asserted output. The test then stays green
+while comparing two different things.
+
+Rule: **a test may inherit a default or assert arithmetic over it, never both.**
+- Comparing against `Default` → derive the value from `Default`.
+- Asserting hand-computed arithmetic → set the input explicitly inside the test.
+- Pinning a default's value → hardcode it; that is the test's whole purpose.
+
+Instances found and fixed in W-aux.f: `StageBaseTerrain2DTests.RectangleTunables()`, the
+inline tunables in `N5a_Custom_WithoutShapeInput_MatchesEllipse`,
+`MapGenerationPresetTests` L62 and `ToTunables_HillsL1L2_AreForwardedAsRelativeFractions`
+(the latter renamed `..._AreForwardedAsAreaFractions` in W-aux.g),
+and (green but weakened) `StageHills2DTests.N5d_BlendPositive_DiffersFromBlend0`. This
+failure mode appeared five times in one batch and cost more time than the fix itself.
+
+Deliberately left alone: `StageBaseTerrain2DTests.NoShapeTunables()` — the NoShape path does
+not consume the changed formula, and compensating it would break green goldens for no
+reason.
+
 ## PCG stage-field overlay contracts (M2.b)
 
 ### Overlay region field contract

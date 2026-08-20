@@ -17,10 +17,20 @@ namespace Islands.PCG.Tests.EditMode.Maps
 
         // Legacy (Phase M absent) golden — preserved as fallback path verification.
         // Set to value reported on first run.
-        private const ulong ExpectedVegetationHash64_Legacy = 0xE7876A1519EC45D3UL;
+        // W-aux.f re-lock.
+        // F3b′ re-anchor: 0x6CDCB0E869BB070F -> 0x4C07AE61280A4079.
+        private const ulong ExpectedVegetationHash64_Legacy = 0x4C07AE61280A4079UL;
 
-        // M2.a biome-aware golden — new. Capture from first green run.
-        private const ulong ExpectedVegetationHash64_M2a = 0x41BB2F99C2BE043DUL;
+        // M2.a biome-aware golden — re-anchored for the quantile-mapping revision
+        // (global quantile cut over the eligible population replaces the absolute
+        // 1 - vegetationDensity threshold). Breaks by design.
+        // Value history: 0x41BB2F99C2BE043DUL (pre W-aux.c block 3)
+        //             -> 0x5B1DB3468075FFDCUL (block 3, absolute threshold)
+        //             -> re-anchor pending.
+        // 0 = sentinel: the golden test reports the value to lock in on first run.
+        // W-aux.f re-lock.
+        // F3b′ re-anchor: 0x6D433B1023A09BB6 -> 0x0583D24540DC8A86.
+        private const ulong ExpectedVegetationHash64_M2a = 0x0583D24540DC8A86UL;
 
         // -----------------------------------------------------------------------
         // Determinism
@@ -55,7 +65,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
         {
             var inputs = MakeInputs();
             RunLegacy(in inputs, out _, out MapContext2D ctx);
-            try { AssertSubsetInvariants(ref ctx); }
+            try { AssertSubsetInvariants(ref ctx, globalHillsL2Exclusion: true); }
             finally { ctx.Dispose(); }
         }
 
@@ -68,7 +78,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
         {
             var inputs = MakeInputs();
             RunM2a(in inputs, out _, out MapContext2D ctx);
-            try { AssertSubsetInvariants(ref ctx); }
+            try { AssertSubsetInvariants(ref ctx, globalHillsL2Exclusion: false); }
             finally { ctx.Dispose(); }
         }
 
@@ -147,47 +157,151 @@ namespace Islands.PCG.Tests.EditMode.Maps
         }
 
         [Test]
-        public void M2a_CoverageMonotonicity_DenseBiomesExceedSparseBiomes()
+        public void M2a_QuantileCut_IsExact_Nested_AndAboveNominal()
         {
-            // M2a-9 statistical: bucket cells by biome, compute coverage ratios,
-            // assert higher-density biomes show higher ratios than lower-density ones.
-            // Tolerant: requires sample size >= 8 cells per bucket; skips otherwise.
+            // M2a-9 reformulated. The former statistical assertion ("dense biomes
+            // cover more") passed while the mapping was broken, so it is replaced by
+            // an exact check of the quantile contract:
+            //   (a) exactness — an eligible cell is vegetated IFF its bucket >= cut(d)
+            //   (b) nesting   — d1 > d2  =>  cut(d1) <= cut(d2)
+            //   (c) floor     — realized coverage over the eligible set >= d
+            // The noise field, the eligible histogram and the cut are recomputed here
+            // independently of the stage; comparing cell by cell is what makes (a)
+            // exact. Deducing the cut from the lowest vegetated bucket would be
+            // unsound: a biome with no cell sitting exactly at the cut would report a
+            // cut above the real one.
             var inputs = MakeInputs();
             RunM2a(in inputs, out _, out MapContext2D ctx);
+
+            var domain = new GridDomain2D(W, H);
+            var noise01 = new NativeArray<float>(domain.Length, Allocator.Temp,
+                NativeArrayOptions.UninitializedMemory);
             try
             {
-                ref ScalarField2D biome = ref ctx.GetField(MapFieldId.Biome);
-                ref MaskGrid2D veg = ref ctx.GetLayer(MapLayerId.Vegetation);
+                MapNoiseBridge2D.FillSimplexPerlin01(
+                    in domain, noise01,
+                    seed: inputs.Seed,
+                    seedSalt: Stage_Vegetation2D.NoiseSeedSalt,
+                    frequency: Stage_Vegetation2D.NoiseFrequency,
+                    octaves: Stage_Vegetation2D.NoiseOctaves,
+                    lacunarity: Stage_Vegetation2D.NoiseLacunarity,
+                    persistence: Stage_Vegetation2D.NoisePersistence,
+                    quantSteps: Stage_Vegetation2D.QuantSteps);
 
+                int steps = Stage_Vegetation2D.QuantSteps;
                 int count = (int)BiomeType.COUNT;
-                int[] cells = new int[count];
-                int[] vegOn = new int[count];
-                for (int y = 0; y < H; y++)
-                    for (int x = 0; x < W; x++)
+
+                // Flatten the context into plain arrays. ctx.GetField / ctx.GetLayer
+                // return ref locals, which C# forbids capturing in a local function —
+                // and flattening also keeps the eligibility rule written exactly once.
+                int[] eligBiome = new int[domain.Length];   // 0 = not eligible
+                bool[] vegetated = new bool[domain.Length];
+                int[] bucket = new int[domain.Length];
+                {
+                    ref ScalarField2D biome = ref ctx.GetField(MapFieldId.Biome);
+                    ref MaskGrid2D landInterior = ref ctx.GetLayer(MapLayerId.LandInterior);
+                    ref MaskGrid2D hillsL2 = ref ctx.GetLayer(MapLayerId.HillsL2);
+                    ref MaskGrid2D veg = ref ctx.GetLayer(MapLayerId.Vegetation);
+
+                    for (int y = 0; y < H; y++)
+                        for (int x = 0; x < W; x++)
+                        {
+                            int idx = y * W + x;
+                            bucket[idx] = math.clamp((int)(noise01[idx] * steps), 0, steps - 1);
+                            vegetated[idx] = veg.GetUnchecked(x, y);
+
+                            if (!landInterior.GetUnchecked(x, y)) continue;
+                            int b = (int)biome.Values[idx];
+                            if (b <= 0 || b >= count) continue;
+                            BiomeDef def = BiomeTable.Definitions[b];
+                            if (def.vegetationDensity <= 0f) continue;
+                            if (hillsL2.GetUnchecked(x, y) && !def.vegetatesOnPeaks) continue;
+                            eligBiome[idx] = b;
+                        }
+                }
+
+                // ---- Eligible histogram ----
+                int[] hist = new int[steps];
+                int[] eligPerBiome = new int[count];
+                int nElig = 0;
+                for (int idx = 0; idx < domain.Length; idx++)
+                {
+                    int b = eligBiome[idx];
+                    if (b == 0) continue;
+                    hist[bucket[idx]]++;
+                    eligPerBiome[b]++;
+                    nElig++;
+                }
+
+                Assert.Greater(nElig, 0, "M2a-9: no eligible cells — fixture is degenerate.");
+
+                // ---- Independent cut computation ----
+                int[] cut = new int[count];
+                for (int b = 0; b < count; b++)
+                    cut[b] = (b <= 0)
+                        ? steps
+                        : CutBucket(hist, nElig, BiomeTable.Definitions[b].vegetationDensity, steps);
+
+                // ---- (a) exactness, cell by cell ----
+                int mismatches = 0;
+                for (int idx = 0; idx < domain.Length; idx++)
+                {
+                    int b = eligBiome[idx];
+                    if (b == 0) continue;
+                    bool expected = bucket[idx] >= cut[b];
+                    if (vegetated[idx] != expected) mismatches++;
+                }
+                Assert.AreEqual(0, mismatches,
+                    "M2a-9(a): vegetated set does not match the global quantile cut.");
+
+                // ---- (b) nesting across densities ----
+                for (int b1 = 1; b1 < count; b1++)
+                    for (int b2 = 1; b2 < count; b2++)
                     {
-                        int b = (int)biome.Values[y * W + x];
-                        if (b <= 0 || b >= count) continue;
-                        cells[b]++;
-                        if (veg.GetUnchecked(x, y)) vegOn[b]++;
+                        float d1 = BiomeTable.Definitions[b1].vegetationDensity;
+                        float d2 = BiomeTable.Definitions[b2].vegetationDensity;
+                        if (d1 <= d2 || d1 <= 0f || d2 <= 0f) continue;
+                        Assert.LessOrEqual(cut[b1], cut[b2],
+                            $"M2a-9(b): cut for {(BiomeType)b1} (d={d1:F2}) sits above " +
+                            $"{(BiomeType)b2} (d={d2:F2}).");
                     }
 
-                float Ratio(BiomeType bt) =>
-                    cells[(int)bt] >= 8 ? (float)vegOn[(int)bt] / cells[(int)bt] : -1f;
-
-                float rRain = Ratio(BiomeType.TropicalRainforest);
-                float rTemp = Ratio(BiomeType.TemperateForest);
-                float rShrub = Ratio(BiomeType.Shrubland);
-                float rDesert = Ratio(BiomeType.SubtropicalDesert);
-
-                // Only assert pairs where both buckets had enough samples.
-                if (rRain >= 0 && rDesert >= 0)
-                    Assert.Greater(rRain, rDesert,
-                        $"M2a-9: TropicalRainforest coverage ({rRain:F2}) must exceed SubtropicalDesert ({rDesert:F2}).");
-                if (rTemp >= 0 && rShrub >= 0)
-                    Assert.Greater(rTemp, rShrub,
-                        $"M2a-9: TemperateForest coverage ({rTemp:F2}) must exceed Shrubland ({rShrub:F2}).");
+                // ---- (c) coverage floor over the eligible population ----
+                for (int b = 1; b < count; b++)
+                {
+                    float d = BiomeTable.Definitions[b].vegetationDensity;
+                    if (d <= 0f || eligPerBiome[b] == 0) continue;
+                    int atOrAbove = 0;
+                    for (int k = cut[b]; k < steps; k++) atOrAbove += hist[k];
+                    float realized = (float)atOrAbove / nElig;
+                    Assert.GreaterOrEqual(realized, d - 1e-6f,
+                        $"M2a-9(c): realized coverage {realized:F4} for d={d:F2} is below nominal.");
+                }
             }
-            finally { ctx.Dispose(); }
+            finally
+            {
+                if (noise01.IsCreated) noise01.Dispose();
+                ctx.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Independent reimplementation of Stage_Vegetation2D's cut rule. Deliberately
+        /// duplicated rather than exposed: the gate must be able to disagree with the
+        /// stage.
+        /// </summary>
+        private static int CutBucket(int[] hist, int population, float density, int steps)
+        {
+            if (population <= 0 || density <= 0f) return steps;
+            int target = (int)math.ceil(density * population);
+            if (target <= 0) return steps;
+            int acc = 0;
+            for (int k = steps - 1; k >= 0; k--)
+            {
+                acc += hist[k];
+                if (acc >= target) return k;
+            }
+            return 0;
         }
 
         // -----------------------------------------------------------------------
@@ -256,7 +370,7 @@ namespace Islands.PCG.Tests.EditMode.Maps
             vegHash = ctx.GetLayer(MapLayerId.Vegetation).SnapshotHash64(includeDimensions: true);
         }
 
-        private static void AssertSubsetInvariants(ref MapContext2D ctx)
+        private static void AssertSubsetInvariants(ref MapContext2D ctx, bool globalHillsL2Exclusion)
         {
             var domain = new GridDomain2D(W, H);
             ref MaskGrid2D land = ref ctx.GetLayer(MapLayerId.Land);
@@ -277,8 +391,31 @@ namespace Islands.PCG.Tests.EditMode.Maps
                 Assert.AreEqual(0, scratch.CountOnes(), "M2a-1: Vegetation ⊆ Land.");
                 scratch.CopyFrom(vegetation); scratch.AndNot(landInterior);
                 Assert.AreEqual(0, scratch.CountOnes(), "M2a-2: Vegetation ⊆ LandInterior.");
-                scratch.CopyFrom(vegetation); scratch.And(hillsL2);
-                Assert.AreEqual(0, scratch.CountOnes(), "M2a-3: Vegetation ∩ HillsL2 == ∅.");
+                if (globalHillsL2Exclusion)
+                {
+                    scratch.CopyFrom(vegetation); scratch.And(hillsL2);
+                    Assert.AreEqual(0, scratch.CountOnes(),
+                        "M2a-3 (legacy path): Vegetation ∩ HillsL2 == ∅.");
+                }
+                else
+                {
+                    // M2a-3 reformulated (W-aux.c block 3): peak vegetation is allowed
+                    // only on biomes whose BiomeDef declares vegetatesOnPeaks.
+                    ref ScalarField2D biome = ref ctx.GetField(MapFieldId.Biome);
+                    int peakViolations = 0;
+                    for (int y = 0; y < H; y++)
+                        for (int x = 0; x < W; x++)
+                        {
+                            if (!vegetation.GetUnchecked(x, y)) continue;
+                            if (!hillsL2.GetUnchecked(x, y)) continue;
+                            int b = (int)biome.Values[y * W + x];
+                            bool allowed = b > 0 && b < (int)BiomeType.COUNT
+                                && BiomeTable.Definitions[b].vegetatesOnPeaks;
+                            if (!allowed) peakViolations++;
+                        }
+                    Assert.AreEqual(0, peakViolations,
+                        "M2a-3 (block 3): Vegetation ∩ HillsL2 only on vegetatesOnPeaks biomes.");
+                }
                 scratch.CopyFrom(vegetation); scratch.And(shallowWater);
                 Assert.AreEqual(0, scratch.CountOnes(), "M2a-4: Vegetation ∩ ShallowWater == ∅.");
 

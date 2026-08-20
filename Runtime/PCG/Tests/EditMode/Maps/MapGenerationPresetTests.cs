@@ -59,7 +59,10 @@ public class MapGenerationPresetTests
     public void DefaultValues_ShapeTunables_MatchComponentDefaults()
     {
         Assert.AreEqual(0.45f, _preset.islandRadius01, 1e-6f);
-        Assert.AreEqual(0.50f, _preset.waterThreshold01, 1e-6f);
+        // W-aux.f: recalibrated from 0.50f. Height is normalized by (1 + amplitude/2),
+        // so the threshold moved to hold the default coastline in place. Must stay equal
+        // to MapTunables2D.Default.waterThreshold01 and to the visualization components.
+        Assert.AreEqual(0.42553192f, _preset.waterThreshold01, 1e-6f);
         Assert.AreEqual(0.30f, _preset.islandSmoothFrom01, 1e-6f);
         Assert.AreEqual(0.70f, _preset.islandSmoothTo01, 1e-6f);
         Assert.AreEqual(1.00f, _preset.islandAspectRatio, 1e-6f);
@@ -243,39 +246,38 @@ public class MapGenerationPresetTests
     [Test]
     public void DefaultValues_HillsL1L2_MatchN5eDefaults()
     {
-        Assert.AreEqual(0.30f, _preset.hillsL1, 1e-6f);
-        Assert.AreEqual(0.43f, _preset.hillsL2, 1e-6f);
+        Assert.AreEqual(0.55f, _preset.hillsL1, 1e-6f);
+        Assert.AreEqual(0.20f, _preset.hillsL2, 1e-6f);
     }
 
     [Test]
-    public void ToTunables_HillsL1L2_AreForwardedAsRelativeFractions()
+    public void ToTunables_HillsL1L2_AreForwardedAsAreaFractions()
     {
         _preset.hillsL1 = 0.40f;
-        _preset.hillsL2 = 0.50f;
-        // waterThreshold = 0.50 (default)
-        // L1_eff = 0.50 + 0.40 * 0.50 = 0.70
-        // L2_eff = 0.70 + 0.50 * 0.30 = 0.85
+        _preset.hillsL2 = 0.25f;
 
         MapTunables2D t = _preset.ToTunables();
 
-        Assert.AreEqual(0.70f, t.hillsThresholdL1, 1e-5f,
-            "Effective L1 threshold should follow remap formula.");
-        Assert.AreEqual(0.85f, t.hillsThresholdL2, 1e-5f,
-            "Effective L2 threshold should follow remap formula.");
+        // F3b′: fractions are stored raw (clamped/ordered only) — the per-run
+        // Height thresholds are computed by HillsThresholdOps2D inside the stage.
+        Assert.AreEqual(0.40f, t.hillsL1, 1e-6f,
+            "hillsL1 must be forwarded as a raw area fraction.");
+        Assert.AreEqual(0.25f, t.hillsL2, 1e-6f,
+            "hillsL2 must be forwarded as a raw area fraction.");
     }
 
     [Test]
-    public void ToTunables_HillsL2Effective_AlwaysGEL1()
+    public void ToTunables_HillsL2_ClampedToL1()
     {
-        // With the N5.e remap, L2 >= L1 is guaranteed by construction.
-        // No explicit clamping needed — hillsL2 = 0 → L2 starts at L1.
-        _preset.hillsL1 = 0.80f;
-        _preset.hillsL2 = 0.0f;
+        // F3b′: peaks are a subset of the hills budget — f2 > f1 clamps to f1.
+        _preset.hillsL1 = 0.30f;
+        _preset.hillsL2 = 0.80f;
 
         MapTunables2D t = _preset.ToTunables();
 
-        Assert.GreaterOrEqual(t.hillsThresholdL2, t.hillsThresholdL1,
-            "N5.e remap must guarantee hillsThresholdL2 >= hillsThresholdL1.");
+        Assert.AreEqual(0.30f, t.hillsL2, 1e-6f,
+            "hillsL2 must be clamped to hillsL1.");
+        Assert.LessOrEqual(t.hillsL2, t.hillsL1);
     }
 
     [Test]
@@ -284,25 +286,25 @@ public class MapGenerationPresetTests
         MapTunables2D fromPreset = _preset.ToTunables();
         MapTunables2D expected = MapTunables2D.Default;
 
-        Assert.AreEqual(expected.hillsThresholdL1, fromPreset.hillsThresholdL1, 1e-5f);
-        Assert.AreEqual(expected.hillsThresholdL2, fromPreset.hillsThresholdL2, 1e-5f);
+        Assert.AreEqual(expected.hillsL1, fromPreset.hillsL1, 1e-6f);
+        Assert.AreEqual(expected.hillsL2, fromPreset.hillsL2, 1e-6f);
     }
 
     [Test]
-    public void ToTunables_HillsRemap_RespectsWaterThreshold()
+    public void ToTunables_HillsFractions_IndependentOfWaterThreshold()
     {
+        // F3b′ removes the N5.e remap: waterThreshold no longer participates in
+        // hills tunables. Fractions must pass through unchanged.
         _preset.waterThreshold01 = 0.30f;
         _preset.hillsL1 = 0.50f;
-        _preset.hillsL2 = 0.50f;
-        // L1_eff = 0.30 + 0.50 * 0.70 = 0.65
-        // L2_eff = 0.65 + 0.50 * 0.35 = 0.825
+        _preset.hillsL2 = 0.20f;
 
         MapTunables2D t = _preset.ToTunables();
 
-        Assert.AreEqual(0.65f, t.hillsThresholdL1, 1e-5f,
-            "Remap should use the preset's waterThreshold, not the default.");
-        Assert.AreEqual(0.825f, t.hillsThresholdL2, 1e-5f,
-            "Remap should use the preset's waterThreshold for L2 calculation.");
+        Assert.AreEqual(0.50f, t.hillsL1, 1e-6f,
+            "hillsL1 must not depend on waterThreshold (no remap in F3b′).");
+        Assert.AreEqual(0.20f, t.hillsL2, 1e-6f,
+            "hillsL2 must not depend on waterThreshold (no remap in F3b′).");
     }
 
     // ------------------------------------------------------------------

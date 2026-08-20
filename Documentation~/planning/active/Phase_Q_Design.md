@@ -259,6 +259,18 @@ No new assembly definition. `BiomeTileOverride.cs` needs `Islands.PCG.Layout.Map
 
 ### 3.1 Starter Asset
 
+> ⚠️ **NOT UPDATED — blocked by an open decision (`Phase_Q_Pending_Doc_Updates.md` §9.1:
+> starter asset naming and path).** The text below is known to be wrong on two counts and
+> is left unedited deliberately, so the correction lands in one pass once the decision is
+> made. (a) The path `Samples~/0.1.0-preview/PCG Map Tilemap/` does not exist in the
+> package tree; the real location is `Runtime/PCG/Samples/PCG Map Tilemap/Tilesets/`, and
+> `reference/tileset-import-guide.md` §Phase 7 specifies the naming convention
+> `<SetName>_BiomeOverride`. Adopting the guide's convention would require renaming the
+> existing `TestBiomeTileOverride.asset`. (b) The "5 temperature clusters" description
+> below does not match the implemented `Populate Default Biome Groups`, which creates 12
+> groups (one per biome except `Unclassified`) with 4 recommended layer slots each — as
+> the context-menu paragraph immediately after it already states correctly.
+
 `BiomeTileOverride-Starter.asset` under `Samples~/0.1.0-preview/PCG Map Tilemap/`.
 Pre-populated with empty `BiomeGroup` entries for the 5 biome temperature clusters
 (Cold: Snow/Tundra/BorealForest; Cool: TemperateDesert/Shrubland; Warm:
@@ -298,9 +310,16 @@ The flat-array lookup ensures no per-cell allocation or dictionary probing. The 
 is rebuilt only on SO validation or first access, not per-frame.
 
 ### Q-6: Multi-layer mode compatibility
-`StampMultiLayer` passes the biome override to all three groups (base, overlay, collider)
-via `ApplyLayeredBiomeAware`. Collider tiles are typically not biome-sensitive (sentinel
-tile), but the system does not prevent it — override null entries produce fallthrough.
+**Amended by Q-fix.a (2026-08-09).** Collider groups are excluded from the biome-aware
+path *by construction*, not by convention. `StampMultiLayerBiomeAware` stamps the base and
+overlay groups via `ApplyLayeredBiomeAware` and the collider group via plain
+`ApplyLayered`. Caller responsibility is documented on the `ApplyLayeredBiomeAware` XML
+doc comment.
+
+The prior wording — that the system permits biome overrides on collider layers and merely
+relies on null entries falling through — was the direct cause of Q-BUG-2: an override on
+`HillsL2` or `Lakes` (both in `s_colliderLayers`) replaced the collider sentinel tile with
+biome art, silently changing collision. Permissiveness here is not a neutral default.
 
 ---
 
@@ -369,6 +388,11 @@ to the existing `MegaTileRule` hash pattern.
 - No region-aware tile selection (M2.b's `BiomeRegionId` is not consumed here).
 - No procedural biome tiles in this phase (deferred to Q.a if needed).
 - No SSoT promotion. This design document carries planning authority only.
+
+**Mega-tile (H8) interaction.** The mega-tile post-pass runs after the stamping pass and
+therefore overwrites biome-varied tiles unconditionally. A 2×2 mega-tile crossing a biome
+boundary is stamped whole, from the base tileset. This is defined behavior, not a decision
+left open — Phase Q does not change mega-tile resolution.
 
 ---
 
@@ -468,6 +492,31 @@ Phase V's inspection tools are the primary debugging surface for Phase Q:
 
 ---
 
+## 10b. Batch Q-fix.a — Defects Found on Review (2026-08-09)
+
+Phase Q was found already implemented but registered in no authority surface. Reviewing
+the found code surfaced four defects, all adapter-side, all fixed in this batch.
+
+| Id | Defect | Fix |
+|---|---|---|
+| Q-BUG-1 | Override was ignored when the base layer entry had a null tile — layer masks were only cached when a base tile existed | Cache layer masks unconditionally; the guard `if (resolved != null)` in the per-cell scan preserves `Apply()` parity |
+| Q-BUG-2 | The collider group was routed through the biome-aware path, so an override on `HillsL2` or `Lakes` replaced the collider sentinel tile with biome art | Collider group stamped separately via `ApplyLayered`; never biome-aware. See the Q-6 amendment in §4 |
+| Q-BUG-3 | Biome field read with `(int)` truncation while `PCGHoverTooltip` (V.a) and `PCGRuntimeOverlay` (V.b) use `Mathf.RoundToInt` | Adapter now uses `Mathf.RoundToInt`, so tooltip, overlay and tile all agree on the same cell |
+| Q-BUG-4 | The Phase Q hash block sat after the `tilesetConfig == null` early return, so override edits could miss dirty tracking | Hash block moved above the early return |
+
+**Test coverage.** `BiomeTileOverrideTests` grew 13 → 16 tests with three regression gates
+(Q-BUG-1, Q-BUG-3, Q-BUG-4). Q-BUG-2 has no unit coverage — see §12.
+
+**Utility Q-aux.a.** `BiomeTileOverridePlaceholderGenerator` (`Editor/Inspectors/`,
+editor-only) generates flat-color placeholder `Tile` assets per (biome, layer) slot so a
+biome-conditional setup can be smoke-tested before any real art exists. Colors mirror the
+`BiomeColorPalette` defaults (V.b), which makes "painted tile color == overlay color" a
+direct cross-check. `HillsL2` placeholders carry a 4px white border by design: a
+white-bordered tile appearing on the collider tilemap is the visual signature of a
+Q-BUG-2 regression. Zero runtime code.
+
+---
+
 ## 11. Dependencies and Phase Interactions
 
 | Phase | Relationship |
@@ -485,11 +534,21 @@ Phase V's inspection tools are the primary debugging surface for Phase Q:
 
 ---
 
-## 12. Open Items (None)
+## 12. Open Items
 
 All three mechanism choices from the `PCG_Roadmap.md` Phase Q entry are resolved:
 1. **Mechanism:** `BiomeTileOverride` SO (Q-DD-1).
 2. **Per-layer scope:** Any layer; recommended set documented (Q-DD-5).
 3. **Fallback:** Three-level fallthrough, no magenta sentinel (Q-DD-6).
 
-No unresolved design decisions remain.
+The following remain open after Q-fix.a:
+
+- **Q-BUG-2 has no unit test coverage.** `StampMultiLayerBiomeAware` is private with no
+  test seam, so the collider-exclusion guarantee is verified by the smoke protocol only.
+  Options: accept smoke-only verification, or introduce a declarative `BiomeAware` flag on
+  `TilemapLayerGroup` to make the exclusion testable at adapter level. Deciding requires
+  reading `TilemapLayerGroup.cs`, which has not been reviewed. Logged as test debt.
+- **Q-aux.a color modulation.** At ×0.60 brightness, `Vegetation` over dark biomes
+  (`BorealForest` #2F4F35, `TropicalRainforest` #1F7535) renders near-black and reads as
+  mush. Consider blending toward a fixed hue instead of multiplying. Cosmetic, debug-only.
+- **Starter asset naming and path** (§3.1). Blocked; see the note in that section.

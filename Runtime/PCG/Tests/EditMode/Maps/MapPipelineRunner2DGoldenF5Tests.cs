@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using Unity.Collections;
 using Islands.PCG.Core;
 using Islands.PCG.Grids;
@@ -14,7 +14,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 42u;
 
         // Set to values reported on first run.
-        private const ulong ExpectedVegetationHash = 0x7929C1150266E4B5UL;
+        // F3b′ re-anchor: 0x7466D4574597051C -> 0x627DF2C3B1C5EF77.
+        private const ulong ExpectedVegetationHash = 0x627DF2C3B1C5EF77UL;
 
         [Test]
         public void Pipeline_F5_GoldenHash_IsLocked()

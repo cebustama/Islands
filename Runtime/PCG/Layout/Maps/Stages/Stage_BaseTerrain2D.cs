@@ -50,7 +50,12 @@ namespace Islands.PCG.Layout.Maps.Stages
     ///   3. Add height perturbation noise (same as built-in path).
     ///
     /// Height post-processing:
-    ///   quantize → pow() redistribution (J2) → spline remap (N2) → Land threshold.
+    ///   normalize by (1 + terrainAmp/2) → saturate → quantize → pow() redistribution (J2)
+    ///   → spline remap (N2) → sea-floor floor (W-aux.b) → Land threshold.
+    ///
+    /// W-aux.f: the perturbation is centred on the mask value, so raw height peaks at
+    /// mask01 * (1 + terrainAmp/2). Normalizing by that factor makes 1.0 reachable only
+    /// at n == 1 instead of clipping every core cell with n &gt; 0.5 to a flat 1.0 plateau.
     ///
     /// Determinism:
     /// - All noise is generated via coordinate hashing (MapNoiseBridge2D.FillNoise01).
@@ -116,6 +121,22 @@ namespace Islands.PCG.Layout.Maps.Stages
             int quantSteps = t.heightQuantSteps;
             float terrainAmp = math.max(0f, terrainNoise.amplitude);
             float invQuant = (quantSteps > 1) ? (1f / quantSteps) : 0f;
+
+            // W-aux.f: height ceiling de-saturation. Raw perturbed height peaks at
+            // mask01 * (1 + terrainAmp/2); dividing by that factor keeps the whole
+            // perturbed core inside [0..1] instead of clipping it. terrainAmp == 0
+            // gives exactly 1f, so unperturbed presets stay bit-identical.
+            // MUST stay in sync with BaseTerrainStage_Configurable.
+            float terrainNormScale = 1f / (1f + terrainAmp * 0.5f);
+
+            // --- W-aux.b: sea-floor relief (identity when both tunables are 0) ---
+            // Epsilon keeps the floored value strictly below the Land threshold, so
+            // the Land bit computed below is unaffected by any tunable value.
+            const float SeaFloorEpsilon = 1e-4f;
+            float seaFloorLevel = t.seaFloorLevel01;
+            float seaFloorAmp = t.seaFloorAmplitude01;
+            bool applySeaFloor = seaFloorLevel > 0f || seaFloorAmp > 0f;
+            float seaFloorCeil = math.max(0f, waterThreshold - SeaFloorEpsilon);
 
             // --- Shared geometry (Ellipse/Rectangle paths; computed regardless so variables are in scope) ---
             float minDim = math.min((float)w, (float)h);
@@ -224,8 +245,9 @@ namespace Islands.PCG.Layout.Maps.Stages
                                 mask01 = 1f - s;
                             }
 
-                            // Height = island mask + noise perturbation (inside island only).
-                            h01 = mask01 + (n - 0.5f) * terrainAmp * mask01;
+                            // Height = island mask + noise perturbation (inside island only),
+                            // normalized so the theoretical maximum is exactly 1.0 (W-aux.f).
+                            h01 = (mask01 + (n - 0.5f) * terrainAmp * mask01) * terrainNormScale;
                         }
 
                         h01 = math.saturate(h01);
@@ -242,6 +264,24 @@ namespace Islands.PCG.Layout.Maps.Stages
                         // Identity spline (or default with null arrays) preserves all goldens.
                         if (applySpline)
                             h01 = heightSpline.Evaluate(h01);
+
+                        // W-aux.b: sea-floor relief. Applied as a LOWER BOUND to
+                        // sub-threshold cells only, and only after quantization /
+                        // redistribution / spline, so land-tuned reshaping never
+                        // deforms submarine terrain. Reuses the already-sampled noise
+                        // value n — no extra draws, RNG consumption parity intact.
+                        // The hard clamp to seaFloorCeil guarantees that no floored
+                        // cell can reach waterThreshold, so Land (and therefore
+                        // DeepWater, CoastDist, morphology, hills and land biomes)
+                        // stays bit-identical under every tunable value.
+                        // Deliberate: the floor bypasses heightQuantSteps, so with low
+                        // quant values land is terraced and the sea floor is smooth.
+                        if (applySeaFloor && h01 < waterThreshold)
+                        {
+                            float floor01 = (seaFloorLevel + (n - 0.5f) * seaFloorAmp)
+                                            * waterThreshold;
+                            h01 = math.max(h01, math.clamp(floor01, 0f, seaFloorCeil));
+                        }
 
                         height.Values[idx] = h01;
                         land.SetUnchecked(x, y, h01 >= waterThreshold);

@@ -116,10 +116,16 @@
 |   +---SSoT_INDEX.md
 |   \---supersession-map.md
 +---Editor
-|   \---Inspectors
-|       +---Islands.PCG.Editor.asmdef
-|       +---PCGMapTilemapVisualizationEditor.cs
-|       \---TerrainNoiseSettingsDrawer.cs
+|   +---Diagnostics
+|   |   \---MapGenerationPresetDiagnostics.cs
+|   +---Inspectors
+|   |   +---BiomeTileOverridePlaceholderGenerator.cs
+|   |   +---PCGMapTilemapVisualizationEditor.cs
+|   |   \---TerrainNoiseSettingsDrawer.cs
+|   +---Windows
+|   |   +---MapGenerationPresetJsonImporter.cs
+|   |   \---MapGenerationPresetWizard.cs
+|   \---Islands.PCG.Editor.asmdef
 +---Runtime
 |   +---Graphs
 |   |   \---GraphLibrary
@@ -209,6 +215,7 @@
 |   |   |   +---BiomeColorPalette-Default.asset
 |   |   |   +---IMapContextSource.cs
 |   |   |   +---Islands.PCG.Inspection.asmdef
+|   |   |   +---MapStatsExporter2D.cs
 |   |   |   \---PCGHoverTooltip.cs
 |   |   +---Layout
 |   |   |   +---Bsp
@@ -276,6 +283,55 @@
 |   |   |   +---PCG Map Tilemap
 |   |   |   |   +---Palettes
 |   |   |   |   +---Tilesets
+|   |   |   |   |   +---Placeholders
+|   |   |   |   |   |   +---PH_Beach_HillsL1.asset
+|   |   |   |   |   |   +---PH_Beach_HillsL2.asset
+|   |   |   |   |   |   +---PH_Beach_Land.asset
+|   |   |   |   |   |   +---PH_Beach_Vegetation.asset
+|   |   |   |   |   |   +---PH_BorealForest_HillsL1.asset
+|   |   |   |   |   |   +---PH_BorealForest_HillsL2.asset
+|   |   |   |   |   |   +---PH_BorealForest_Land.asset
+|   |   |   |   |   |   +---PH_BorealForest_Vegetation.asset
+|   |   |   |   |   |   +---PH_Grassland_HillsL1.asset
+|   |   |   |   |   |   +---PH_Grassland_HillsL2.asset
+|   |   |   |   |   |   +---PH_Grassland_Land.asset
+|   |   |   |   |   |   +---PH_Grassland_Vegetation.asset
+|   |   |   |   |   |   +---PH_Shrubland_HillsL1.asset
+|   |   |   |   |   |   +---PH_Shrubland_HillsL2.asset
+|   |   |   |   |   |   +---PH_Shrubland_Land.asset
+|   |   |   |   |   |   +---PH_Shrubland_Vegetation.asset
+|   |   |   |   |   |   +---PH_Snow_HillsL1.asset
+|   |   |   |   |   |   +---PH_Snow_HillsL2.asset
+|   |   |   |   |   |   +---PH_Snow_Land.asset
+|   |   |   |   |   |   +---PH_Snow_Vegetation.asset
+|   |   |   |   |   |   +---PH_SubtropicalDesert_HillsL1.asset
+|   |   |   |   |   |   +---PH_SubtropicalDesert_HillsL2.asset
+|   |   |   |   |   |   +---PH_SubtropicalDesert_Land.asset
+|   |   |   |   |   |   +---PH_SubtropicalDesert_Vegetation.asset
+|   |   |   |   |   |   +---PH_TemperateDesert_HillsL1.asset
+|   |   |   |   |   |   +---PH_TemperateDesert_HillsL2.asset
+|   |   |   |   |   |   +---PH_TemperateDesert_Land.asset
+|   |   |   |   |   |   +---PH_TemperateDesert_Vegetation.asset
+|   |   |   |   |   |   +---PH_TemperateForest_HillsL1.asset
+|   |   |   |   |   |   +---PH_TemperateForest_HillsL2.asset
+|   |   |   |   |   |   +---PH_TemperateForest_Land.asset
+|   |   |   |   |   |   +---PH_TemperateForest_Vegetation.asset
+|   |   |   |   |   |   +---PH_TemperateRainforest_HillsL1.asset
+|   |   |   |   |   |   +---PH_TemperateRainforest_HillsL2.asset
+|   |   |   |   |   |   +---PH_TemperateRainforest_Land.asset
+|   |   |   |   |   |   +---PH_TemperateRainforest_Vegetation.asset
+|   |   |   |   |   |   +---PH_TropicalRainforest_HillsL1.asset
+|   |   |   |   |   |   +---PH_TropicalRainforest_HillsL2.asset
+|   |   |   |   |   |   +---PH_TropicalRainforest_Land.asset
+|   |   |   |   |   |   +---PH_TropicalRainforest_Vegetation.asset
+|   |   |   |   |   |   +---PH_TropicalSeasonalForest_HillsL1.asset
+|   |   |   |   |   |   +---PH_TropicalSeasonalForest_HillsL2.asset
+|   |   |   |   |   |   +---PH_TropicalSeasonalForest_Land.asset
+|   |   |   |   |   |   +---PH_TropicalSeasonalForest_Vegetation.asset
+|   |   |   |   |   |   +---PH_Tundra_HillsL1.asset
+|   |   |   |   |   |   +---PH_Tundra_HillsL2.asset
+|   |   |   |   |   |   +---PH_Tundra_Land.asset
+|   |   |   |   |   |   \---PH_Tundra_Vegetation.asset
 |   |   |   |   |   +---TestBiomeTileOverride.asset
 |   |   |   |   |   +---TilesetConfig_BaseSet.asset
 |   |   |   |   |   +---TilesetConfig_Winlu.asset
@@ -313,6 +369,7 @@
 |   |   |       |   |   \---TilesetConfigTests.cs
 |   |   |       |   +---HeightFieldHydrologyOps2DTests.cs
 |   |   |       |   +---MapExporter2DTests.cs
+|   |   |       |   +---MapGenerationPresetDiagnosticsTests.cs
 |   |   |       |   +---MapGenerationPresetTests.cs
 |   |   |       |   +---MapNoiseBridge2DTests.cs
 |   |   |       |   +---MapPipelineRunner2DGoldenF2cTests.cs
@@ -347,6 +404,7 @@
 |   |   |       +---GoldenSnapshotHashTests.cs
 |   |   |       +---Islands.PCG.Tests.EditMode.asmdef
 |   |   |       +---IteratedRandomWalk2DTests.cs
+|   |   |       +---MapGenerationPresetJsonRoundTripTests.cs
 |   |   |       +---MaskGrid2DRandomSetBitTests.cs
 |   |   |       +---RoomFirstBspDungeon2DTests.cs
 |   |   |       +---RoomGridDungeon2DTests.cs

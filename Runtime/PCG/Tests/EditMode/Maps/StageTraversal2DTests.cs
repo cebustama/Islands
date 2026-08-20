@@ -13,9 +13,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const int H = 64;
         private const uint Seed = 12345u;
 
-        // Set to values reported on first run.
-        private const ulong ExpectedWalkableHash64 = 0xB726EAA2F984C49BUL;
-        private const ulong ExpectedStairsHash64 = 0x74183135BE3C8913UL;
+        // F3b′ re-anchor (area-quantile hill thresholds). Stairs ⊆ HillsL1, so it
+        // moves with the hills masks; Walkable excludes HillsL2 for the same reason.
+        //   Walkable 0x3C9A669DF4449546 -> 0x6BD1E35739724D50
+        //   Stairs   0xED7D577500BFB901 -> 0x23E0586B1660525E
+        private const ulong ExpectedWalkableHash64 = 0x6BD1E35739724D50UL;
+        private const ulong ExpectedStairsHash64 = 0x23E0586B1660525EUL;
 
         // -----------------------------------------------------------------------
         // Determinism

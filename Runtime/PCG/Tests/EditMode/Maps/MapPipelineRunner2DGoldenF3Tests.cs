@@ -1,4 +1,4 @@
-using NUnit.Framework;
+﻿using NUnit.Framework;
 using Unity.Collections;
 using Islands.PCG.Core;
 using Islands.PCG.Layout.Maps;
@@ -17,8 +17,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // LandInterior are structurally unaffected but re-locked together.
         private const ulong ExpectedLandEdgeHash64 = 0x17D1FE919DCC3C33UL;
         private const ulong ExpectedLandInteriorHash64 = 0x228E6C047D7792EFUL;
-        private const ulong ExpectedHillsL1Hash64 = 0xD8B3DCF4A4AC3BA0UL;
-        private const ulong ExpectedHillsL2Hash64 = 0x29F3B1EA4B818E4FUL;
+        // W-aux.f re-lock: height ceiling de-saturation + waterThreshold recalibration.
+        // LandEdge / LandInterior verified UNCHANGED — Land topology survived the fix.
+        // F3b′ re-anchor: HillsL1 0xCB0433856C6A4A3B -> 0x532B332F40A43C82.
+        //                 HillsL2 0xA6E4DF1C6BE62012 -> 0xB05ADEBE66AE4D5C.
+        private const ulong ExpectedHillsL1Hash64 = 0x532B332F40A43C82UL;
+        private const ulong ExpectedHillsL2Hash64 = 0xB05ADEBE66AE4D5CUL;
 
         [Test]
         public void MapPipelineRunner2D_GoldenHash_F3Pipeline_IsLocked()

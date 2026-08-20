@@ -29,9 +29,9 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 12345u;
 
         // Golden hashes — zero until first successful run captures values.
-        private const ulong ExpectedTemperatureHash = 0x6D4398BDE2385AF8UL;
+        private const ulong ExpectedTemperatureHash = 0x2BD9F557217BC216UL;
         private const ulong ExpectedMoistureHash = 0xAB0779B315B726BFUL;
-        private const ulong ExpectedBiomeHash = 0xF20A7D056CEB37F3UL;
+        private const ulong ExpectedBiomeHash = 0x25FC55783B618FF3UL;
 
         // =================================================================
         // M-1: Determinism

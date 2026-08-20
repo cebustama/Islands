@@ -36,12 +36,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 12345u;
 
         // ── Phase L+M new goldens (F0→G→L→M) ─────────────────────────────────
-        private const ulong GoldenFlowAccumLM = 0xD549F3F32D57C771UL; // unchanged from L-only golden
-        private const ulong GoldenRiversLM = 0x7BE94E82265A2FEAUL; // unchanged from L-only golden
+        private const ulong GoldenFlowAccumLM = 0xFF413C94785FCEACUL; // unchanged from L-only golden
+        private const ulong GoldenRiversLM = 0xA14DDE84505F6876UL; // unchanged from L-only golden
         private const ulong GoldenLakesLM = 0UL; // unchanged from L-only golden
-        private const ulong GoldenMoistureLM = 0x0A2EFAAF55D33A97UL; // DIFFERENT from M-only — river enrichment active
-        private const ulong GoldenTemperatureLM = 0x4A10E758A2C6AD88UL; // unchanged from M-only — temperature unaffected by L
-        private const ulong GoldenBiomeLM = 0x0051483ABC36882AUL; // MAY DIFFER from M-only — biome follows moisture
+        private const ulong GoldenMoistureLM = 0x4A046696491A7B1CUL; // DIFFERENT from M-only — river enrichment active
+        private const ulong GoldenTemperatureLM = 0xBFB50453C73FF496UL; // unchanged from M-only — temperature unaffected by L
+        private const ulong GoldenBiomeLM = 0x4651014815F02263UL; // MAY DIFFER from M-only — biome follows moisture
 
         // =====================================================================
         // Full pipeline F0→G→L→M

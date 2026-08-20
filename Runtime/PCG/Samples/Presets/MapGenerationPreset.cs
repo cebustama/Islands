@@ -18,6 +18,7 @@ namespace Islands.PCG.Samples
     /// Phase H3: initial implementation.
     /// Phase F4b: shallowWaterDepth01 field.
     /// Phase F4c: midWaterDepth01 field.
+    /// Phase W-aux.b: seaFloorLevel01 + seaFloorAmplitude01 fields.
     /// Phase J2: heightRedistributionExponent field.
     /// Phase N2: heightRemapCurve field (AnimationCurve → ScalarSpline bridge).
     /// Phase N4: TerrainNoiseSettings replaces noiseCellSize/noiseAmplitude/quantSteps.
@@ -217,7 +218,12 @@ namespace Islands.PCG.Samples
                  "Higher values = smaller island (more ocean). Lower = larger island.\n" +
                  "Default 0.50 gives balanced land/water ratio at default radius.\n" +
                  "For NoShape mode: this is the primary control for land/water balance.")]
-        public float waterThreshold01 = 0.50f;
+        // W-aux.f: mirrors MapTunables2D.Default.waterThreshold01. Both were 0.50f before
+        // the height normalization by (1 + amplitude/2); they must stay equal or
+        // ToTunables_DefaultPreset_MatchesMapTunables2DDefault fails. A tuned preset ASSET
+        // carries its own value (Default_MapPreset uses 0.412119f, compensated for its own
+        // amplitude 0.22 and exponent 1.3) — this is the class default, not an asset value.
+        public float waterThreshold01 = 0.42553192f;
 
         [Range(0f, 0.5f)]
         [Tooltip("Height band below the water threshold for ShallowWater classification.\n" +
@@ -239,6 +245,28 @@ namespace Islands.PCG.Samples
                  "Keep below ~80% of Water Threshold to preserve visible deep ocean.\n\n" +
                  "Typical values: 0.15 = subtle mid band, 0.30 = wide mid band.")]
         public float midWaterDepth01 = 0f;
+
+        // ==================================================================
+        // Sea Floor (W-aux.b)
+        // ==================================================================
+
+        [Header("Sea Floor (W-aux.b)")]
+        [Range(0f, 1f)]
+        [Tooltip("Mean sea-floor elevation as a fraction of Water Threshold.\n" +
+                 "0 = legacy flat ocean (golden-safe default).\n\n" +
+                 "Applied as a LOWER BOUND to water cells only: coastal falloff\n" +
+                 "gradients survive wherever they are higher, and the value is\n" +
+                 "hard-clamped below the Land threshold, so Land never changes.\n\n" +
+                 "Typical values: 0.30-0.40, paired with depth bands ~0.10 / ~0.25.")]
+        public float seaFloorLevel01 = 0f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Sea-floor relief amplitude as a fraction of Water Threshold,\n" +
+                 "driven by the terrain noise already sampled for this map\n" +
+                 "(no extra RNG draws, no change to determinism).\n" +
+                 "0 = flat floor at Sea Floor Level.\n\n" +
+                 "Typical values: 0.20-0.40 for visible abyssal ridges and shoals.")]
+        public float seaFloorAmplitude01 = 0f;
 
         // ==================================================================
         // Noise Settings Assets (N5.b — optional override)
@@ -282,24 +310,23 @@ namespace Islands.PCG.Samples
         public TerrainNoiseSettings warpNoiseSettings = TerrainNoiseSettings.DefaultWarp;
 
         // ==================================================================
-        // Hills (F3b / N5.e)
+        // Hills (F3b′ — area-fraction quantile thresholds)
         // ==================================================================
 
-        [Header("Hills (F3b / N5.e)")]
+        [Header("Hills (F3b′)")]
         [Range(0f, 1f)]
-        [Tooltip("Hill slopes (HillsL1) — fraction of the land height range.\n" +
-                 "0.0 = all land eligible for hills. 1.0 = no hills.\n" +
-                 "Effective threshold = waterThreshold + hillsL1 × (1 − waterThreshold).\n" +
-                 "Default 0.30 ≈ effective 0.65 at default water threshold.")]
-        public float hillsL1 = 0.30f;
+        [Tooltip("Hills budget — fraction of the LAND AREA that becomes hills-or-peaks (HillsL1 + HillsL2).\n" +
+                 "0.0 = no hills. 1.0 = all land.\n" +
+                 "Resolved per run: the pipeline finds the Height cut that yields this\n" +
+                 "area on the actual map, so the result is stable across seeds.")]
+        public float hillsL1 = 0.55f;
 
         [Range(0f, 1f)]
-        [Tooltip("Hill peaks (HillsL2) — fraction of the remaining range above L1.\n" +
-                 "0.0 = L2 starts at L1 (L1 band empty, all hills are peaks).\n" +
-                 "1.0 = only the highest cells become peaks.\n" +
-                 "Effective threshold = L1_eff + hillsL2 × (1 − L1_eff).\n" +
-                 "Default 0.43 ≈ effective 0.80 at default water threshold.")]
-        public float hillsL2 = 0.43f;
+        [Tooltip("Peaks budget — fraction of the LAND AREA that becomes impassable peaks (HillsL2).\n" +
+                 "Clamped to <= Hills L1 (peaks are a subset of the hills budget).\n" +
+                 "Resolved per run like Hills L1. Measured on the raw threshold band —\n" +
+                 "Hills Noise Blend shifts the exported layer around this target.")]
+        public float hillsL2 = 0.20f;
 
         [Range(0f, 1f)]
         [Tooltip("Noise modulation of hill boundaries (N5.d).\n" +
@@ -382,6 +409,7 @@ namespace Islands.PCG.Samples
         /// Phase N5.b: resolves NoiseSettingsAsset slots (asset → inline fallback).
         /// Phase N5.d: includes hillsNoiseBlend + hillsNoise (asset → inline fallback).
         /// Phase N5.e: hillsL1/L2 relative fractions (remap computed in MapTunables2D ctor).
+        /// Phase W-aux.b: includes sea-floor relief tunables.
         /// </summary>
         public MapTunables2D ToTunables() => new MapTunables2D(
             islandRadius01: islandRadius01,
@@ -405,7 +433,9 @@ namespace Islands.PCG.Samples
             hillsNoise: hillsNoiseAsset != null
                 ? hillsNoiseAsset.Settings
                 : hillsNoiseSettings,
-            shapeMode: shapeMode);
+            shapeMode: shapeMode,
+            seaFloorLevel01: seaFloorLevel01,
+            seaFloorAmplitude01: seaFloorAmplitude01);
 
         // ==================================================================
         // W-aux.a — JSON dump (diagnostics only)
@@ -467,7 +497,9 @@ namespace Islands.PCG.Samples
             sb.Append("  \"waterAndShore\": {\n");
             sb.Append($"    \"waterThreshold01\": {F(waterThreshold01)},\n");
             sb.Append($"    \"shallowWaterDepth01\": {F(shallowWaterDepth01)},\n");
-            sb.Append($"    \"midWaterDepth01\": {F(midWaterDepth01)}\n");
+            sb.Append($"    \"midWaterDepth01\": {F(midWaterDepth01)},\n");
+            sb.Append($"    \"seaFloorLevel01\": {F(seaFloorLevel01)},\n");
+            sb.Append($"    \"seaFloorAmplitude01\": {F(seaFloorAmplitude01)}\n");
             sb.Append("  },\n");
 
             sb.Append("  \"height\": {\n");
@@ -507,12 +539,13 @@ namespace Islands.PCG.Samples
             sb.Append($"    \"clearBeforeRun\": {B(clearBeforeRun)}\n");
             sb.Append("  },\n");
 
-            // Derived: what the pipeline actually consumes. The hills thresholds are
-            // relative fractions in the Inspector but absolute Height-space values here.
+            // Derived: F3b′ — hills thresholds are per-run quantiles computed inside
+            // the stage, not derivable from tunables alone. The TEMP height probe
+            // logs the realized thresholds per run.
             sb.Append("  \"derived\": {\n");
-            sb.Append($"    \"hillsThresholdL1_effective\": {F(t.hillsThresholdL1)},\n");
-            sb.Append($"    \"hillsThresholdL2_effective\": {F(t.hillsThresholdL2)},\n");
-            sb.Append("    \"hillsRemapFormula\": \"L1 = water + f1*(1-water); L2 = L1 + f2*(1-L1)\"\n");
+            sb.Append($"    \"hillsL1_areaFraction\": {F(t.hillsL1)},\n");
+            sb.Append($"    \"hillsL2_areaFraction\": {F(t.hillsL2)},\n");
+            sb.Append("    \"hillsThresholds\": \"per-run quantiles over Land (F3b-prime) — see hprobe log\"\n");
             sb.Append("  }\n");
 
             sb.Append("}");

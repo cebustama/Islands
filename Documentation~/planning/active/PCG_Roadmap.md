@@ -8,6 +8,61 @@ Scope: Sequencing and future work for the new Islands.PCG pipeline.
 This document is not implementation authority.
 Implemented truth lives in subsystem SSoTs and governed reference/support docs where explicitly assigned.
 
+## Prioritisation posture (stated 2026-08-19)
+
+Islands.PCG is in design and implementation. It is not in production and no shipped
+content depends on any particular map. Therefore:
+
+- **Pipeline quality, expressiveness and interesting output take priority over the
+  stability of previously generated maps.** "This breaks the goldens" is not, by itself, an
+  argument against a change. A golden is a change detector, not a desirable property: it
+  reports that something moved and leaves the judgement to us. Re-anchoring goldens is
+  mechanical work and is costed as such.
+- **This does not relax determinism.** Same seed + same tunables + same version ⇒ same map
+  remains a hard invariant. The two are often confused and are opposites in effect:
+  determinism is precisely what makes breaking old maps cheap. Without it you cannot
+  reproduce a bug you saw, cannot compare two configurations, and cannot measure whether a
+  change improved anything. The W-aux.d diagnosis depended entirely on being able to
+  re-derive one specific field from one specific seed, and its validation depended on
+  re-running the same pipeline at three.
+- **Proposals must state which kind of objection they are answering.** When an option is
+  rejected, the rejection is labelled either *expressiveness* (a design judgement, open to
+  argument) or *re-anchoring cost* (no longer a valid reason on its own). Example from
+  W-aux.d: per-biome quantiles were rejected on expressiveness — they destroy the contrast
+  between biomes, so a forest would stop reading as greener than a tundra — not because of
+  their golden impact.
+- Scope discipline still applies. This posture licenses *ambitious* batches, not *wide*
+  ones. One problem per batch remains the rule.
+
+## Standing thread — parameter legibility
+
+Not a batch. A named thread, so the finding does not decay into folklore. Pipeline
+parameters do not have legible effects, and preset calibration is done by turning knobs and
+looking, so a knob that lies costs a full measure-and-diagnose cycle each time.
+
+Four independent, measured demonstrations (2026-08-19):
+
+| Parameter | What it promises | What it did (measured) |
+|---|---|---|
+| `terrainAmp` | more interior relief | non-monotone: past `1/(1+amp/2)` of mask, more amplitude meant more clamp saturation — a *flatter* top. **Cause removed by W-aux.f.** |
+| `heightRedistributionExponent`, `heightRemapCurve` | reshape the height distribution | were inert over the saturated set — monotone with `f(1)=1`, and a collapsed pre-image cannot be re-separated. **Effective again after W-aux.f.** |
+| `vegetationDensity` | per-cell vegetation rate | absolute threshold against a narrow noise distribution: 95.5 % coverage at 0.65, 0.26 % at 0.25. **Fixed by W-aux.d** (global quantile cut); the per-biome caveat M2a-9(d) is the residue. |
+| `biomeBaseTemperature` | land temperature | land ceiling is `base − lapse·waterThreshold01`, three coupled parameters; none of the three names the coupling. **Still true.** |
+
+**Delivery mechanism: X1 diagnostics rules.** Three of the four are now surfaced
+automatically at authoring time (`R4`, `R6`, `R5` respectively) instead of costing a
+measure-and-diagnose cycle. Future legibility findings therefore have an obvious home: a new
+rule in `MapGenerationPresetDiagnostics`, labelled `measured` or `inferred` per the X1
+standing constraint. Two of the shipped rules now carry historical backing after W-aux.d and
+W-aux.f — re-basing them is unscheduled work on this thread, not a defect.
+
+Structural causes identified, both documented in `CURRENT_STATE.md`: multiplicative
+composition against a hard ceiling (resolved in W-aux.f) and derived-from-derived thresholds
+(the N5.e hills remap, which is why the `derived` JSON block exists at all). A cheap
+concrete step, if the thread is ever picked up: extend that `derived` block with
+`landTemperatureCeiling` and `reachableWhittakerRows`, both computable from fields already
+present, both additive and golden-neutral.
+
 ## Current status snapshot
 - Phase A: done
 - Phase B: done
@@ -67,12 +122,24 @@ Implemented truth lives in subsystem SSoTs and governed reference/support docs w
 - Phase M2: done (M2.a + M2.b complete, all golden-captured)
 - Phase N: later (planning only)
 - Phase O: later (planning only)
-- Phase P: later (planning only — new)
+- Phase P: paused (resumes with rubric derived from Phase W output)
 - Phase T1: planning (design complete — adapter track)
-- Phase W: later (planning / exploratory only)
+- Phase W: active (W.a complete 2026-08-09; W-aux.a…W-aux.g closed 2026-08-17…20;
+  next: W.b — scope defined 2026-08-20)
+  - W-aux.a: done (measurement — statistics exporter + measured preset baselines)
+  - W-aux.b: done (submarine relief — first core change of the milestone, identity by default)
+  - W-aux.c: done (calibration instrumentation, preset wizard, per-biome vegetation policy)
+  - W-aux.d: done (vegetation quantile mapping — goldens re-anchored by design)
+  - W-aux.e: done (threshold-mapping audit — measurement only, no code change)
+  - W-aux.f: done (height ceiling de-saturation — 29 goldens re-anchored, land topology identical)
+  - W-aux.g: done (hills window recalibration — area-quantile thresholds, 10 goldens re-anchored)
 - Phase V: done (V.a + V.b — read-only inspection tooling, all smoke-validated)
-- Phase Q: planning (next focus — adapter-side biome-conditional tile selection)
+- Phase Q: done (adapter-side biome-conditional tile selection; Q-fix.a + Q-aux.a folded in)
 - Phase Q2: planning (sibling of Q — composite-condition tile selection; adapter track)
+- Phase X1: active (authoring track — X1.a complete 2026-08-19; X1.b deferred)
+  - X1.a: done (preset diagnostics + preset diff, Editor-only, golden-neutral)
+  - X1.b: deferred (objective-driven guidance — blocked on measured runs beyond
+    vegetation and height)
 
 ## Documentary note on Layout Strategies
 Layout strategies are currently treated as a governed deep reference / staged support surface under PCG.
@@ -89,7 +156,7 @@ This roadmap may mention those surfaces as planning dependencies or support infr
 
 ## Documentary note on Phase Design Documents
 Phases that require detailed specification (stage contracts, data structures, invariants,
-test plans) have dedicated design documents under `planning/active/design/`. These carry
+test plans) have dedicated design documents under `planning/active/`. These carry
 planning authority for their phase — the same authority level as this roadmap (not
 implementation truth until built and recorded in the SSoT).
 
@@ -99,13 +166,14 @@ to its design doc if one exists. The design doc contains the implementation-dept
 
 | Phase | Design document | Status |
 |-------|----------------|--------|
-| Phase M | [`Phase_M_Design.md`](design/Phase_M_Design.md) | Complete |
-| Phase W | [`Phase_W_Design.md`](design/Phase_W_Design.md) | Complete |
-| Phase M2 | [`Phase_M2_Design.md`](design/Phase_M2_Design.md) | Complete (M2.a + M2.b) |
-| Phase L | [`Phase_L_Design.md`](design/Phase_L_Design.md) | Complete |
-| Phase T1 | [`Phase_T1_Design.md`](design/Phase_T1_Design.md) | Complete |
-| Phase H8 | [`Phase_H8_Design.md`](design/Phase_H8_Design.md) | Complete (implemented) |
-| Phase V | [`Phase_V_Design.md`](design/Phase_V_Design.md) | Complete (V.a + V.b implemented) |
+| Phase M | [`Phase_M_Design.md`](Phase_M_Design.md) | Complete |
+| Phase W | [`Phase_W_Design.md`](Phase_W_Design.md) | Complete |
+| Phase M2 | [`Phase_M2_Design.md`](Phase_M2_Design.md) | Complete (M2.a + M2.b) |
+| Phase L | [`Phase_L_Design.md`](Phase_L_Design.md) | Complete |
+| Phase T1 | [`Phase_T1_Design.md`](Phase_T1_Design.md) | Complete |
+| Phase H8 | [`Phase_H8_Design.md`](Phase_H8_Design.md) | Complete (implemented) |
+| Phase V | [`Phase_V_Design.md`](Phase_V_Design.md) | Complete (V.a + V.b implemented) |
+| Phase Q | [`Phase_Q_Design.md`](Phase_Q_Design.md) | Complete — implemented |
 
 ## Resolved design decisions (2026-04-06)
 
@@ -450,6 +518,12 @@ from the Islands noise runtime via `MapNoiseBridge2D.FillNoise01`.
 ### Phase F3b — Height-Coherent Hills (Clean Break)
 **Done.**
 
+> **Partially superseded (W-aux.g, 2026-08-20).** The classifier described below is unchanged,
+> but the *tunables* are not: `hillsThresholdL1` / `hillsThresholdL2` no longer exist as raw
+> Height values. F3b′ replaced them with `hillsL1` / `hillsL2` as area fractions of `Land`,
+> resolved to per-run thresholds by an order statistic. Read the threshold contract in
+> `map-pipeline-by-layers-ssot.md` §F3b′, not the tunable descriptions below.
+
 Replaces the topology-based `Stage_Hills2D` with height-threshold classification.
 Hills are derived directly from the Height field, so mountains appear where terrain is
 highest. This resolves the Height/Hills spatial disconnect identified during post-N2
@@ -481,6 +555,20 @@ heatmap visualization.
 - **Visual smoke test:** Verify the heatmap overlay now visually matches hill placement.
   HillsL2 cells should correspond to the brightest Height values. Adjusting the thresholds
   should visibly move the hill/mountain boundary.
+- **Measured limitation and its resolution (W-aux.e → W-aux.f).** Between 2026-08-19 and
+  2026-08-20 the peak-fraction target was *unreachable*, and the reason was not the
+  classifier. `hillsL1/L2` are fractions of the height *range* (N5.e remap), never fractions
+  of land area, and the field they cut carried a degenerate atom at `Height == 1.0` holding
+  3.7–11.7 % of `Land` depending on seed: the realized peak fraction spanned 17.6–33.1 % at
+  fixed thresholds, and no threshold could express a peak fraction below the atom. Treating
+  the 15–30 % window as a specification during that period would have sent a reader hunting
+  for a bug in a correct classifier.
+  **W-aux.f removed the atom, and W-aux.g resolved the window.** After W-aux.f, fixed
+  thresholds still measured 9.86 / 9.36 / 2.60 % of `Land` at seeds 56 / 8 / 243 — a 3.8×
+  spread, because the seed-varying height maximum leaves dead space at the top of the range
+  the fractions are taken over. W-aux.g replaced the range remap with per-run area quantiles;
+  the band now measures 20.13 / 20.30 / 20.20 % against a 20 % target. The threshold contract
+  is `map-pipeline-by-layers-ssot.md` §F3b′; this bullet is history.
 - Depends on: Phase N4 (richer Height field makes threshold-based hills interesting).
 - No new `MapLayerId` or `MapFieldId`.
 
@@ -627,7 +715,7 @@ fields and raw noise patterns.
 
 ### Phase H8 — Mega-Tiles (2×2 Large Terrain Sprites)
 **Done.**
-**See [`Phase_H8_Design.md`](design/Phase_H8_Design.md) for full design, tradeoff analysis,
+**See [`Phase_H8_Design.md`](Phase_H8_Design.md) for full design, tradeoff analysis,
 coordinate mapping, and visual smoke test protocol.**
 
 Replaces clusters of same-type tiles with large multi-cell sprite groups.
@@ -691,7 +779,7 @@ Target dimensions: 1×2, 2×1, 2×3, 3×2, 3×3.
 
 ### Phase T1 — PCG Map Mesh Visualization
 **Planning. Design complete. Sequenced on adapter track, parallel to mainline.**
-**See [`Phase_T1_Design.md`](design/Phase_T1_Design.md) for detailed design.**
+**See [`Phase_T1_Design.md`](Phase_T1_Design.md) for detailed design.**
 
 3D mesh visualization adapter for the PCG map pipeline. Reads `MapDataExport` and
 produces a Unity `Mesh` with height-displaced vertices and per-layer vertex colors.
@@ -799,7 +887,7 @@ Planning / exploratory only.
 
 ### Phase L — Hydrology (Rivers & Lakes)
 **Done.** Implemented, test-gated, golden hashes captured, visual smoke tests 1–4 passed.
-**See [`Phase_L_Design.md`](design/Phase_L_Design.md) for detailed design and post-delivery notes (§17).**
+**See [`Phase_L_Design.md`](Phase_L_Design.md) for detailed design and post-delivery notes (§17).**
 
 Single `IMapStage2D` (`Stage_Hydrology2D`) with two sub-stages: L.1 Rivers (Priority-Flood
 depression fill → D8 flow direction → flow accumulation → fractional-threshold extraction)
@@ -850,7 +938,7 @@ should be audited for the same Rivers/Lakes coverage.
 
 ### Phase M — Climate & Biome Classification
 **Done.** Implemented, test-gated, golden hashes captured, smoke test passed.
-**See [`Phase_M_Design.md`](design/Phase_M_Design.md) for detailed design.**
+**See [`Phase_M_Design.md`](Phase_M_Design.md) for detailed design.**
 
 Single `IMapStage2D` (Stage_Biome2D) with three sub-stages: M.1 Temperature, M.2 Moisture,
 M.3 Biome. `MapFieldId` extended: Temperature=3, Biome=4 (COUNT→5). 12 ecological biomes
@@ -908,7 +996,7 @@ moistureNoiseAmplitude 0.5→0.3.
 
 ### Phase M2 — Biome-Aware Vegetation & Region Naming
 **Confirmed (after M). Design complete.**
-**See [`Phase_M2_Design.md`](design/Phase_M2_Design.md) for detailed design.**
+**See [`Phase_M2_Design.md`](Phase_M2_Design.md) for detailed design.**
 
 - **M2.a — Biome-aware vegetation refactor.** ✅ Complete (golden-captured).
   Per-cell threshold from `BiomeTable`; stage-local `moistureModulation=0`
@@ -929,7 +1017,7 @@ moistureNoiseAmplitude 0.5→0.3.
 
 ### Phase V — Runtime Inspection UI
 **Done (V.a + V.b). All smoke-validated.**
-**See [`Phase_V_Design.md`](design/Phase_V_Design.md) for detailed design.**
+**See [`Phase_V_Design.md`](Phase_V_Design.md) for detailed design.**
 
 Runtime inspection overlay for the PCG pipeline. Read-only sample/tooling phase — produces
 no authored data, does not participate in golden tests or determinism gates. Does not replace
@@ -972,7 +1060,8 @@ Authority note: Phase V is roadmap-scoped only. It is **not** implementation aut
 authority for the phase).
 
 ### Phase Q — Biome-Conditional Tile Selection
-**Planning only. Sequenced on adapter track. Independent of Phase N/O/P/W path.**
+**Done (Q + Q-fix.a + Q-aux.a, 2026-08-09). Adapter track. Independent of Phase N/O/P/W path.**
+**See [`Phase_Q_Design.md`](Phase_Q_Design.md) for detailed design.**
 
 Closes the documented but unimplemented gap between Phase M (produces `MapFieldId.Biome`
 per cell) and the tilemap adapter (currently ignores it). `Phase_M_Design.md` §9 and
@@ -994,13 +1083,10 @@ zero biome references — the field is produced and ignored. Phase Q wires the c
 stage. No `MapPipelineRunner2D` modification. The adapter reads the existing `Biome`
 field and routes layer→tile resolution through a biome-aware `TilesetConfig` extension.
 
-**Open mechanism choices** (resolved in `Phase_Q_Design.md` when phase activates):
-- Extend `TilesetConfig.LayerEntry` with optional `BiomeType[]` filter + per-biome tile
-  arrays, vs. parallel `BiomeTilesetOverride` ScriptableObject wrapping a base
-  `TilesetConfig`, vs. multiple `TilesetConfig` assets selected by a `BiomeTilesetSelector`.
-- Per-layer scope: which `MapLayerId` values participate (likely `Land`, `LandInterior`,
-  `LandCore`, `Vegetation`, `HillsL1`, `HillsL2`; not `Walkable`, `Paths`).
-- Fallback when biome has no entry: use base layer tile (recommended) vs. magenta sentinel.
+**Mechanism choices — resolved in `Phase_Q_Design.md`:**
+- Mechanism: `BiomeTileOverride` ScriptableObject wrapping a base `TilesetConfig` (Q-DD-1).
+- Per-layer scope: any layer; recommended set documented (Q-DD-5).
+- Fallback when a biome has no entry: three-level fallthrough, no magenta sentinel (Q-DD-6).
 
 **Soft dependency: biome transition blending.** Currently a Tier 1 unbuilt item per
 `technique_integration_matrix.md` ("Biome transition blending — NONE"). Without it,
@@ -1008,10 +1094,11 @@ biome boundaries produce sharp tile changes. Phase Q ships acceptably without it
 (hard transitions match the current `Biome` field's hard-boundary nature); blending
 is a separate later refinement that improves Q's visual output.
 
-**Expected files:** `Phase_Q_Design.md` (when activated). Extension to `TilesetConfig.cs`
-or new `BiomeTilesetOverride.cs` (mechanism choice deferred). Extension to
-`TilemapAdapter2D.cs` to consult biome at tile resolution time. Possibly a starter
-`BiomeTilesetOverride-Default.asset`.
+**Delivered files:** `BiomeTileOverride.cs` (`Runtime/PCG/Adapters/Tilemap/`);
+`TilemapAdapter2D.cs`, `PCGMapTilemapVisualization.cs`,
+`PCGMapTilemapVisualizationEditor.cs` (modified);
+`BiomeTileOverrideTests.cs` (`Tests/EditMode/PCG/Adapters/Tilemap/`);
+`BiomeTileOverridePlaceholderGenerator.cs` (`Editor/Inspectors/`, Q-aux.a, editor-only).
 
 **Dependencies:** Phase M (done). No others required.
 
@@ -1019,9 +1106,29 @@ or new `BiomeTilesetOverride.cs` (mechanism choice deferred). Extension to
 (separate future work). No vegetation layer split. No region-aware tile selection
 (M2.b's `BiomeRegionId` is not consumed here — region is a different axis).
 
-Authority note: Phase Q is roadmap-scoped only. It is **not** implementation authority
-and **not** a governed surface. Design document `Phase_Q_Design.md` to be written when
-the phase activates. Do not promote into SSoTs until designed.
+#### Done
+
+- `BiomeTileOverride` SO: additive per-biome tile overrides over a base `TilesetConfig`;
+  flat `TileBase[]` lookup sized `BiomeType.COUNT × MapLayerId.COUNT`, O(1) per cell.
+- `TilemapAdapter2D.ApplyBiomeAware` / `ApplyLayeredBiomeAware`; a null override delegates
+  to the pre-Q path, so pre-Q output is byte-identical.
+- `PCGMapTilemapVisualization`: `biomeTileOverride` slot, `StampMultiLayerBiomeAware`,
+  override-content hashing for dirty tracking.
+- **Q-fix.a** — four adapter-side defects found on review of the previously unregistered
+  implementation (Q-BUG-1 null base tile skipped overrides; Q-BUG-2 collider group routed
+  through the biome-aware path; Q-BUG-3 `(int)` truncation vs. `Mathf.RoundToInt`;
+  Q-BUG-4 hash block after the early return). All fixed; `BiomeTileOverrideTests` 13 → 16.
+- **Q-aux.a** — `BiomeTileOverridePlaceholderGenerator`, editor-only placeholder tile
+  generation so a biome-conditional setup can be smoke-tested before any real art exists.
+- Zero new `MapLayerId`, zero new `MapFieldId`, zero new stages, zero
+  `MapPipelineRunner2D` change, zero golden impact.
+
+See `CURRENT_STATE.md` (Phase Q resolution block) for the implemented detail and
+`reference/tileset-import-guide.md` §Phase 7 for the authoring workflow.
+
+Authority note: this roadmap entry is roadmap-scoped only. It is **not** implementation
+authority. Design authority for the phase is `Phase_Q_Design.md`; implemented truth is
+recorded in `CURRENT_STATE.md`.
 
 ### Phase Q2 — Composite-Condition Tile Selection
 **Planning only. Sequenced on adapter track. Independent of Phase N/O/P/W path. Sibling of Phase Q (can ship in either order; share architecture flavor, do not depend on each other).**
@@ -1130,13 +1237,131 @@ Planning only.
 - Depends on: at least Phase M for biome diversity validation.
 
 ### Phase W — Hierarchical World-to-Local Generation (Zoom-In)
-Planning / exploratory only. Not implementation authority.
-**See [`Phase_W_Design.md`](design/Phase_W_Design.md) for detailed design.**
+**Active. W.a complete 2026-08-09; W-aux.a through W-aux.g closed. Next: W.b.**
+Not implementation authority.
+**See [`Phase_W_Design.md`](Phase_W_Design.md) for detailed design.**
 
 - World map = low-resolution `MapContext2D` rectangular grid.
 - `WorldTileContext` handoff struct.
 - `MapShapeInput` (F2c) as integration point.
-- Dependencies: F2c (done), Phase M, optionally Phase K and Phase L.
+- Dependencies: F2c (done), Phase M (done), Phase L (done, optional), Phase K (optional).
+
+**Sequencing deviation (2026-08-09):** Phase W proceeds before Phase P. Rationale: no
+rubric yet exists for what distinguishes a good world from a bad one; building
+`IMapValidator2D` without criteria would produce a retry loop with no semantics. The
+rubric will be distilled from observing W-generated worlds. Phase P is paused, not
+cancelled; it resumes with criteria derived from W output.
+
+**W.a — complete (2026-08-09).** 64×64 world-scale pipeline run from a
+`MapGenerationPreset`, visually smoke-validated. World identity is `shapeMode = Ellipse`.
+The console golden for the run is captured but not yet registered in a governed surface.
+
+**W.b — parameter surface consolidation (scope defined 2026-08-20, not started).**
+This entry is the single definition of W.b's scope; other documents point here rather than
+restating it.
+
+W.b promotes the tunables that exist in code but cannot be reached from a
+`MapGenerationPreset`. It is **not** a step of the world→local zoom sequence — that arc
+continues at W.c (the F2c shape-mask builder) and is unaffected by W.b. W.b comes first
+because a world is many maps: configuring them one GameObject at a time does not scale, and
+every later W step assumes a preset is a complete description of a map.
+
+In scope — the five component-scoped fields, today living on the visualization components:
+`enableRegionsStage`, `enableHydrologyStage`, `hydroEpsilon`, `hydroRiverThresholdFraction`,
+`hydroMinLakeArea`. Two candidates of the same class, to be decided at batch start rather
+than assumed: `Stage_Regions2D.SpeckThreshold` (a stage constant, not a component field) and
+`Stage_Vegetation2D.moistureModulation` (a public field never verified as assigned by
+anything in the construction path — see `CURRENT_STATE.md` §Open observations).
+
+Two destinations, with different consequences. Stage toggles sit beside the six already in
+the preset and do not enter `MapTunables2D`, so they cannot move a golden. The three
+`hydro*` values are algorithm tunables and **do** enter the `MapTunables2D` constructor;
+identity defaults are the strategy that let W-aux.b close without breaking a single golden,
+and the same discipline applies here.
+
+Closure conditions beyond the code: `ToJson()` and the importer table change **together**
+(the round-trip gate fails until both do — that is the gate working, not a bug), and the
+wizard's `HelpBox` declaring this gap is retired in the same batch. Leaving it is worse than
+never having written it: the tool would be lying about its own limitations.
+
+**W-aux track (opened 2026-08-17):** measurement and calibration sub-batches running
+alongside Phase W's world→local sequence.
+- **W-aux.a — complete (2026-08-17).** Read-only statistics exporter + Inspector button +
+  measured preset baselines. Adapter/inspection-side only; no core changes, no golden
+  breaks (W.a goldens re-captured identical).
+- **W-aux.b — submarine relief (closed 2026-08-18).** Sea-floor relief in
+  `Stage_BaseTerrain2D` + mirror, two tunables defaulting to identity, hard clamp below
+  `waterThreshold01`. `ShallowWater` and `MidWater` now denote depth bands rather than
+  adjacency. First non-empty `Lakes`. **No golden was broken** — the identity default made
+  re-anchoring unnecessary, correcting the batch's original scoping assumption.
+- **W-aux.c — instrumentation, preset authoring, per-biome vegetation (closed 2026-08-19).**
+  Three blocks: `MapStatsExporter2D` calibration sections + `Default_MapPreset`
+  recalibration; `MapGenerationPresetWizard` + JSON importer in `Islands.PCG.Editor`;
+  `BiomeDef.vegetatesOnPeaks` with contract M2a-3 reformulated. Vegetation goldens
+  re-anchored by design.
+- **W-aux.d — vegetation quantile mapping (closed 2026-08-19).** `Stage_Vegetation2D`
+  accepts by a global quantile cut over the eligible population instead of the absolute
+  threshold `1 − vegetationDensity`, which had put low-density biomes outside the noise
+  field's support entirely. Contract M2a-9 reformulated. `BiomeTable` densities deliberately
+  **not** recalibrated in that batch — the mapping changed what the numbers mean, and
+  recalibration should follow measurement.
+- **W-aux.e — threshold-mapping audit (closed 2026-08-19, no code change).** Audited
+  `Stage_Hills2D` and `Stage_BaseTerrain2D` for the defect W-aux.d had just fixed. Verdicts:
+  `waterThreshold01` is a feature; the hills classifier is exonerated; the defect was
+  upstream in the height composition formula. Produced the diagnosis that opened W-aux.f.
+- **W-aux.f — height ceiling de-saturation (closed 2026-08-20).** Height perturbation
+  normalized by `(1 + terrainAmp/2)`, removing the `Height == 1.0` atom. `waterThreshold01`
+  recalibrated at six entry points so the coastline would not move — and it did not: land
+  topology is bit-identical. 29 golden constants depending on the *value* of Height were
+  re-anchored. Accepted under the prioritisation posture above.
+- **W-aux.g — hills window recalibration (closed 2026-08-20).** `hillsL1` / `hillsL2`
+  redefined as area fractions of `Land`, resolved per run by an order statistic over the Land
+  height population (`HillsThresholdOps2D`), replacing the N5.e range remap. The band moved
+  from 9.86 / 9.36 / 2.60 % (3.8× spread) to 20.13 / 20.30 / 20.20 % at seeds 56 / 8 / 243.
+  Defaults 0.55 / 0.20; 10 goldens re-anchored; suite green; visual smoke test passed.
+  Fixed-threshold recalibration was rejected as **ineffective** (the dispersion is structural)
+  and moving `heightRedistributionExponent` as **out of proportion** (it reshapes the whole
+  field and would force a second `waterThreshold01` recalibration). Contract in
+  `map-pipeline-by-layers-ssot.md` §F3b′; entry in `changelog-ssot.md`.
+  Two follow-ups were opened rather than absorbed, both recorded in `CURRENT_STATE.md`
+  §Open observations: the exported `HillsL2` layer is still seed-dispersed because of
+  `hillsNoiseBlend`, and `Default_MapPreset.waterThreshold01` appears to carry the code
+  default's compensated value instead of its own.
+  Related and separate: `BiomeTable` vegetation densities have not been recalibrated since
+  W-aux.d changed what they mean.
+
+**Authority note:** the W-aux track is roadmap-scoped only. It is **not** implementation
+authority.
+
+### Phase X1 — Authoring Tools
+
+First phase of the **authoring track**: Editor-side tools that help a designer reach an
+intended map, as distinct from the pipeline track (which changes what the pipeline
+produces) and the adapter track (T1, Q2). Parallel by construction — X1 neither blocks
+nor is blocked by W.b.
+
+Standing constraints for every X1 iteration:
+- Editor-only. Golden-neutral. No core runtime or pipeline dependency.
+- The wizard does not run the pipeline (X1.a architecture decision; revisit only as an
+  explicit decision, never as UI drift).
+- **Every statement the tooling shows to the user is labeled `measured` or `inferred`.
+  `measured` requires a named run.** A plausible-but-false hint costs the designer a full
+  measure-and-diagnose cycle; silence costs nothing.
+
+**X1.a — Preset diagnostics (done, 2026-08-19).** Pure `preset → List<PresetFinding>`
+analysis, six deterministic rules computed without running the pipeline, rendered in
+`MapGenerationPresetWizard`, plus a filtered preset-to-preset JSON diff. See
+`CURRENT_STATE.md` for the implemented surface. Two of the six rules now carry historical
+measured backing (see the parameter-legibility thread); re-basing them is unscheduled.
+
+**X1.b — Objective-driven guidance (deferred).** "I want more vegetation / bigger
+mountains / more rivers." Blocked on measured evidence: today only vegetation density and
+height composition have backing runs. Rivers, lakes, biome shape and relief have none, so
+any guidance on them would be `inferred` at best.
+
+**W.b coupling.** The wizard's `HelpBox` declaring the five component-scoped fields absent
+from `MapGenerationPreset` is true today. **Removing it is part of W.b's closure**, not a
+future X1 iteration — otherwise the wizard starts lying about its own gap.
 
 ## Legacy relationship
 Legacy map-generation documents are conceptual reference only for the new pipeline.
@@ -1197,3 +1422,133 @@ Items below are not planned work. They are design seeds worth preserving for whe
 **Reference:** Dynjandi waterfall, Iceland — cascading falls over horizontally layered basalt producing staircase topography. Also: Giant's Causeway, Iguazú Falls, tepui mesa formations.  
 **Relevance:** `Stage_BaseTerrain2D` or a new post-terrain shaping pass. Could leverage existing `ScalarSpline` infrastructure (N2). Feeds directly into Phase Q2 waterfall visual quality.  
 **Status:** Unvalidated seed. No implementation work.
+
+### PL-6 — Domain offset (X, Y) (Phase W / Base Terrain)
+**Date:** 2026-08-18 (extended 2026-08-19)
+**Idea:** A tunable offset for the generated island/map within the domain.
+`Stage_BaseTerrain2D` hardcodes `center = new float2(w * 0.5f, h * 0.5f)`, so the island
+cannot be shifted. Confirmed by the user as a wanted feature rather than a hypothetical.
+**Relevance:** `Stage_BaseTerrain2D`, `MapTunables2D`. Sits alongside — or competes with —
+Phase W's F2c mask mechanism.
+
+**Two distinct readings, not yet separated (2026-08-19).** The request has been made in
+two different registers and they are not the same feature:
+- **(i) Shape offset.** Move the *island silhouette* within a fixed domain — the ellipse
+  centre becomes a tunable. Cheap: one `float2` on `MapTunables2D`, consumed at the
+  existing `center` site in `Stage_BaseTerrain2D` (and its mirror). Full regeneration.
+  Does not change what noise is sampled, only where the falloff is anchored.
+- **(ii) Window offset.** Move the *sampling window* over a conceptually infinite noise
+  field — the domain becomes a viewport on a larger continuous world. This is what makes
+  panning meaningful at runtime, and it is a different mechanism: the noise sample
+  coordinate becomes `(x + offsetX, y + offsetY)` rather than `x, y`, and every
+  neighbourhood-dependent stage (morphology `CoastDist`, hydrology flow accumulation,
+  regions CCA) sees a *different* neighbourhood at the window edge. Determinism survives
+  per-window; continuity across windows does not, unless edge handling is designed.
+
+Reading (i) is a small, safe tunable. Reading (ii) overlaps heavily with Phase W's
+world→local mechanism and with PL-7 — deciding between them should not be done casually.
+**Status:** Idea only, no design. See `CURRENT_STATE.md` "What is not settled yet".
+
+### PL-7 — Continuous zoom (Phase W)
+**Date:** 2026-08-18 (extended 2026-08-19)
+**Idea:** Generate the same world "from higher up" or "closer in" via a configurable scale
+field, sampling a *window* of the same continuous field at a different offset or scale.
+**Relevance:** Conceptually competes with the F2c binary-mask zoom mechanism of Phase W;
+shares the domain-offset prerequisite with PL-6 (reading (ii)).
+
+**Known obstacle (2026-08-19): zoom is not detail-neutral.** Two independent findings
+already recorded make a naive scale tunable produce a *different world*, not the same
+world closer up:
+- **Climate is not scale-invariant.** `coastModerationStrength`, `coastDecayRate` and
+  `coastalMoistureBonus` divide by `CoastDist` measured in cells, so the same tunables at
+  a different resolution produce a different biome distribution (measured: `Showcase`
+  64 → 128 took TemperateDesert from 1 to 291 cells). See `CURRENT_STATE.md`, "Measured
+  calibration baselines and climate reachability".
+- **River extraction is fraction-of-land-cells based.** `ExtractRivers` uses
+  `riverThresholdFraction` against the land-cell count, which auto-scales with
+  resolution — a different property from the climate terms and not obviously compatible
+  with them under a shared zoom factor.
+
+A usable zoom therefore needs a *policy* for which tunables are cell-denominated and must
+be rescaled, which are domain-relative and must not be, and which are neither. That policy
+does not exist and is a prerequisite, not an implementation detail.
+**Status:** Idea only, no design.
+
+### PL-7b — Runtime pan / zoom control surface (Phase V / Adapter)
+**Date:** 2026-08-19
+**Idea:** Expose PL-6 and PL-7 as runtime controls on the sample component rather than
+Editor-only tunables, so the map can be panned and zoomed in play mode.
+**Why this is a separate item:** PL-6 and PL-7 are *generation* questions; this is a
+*cost* question. Today every parameter change triggers a full pipeline rebuild through
+`PCGMapTilemapVisualization`'s dirty-tracking path (`MapPipelineRunner2D.Run` →
+`MapExporter2D.Export` → tilemap stamp). Pan and zoom are continuous gestures: driving a
+full O(cells) regeneration per frame from a scroll wheel is not viable at 256×256, and is
+the reason PL-9 stops being optional the moment this item is taken seriously.
+**Open questions, none answered:** whether panning regenerates or reuses a cached larger
+field; whether zoom levels are discrete (a small set of pre-generated resolutions) or
+continuous; whether the tilemap adapter can stamp incrementally rather than clearing and
+re-stamping; whether a coarse preview field is generated during the gesture and the full
+field only on release.
+**Status:** Idea only, no design. Hard prerequisite: PL-6 reading (ii) and PL-7's rescale
+policy must be resolved first — there is no point optimising the delivery of a mechanism
+that is not specified.
+
+### PL-8 — Runtime overlay toggles (Phase V / Inspection)
+**Date:** 2026-08-18
+**Idea:** Simple in-play UI to switch scalar overlays on and off, with overlays
+precomputed (or computed in parallel) so toggling does not recompute per tile.
+**Relevance:** `PCGRuntimeOverlay`, `ScalarOverlayRenderer`. A V.c-flavoured refinement.
+**Status:** Idea only, no design.
+
+### PL-9 — Generation performance work (cross-cutting)
+**Date:** 2026-08-18 (extended 2026-08-19)
+**Idea:** The noise library carries optimisations (Burst jobs, CPU parallelism, GPU paths)
+that the map pipeline does not currently use.
+**Constraint:** would need explicit determinism gates before any parallel path is
+accepted — the grid-first deterministic invariant is not negotiable for a speedup.
+
+**Promoted from "nice to have" to "prerequisite of PL-7b" (2026-08-19.)** As long as
+generation is Editor-triggered and occasional, its cost is invisible. A runtime pan/zoom
+control surface makes it the dominant cost. Recording the shape of the problem so the
+evaluation is not started from zero:
+
+- **Not all stages parallelise the same way.** `Stage_BaseTerrain2D`, `Stage_Hills2D` and
+  `Stage_Biome2D` are per-cell functions of coordinate-hashed noise and already-written
+  fields — embarrassingly parallel, and the noise runtime already has Burst paths for
+  exactly this shape. `Stage_Morphology2D` (multi-source BFS), `Stage_Hydrology2D`
+  (Priority-Flood with a `SortedSet` min-heap, then a descending-height sort, then
+  downstream propagation) and `Stage_Regions2D` (connected-component analysis with
+  ordered speck merging) are inherently sequential and carry explicit row-major
+  determinism contracts. Parallelising the first group is a different project from
+  touching the second, and the second is where the ordering invariants live.
+- **Measurement before optimisation.** No per-stage timing exists. `MapStatsExporter2D`
+  (W-aux.a) is the precedent for how to add a read-only diagnostic without touching core:
+  a static function plus an Inspector button, never wired into the per-rebuild path.
+- **The determinism gate is the deliverable, not the speedup.** Any parallel path needs a
+  test asserting bit-identical output against the sequential one, on the same seed and
+  domain. That test is cheap to write now and expensive to retrofit after a rewrite —
+  it is the same shape as the already-proposed `BaseTerrainMirrorParityTests`.
+- **The mirror problem compounds this.** `PCGMapTilemapVisualization` runs
+  `BaseTerrainStage_Configurable`, not the governed stage. Any performance work on base
+  terrain has to be done twice or the duplication has to be resolved first.
+
+**Status:** Idea only, no design. Evaluation not started.
+
+### PL-10 — Per-layer inspection overlay (Phase V / Adapter)
+**Date:** 2026-08-19  
+**Idea:** There is no clean way to display a single mask layer (e.g. `Vegetation`) in
+isolation over the runtime map. Layer isolation is step 2 of the standing visual smoke test
+protocol, so the protocol currently asks for something the tooling does not make easy.
+Observed during the W-aux.d smoke test.  
+**Scope:** Adapter-side only; touches `ScalarOverlayRenderer` / `PCGRuntimeOverlay` /
+`PCGMapCompositeVisualization`. Small, and it pays for itself on every future stage.  
+**Status:** Idea only, no design.
+
+### PL-11 — Biome coverage at the reference preset (Phase M / Biome)
+**Date:** 2026-08-19  
+**Idea:** `biomesNonZero` is 10 / 8 / 8 of 13 at seeds 56 / 8 / 243, with SubtropicalDesert,
+TropicalSeasonalForest and TropicalRainforest at zero in all three, and Grassland and
+TemperateRainforest in the single or double digits of cells. Surfaced by W-aux.d
+verification. Belongs to `Stage_Biome2D` and its temperature/moisture bands, not to
+vegetation — recalibrating vegetation densities for those biomes would change nothing.  
+**Status:** Idea only, no design. Not scheduled.

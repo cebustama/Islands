@@ -8,12 +8,15 @@
         "Islands.PCG.Inspection",
         "Islands.PCG.Samples.Shared",
         "Islands.PCG.Samples",
+        "Islands.PCG.Editor",
         "Unity.Mathematics",
         "Unity.Collections",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
-    "includePlatforms": [ "Editor" ],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
@@ -21,6 +24,5 @@
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": false,
-    "testAssemblies": true
+    "noEngineReferences": false
 }

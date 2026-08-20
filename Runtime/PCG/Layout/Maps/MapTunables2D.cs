@@ -42,14 +42,13 @@ namespace Islands.PCG.Layout.Maps
     /// the noise algorithm via TerrainNoiseSettings (amplitude field ignored — modulation
     /// depth is controlled by hillsNoiseBlend).
     ///
-    /// N5.e: Hills threshold UX remap.
-    /// Constructor now accepts hillsL1 / hillsL2 as relative fractions [0,1] instead
-    /// of raw Height-space thresholds. The remap computes effective thresholds:
-    ///   L1_eff = waterThreshold + hillsL1 * (1 - waterThreshold)
-    ///   L2_eff = L1_eff + hillsL2 * (1 - L1_eff)
-    /// Stored fields hillsThresholdL1 / hillsThresholdL2 remain as effective raw
-    /// thresholds consumed by Stage_Hills2D — no stage changes required.
-    /// L2 >= L1 is guaranteed by construction. Golden break for F3+ hashes.
+    /// F3b′ (hills window recalibration): hillsL1 / hillsL2 redefined as AREA
+    /// fractions of Land. The ctor stores clamped fractions (f2 <= f1); the
+    /// per-run Height-space thresholds are computed by HillsThresholdOps2D
+    /// inside Stage_Hills2D via order statistics over the actual Land height
+    /// distribution. Replaces the N5.e range remap, whose [waterThreshold, 1.0]
+    /// anchor no longer matches the field (max Height < 1.0 post-W-aux.f and
+    /// varies per seed). Golden break for F3+ hashes.
     /// </summary>
     public readonly struct MapTunables2D
     {
@@ -155,25 +154,25 @@ namespace Islands.PCG.Layout.Maps
         public readonly int heightQuantSteps;
 
         // ------------------------------------------------------------------
-        // F3b additions (N5.e: stored as effective raw thresholds)
+        // F3b′ additions (area-fraction hills tunables; replace N5.e thresholds)
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Effective height threshold for HillsL1 (passable slopes).
-        /// Land cells with Height >= this value become HillsL1 (unless >= hillsThresholdL2).
-        /// [0..1]. Computed from the relative hillsL1 input via N5.e remap:
-        ///   hillsThresholdL1 = waterThreshold + hillsL1 * (1 - waterThreshold).
+        /// Target fraction of the LAND AREA classified as hills-or-peaks
+        /// (HillsL1 ∪ HillsL2). [0..1]. Resolved to a per-run Height threshold by
+        /// <c>HillsThresholdOps2D</c> (order statistic over the Land height
+        /// distribution) — NOT a height value. 0 = no hills; 1 = all land.
         /// </summary>
-        public readonly float hillsThresholdL1;
+        public readonly float hillsL1;
 
         /// <summary>
-        /// Effective height threshold for HillsL2 (impassable peaks).
-        /// Land cells with Height >= this value become HillsL2.
-        /// Always >= hillsThresholdL1 (guaranteed by N5.e remap construction).
-        /// [0..1]. Computed from the relative hillsL2 input via N5.e remap:
-        ///   hillsThresholdL2 = hillsThresholdL1 + hillsL2 * (1 - hillsThresholdL1).
+        /// Target fraction of the LAND AREA classified as impassable peaks
+        /// (HillsL2). [0..1]. Clamped to &lt;= <see cref="hillsL1"/> by construction
+        /// (peaks are a subset of the hills budget). Resolved per run like hillsL1.
+        /// The declared target is measured on the raw threshold band (pre-blend);
+        /// hillsNoiseBlend shifts the exported layer around it.
         /// </summary>
-        public readonly float hillsThresholdL2;
+        public readonly float hillsL2;
 
         // ------------------------------------------------------------------
         // N5.d additions
@@ -199,6 +198,31 @@ namespace Islands.PCG.Layout.Maps
         public readonly TerrainNoiseSettings hillsNoise;
 
         // ------------------------------------------------------------------
+        // W-aux.b additions
+        // ------------------------------------------------------------------
+
+        /// <summary>
+        /// Mean sea-floor elevation, expressed as a fraction of <see cref="waterThreshold01"/>.
+        /// 0.0 = legacy flat ocean (identity; preserves all pre-W-aux.b goldens).
+        ///
+        /// Effective floor per cell =
+        ///   (seaFloorLevel01 + (terrainNoise01 - 0.5) * seaFloorAmplitude01) * waterThreshold01
+        /// hard-clamped to [0, waterThreshold01 - eps] and applied as a LOWER BOUND to
+        /// sub-threshold cells only. Existing falloff gradients survive wherever they are
+        /// higher, and no water cell can ever cross the Land threshold.
+        /// [0..1].
+        /// </summary>
+        public readonly float seaFloorLevel01;
+
+        /// <summary>
+        /// Sea-floor relief amplitude as a fraction of <see cref="waterThreshold01"/>,
+        /// driven by the terrain noise array already sampled for this map — zero extra
+        /// RNG draws, so consumption parity is untouched.
+        /// 0.0 = flat floor at <see cref="seaFloorLevel01"/>. [0..1].
+        /// </summary>
+        public readonly float seaFloorAmplitude01;
+
+        // ------------------------------------------------------------------
         // Default
         // ------------------------------------------------------------------
 
@@ -209,13 +233,27 @@ namespace Islands.PCG.Layout.Maps
         /// Phase F3b: full golden break for F3+ hashes.
         /// Phase N5.a: shapeMode = Ellipse (bit-identical to pre-N5.a).
         /// Phase N5.d: hillsNoiseBlend = 0.0 (bit-identical to pre-N5.d).
-        /// Phase N5.e: hillsL1/L2 relative fractions replace raw thresholds.
-        ///   Effective thresholds ≈ 0.65 / 0.8005 (golden break from pre-N5.e 0.65 / 0.80).
+        /// Phase N5.e: hillsL1/L2 relative fractions replace raw thresholds. (superseded)
+        /// Phase F3b′: hillsL1/L2 redefined as AREA fractions of Land (0.55 / 0.20):
+        ///   ~55% of land is hills-or-peaks, ~20% is peaks, resolved per run via
+        ///   order statistics. Golden break for F3+ hashes.
+        /// Phase W-aux.b: seaFloorLevel01 / seaFloorAmplitude01 = 0.0 (bit-identical to pre-W-aux.b).
+        /// Phase W-aux.f: Height is normalized by (1 + terrainNoise.amplitude/2), so the
+        ///   perturbed mask core no longer clips to a flat 1.0 plateau. waterThreshold01
+        ///   moves 0.50 -> 0.4255319 to hold the default coastline. Land topology is
+        ///   expected to survive; Height-VALUED goldens (Temperature, Moisture, Biome,
+        ///   Hills, Vegetation) break by design and are re-anchored.
         /// </summary>
         public static MapTunables2D Default => new MapTunables2D(
             shapeMode: IslandShapeMode.Ellipse,
             islandRadius01: 0.45f,
-            waterThreshold01: 0.50f,
+            // W-aux.f: compensates the height normalization by (1 + amplitude/2).
+            // 0.50f / (1f + 0.35f * 0.5f), with DefaultTerrain.amplitude = 0.35 and
+            // heightRedistributionExponent = 1.0. Holds the default coastline in place
+            // while the height field is rescaled. Not auto-derived on purpose: the
+            // factor depends on amplitude AND the redistribution exponent, and a
+            // silently self-adjusting threshold would hide recalibration from goldens.
+            waterThreshold01: 0.42553192f,
             islandSmoothFrom01: 0.30f,
             islandSmoothTo01: 0.70f,
             islandAspectRatio: 1.00f,
@@ -225,10 +263,12 @@ namespace Islands.PCG.Layout.Maps
             terrainNoise: TerrainNoiseSettings.DefaultTerrain,
             warpNoise: TerrainNoiseSettings.DefaultWarp,
             heightQuantSteps: 1024,
-            hillsL1: 0.30f,
-            hillsL2: 0.43f,
+            hillsL1: 0.55f,
+            hillsL2: 0.20f,
             hillsNoiseBlend: 0.0f,
-            hillsNoise: TerrainNoiseSettings.DefaultHills
+            hillsNoise: TerrainNoiseSettings.DefaultHills,
+            seaFloorLevel01: 0.0f,
+            seaFloorAmplitude01: 0.0f
         );
 
         // ------------------------------------------------------------------
@@ -247,12 +287,14 @@ namespace Islands.PCG.Layout.Maps
         /// <param name="terrainNoise">Noise settings for height perturbation. Default = Perlin fBm freq 8.</param>
         /// <param name="warpNoise">Noise settings for domain warp. Default = Perlin freq 4.</param>
         /// <param name="heightQuantSteps">Height quantization steps. 0 = none, 1024 = smooth. Default = 1024.</param>
-        /// <param name="hillsL1">Fraction of land height range for HillsL1 threshold. [0..1]. Default = 0.30.
-        ///   Effective threshold = waterThreshold + hillsL1 * (1 - waterThreshold). (N5.e)</param>
-        /// <param name="hillsL2">Fraction of remaining range above L1 for HillsL2 threshold. [0..1]. Default = 0.43.
-        ///   Effective threshold = L1_eff + hillsL2 * (1 - L1_eff). (N5.e)</param>
+        /// <param name="hillsL1">Target fraction of LAND AREA that is hills-or-peaks (HillsL1 ∪ HillsL2). [0..1]. Default = 0.55.
+        ///   Resolved to a per-run Height threshold by order statistics. (F3b′)</param>
+        /// <param name="hillsL2">Target fraction of LAND AREA that is peaks (HillsL2). [0..1]. Default = 0.20.
+        ///   Clamped to &lt;= hillsL1. Resolved per run. (F3b′)</param>
         /// <param name="hillsNoiseBlend">Noise modulation blend for hill boundaries. [0..1]. Default = 0.0 (no noise). (N5.d)</param>
         /// <param name="hillsNoise">Noise settings for hills modulation. Default = Perlin freq 6. Amplitude ignored. (N5.d)</param>
+        /// <param name="seaFloorLevel01">Mean sea-floor elevation as a fraction of waterThreshold01. 0.0 = flat ocean (identity). [0..1]. (W-aux.b)</param>
+        /// <param name="seaFloorAmplitude01">Sea-floor relief amplitude as a fraction of waterThreshold01, driven by terrain noise. 0.0 = flat floor. [0..1]. (W-aux.b)</param>
         public MapTunables2D(
             float islandRadius01,
             float waterThreshold01,
@@ -265,11 +307,13 @@ namespace Islands.PCG.Layout.Maps
             TerrainNoiseSettings terrainNoise = default,
             TerrainNoiseSettings warpNoise = default,
             int heightQuantSteps = 1024,
-            float hillsL1 = 0.30f,
-            float hillsL2 = 0.43f,
+            float hillsL1 = 0.55f,
+            float hillsL2 = 0.20f,
             float hillsNoiseBlend = 0.0f,
             TerrainNoiseSettings hillsNoise = default,
-            IslandShapeMode shapeMode = IslandShapeMode.Ellipse)
+            IslandShapeMode shapeMode = IslandShapeMode.Ellipse,
+            float seaFloorLevel01 = 0f,
+            float seaFloorAmplitude01 = 0f)
         {
             this.shapeMode = shapeMode;
 
@@ -307,23 +351,26 @@ namespace Islands.PCG.Layout.Maps
                 : TerrainNoiseSettings.DefaultWarp;
             this.heightQuantSteps = math.max(0, heightQuantSteps);
 
-            // N5.e: Hills UX remap — relative fractions → effective raw thresholds.
-            // L1: fraction of [waterThreshold, 1.0] range.
-            // L2: fraction of [L1_effective, 1.0] range.
-            // Guarantees L2_effective >= L1_effective by construction (both inputs >= 0,
-            // both multiplied by non-negative remaining range).
+            // F3b′: hills tunables are AREA fractions of Land, resolved to
+            // Height-space thresholds per run by HillsThresholdOps2D (order
+            // statistics over the actual Land height distribution). No remap
+            // here — the ctor cannot see the field. f2 is clamped to f1:
+            // peaks are a subset of the hills budget.
             float hl1_in = math.clamp(hillsL1, 0f, 1f);
             float hl2_in = math.clamp(hillsL2, 0f, 1f);
-            float hl1_eff = wt + hl1_in * (1f - wt);
-            float hl2_eff = hl1_eff + hl2_in * (1f - hl1_eff);
-            this.hillsThresholdL1 = hl1_eff;
-            this.hillsThresholdL2 = hl2_eff;
+            if (hl2_in > hl1_in) hl2_in = hl1_in;
+            this.hillsL1 = hl1_in;
+            this.hillsL2 = hl2_in;
 
             // N5.d: hills noise modulation.
             this.hillsNoiseBlend = math.clamp(hillsNoiseBlend, 0f, 1f);
             this.hillsNoise = hillsNoise.frequency > 0
                 ? hillsNoise
                 : TerrainNoiseSettings.DefaultHills;
+
+            // W-aux.b: sea-floor relief. Both 0 = identity (flat ocean, golden-safe).
+            this.seaFloorLevel01 = math.clamp(seaFloorLevel01, 0f, 1f);
+            this.seaFloorAmplitude01 = math.clamp(seaFloorAmplitude01, 0f, 1f);
         }
     }
 }

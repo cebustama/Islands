@@ -46,8 +46,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const ulong GoldenCoastDist = 0UL;
 
         // ── Phase L new outputs ───────────────────────────────────────────────
-        private const ulong GoldenFlowAccumL = 0xD549F3F32D57C771UL;
-        private const ulong GoldenRiversL = 0x7BE94E82265A2FEAUL;
+        private const ulong GoldenFlowAccumL = 0xFF413C94785FCEACUL;
+        private const ulong GoldenRiversL = 0xA14DDE84505F6876UL;
         private const ulong GoldenLakesL = 0x31F98F699FC42573UL;
 
         // =====================================================================

@@ -30,13 +30,13 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // ── Capture instructions ─────────────────────────────────────────────
         // Run with 0UL. The test fails and prints the real hash in the message.
         // Paste that value here, then re-run to lock.
-        private const ulong ExpectedBiomeRegionIdHash = 0x6CAE7B67362E5D3DUL;
+        private const ulong ExpectedBiomeRegionIdHash = 0x7B6642295E08D0CDUL;
 
         // ── M2a hashes reproduced here for the no-invalidate cross-check ─────
         // These must match MapPipelineRunner2DGoldenM2Tests constants exactly.
-        private const ulong ExpectedTemperatureHash = 0xB21849253CD4A4A5UL;
+        private const ulong ExpectedTemperatureHash = 0x4AC0E124479485A9UL;
         private const ulong ExpectedMoistureHash = 0x4B4106BD43EAA656UL;
-        private const ulong ExpectedBiomeHash = 0x83F2BC89009F7C13UL;
+        private const ulong ExpectedBiomeHash = 0xA7E6C1ECCB9C9AB3UL;
 
         // =====================================================================
         // Test 1 — BiomeRegionId golden

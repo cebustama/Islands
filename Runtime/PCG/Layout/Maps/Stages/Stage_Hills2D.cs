@@ -4,6 +4,7 @@ using Islands.PCG.Core;
 using Islands.PCG.Fields;
 using Islands.PCG.Grids;
 using Islands.PCG.Layout.Maps;
+using Islands.PCG.Layout.Maps.Operators;
 using Islands.PCG.Operators;
 
 namespace Islands.PCG.Layout.Maps.Stages
@@ -33,8 +34,11 @@ namespace Islands.PCG.Layout.Maps.Stages
     ///
     /// Phase F3b replaces the original topology-based hills (noise threshold on LandInterior)
     /// with height-threshold classification. Hills now correlate spatially with the Height
-    /// field — peaks appear where terrain is highest. Thresholds are read from
-    /// <see cref="MapTunables2D.hillsThresholdL1"/> and <see cref="MapTunables2D.hillsThresholdL2"/>.
+    /// field — peaks appear where terrain is highest. F3b′ (hills window recalibration):
+    /// thresholds are no longer tunables — they are resolved per run from the AREA
+    /// fractions <see cref="MapTunables2D.hillsL1"/> / <see cref="MapTunables2D.hillsL2"/>
+    /// by <see cref="HillsThresholdOps2D"/> (order statistics over the Land height
+    /// distribution), so the realized band tracks the target across seeds.
     ///
     /// Phase N5.d adds optional per-cell noise offset to the thresholds via
     /// <see cref="MapTunables2D.hillsNoiseBlend"/>. When blend > 0, a noise array is filled
@@ -81,10 +85,14 @@ namespace Islands.PCG.Layout.Maps.Stages
             // LandEdge / LandInterior: unchanged 4-neighbor boundary detection.
             MaskTopologyOps2D.ExtractEdgeAndInterior4(in land, ref landEdge, ref landInterior);
 
-            // Height-threshold classification.
-            // Thresholds are constructor-validated in MapTunables2D (clamped, L2 >= L1).
-            float thL1 = inputs.Tunables.hillsThresholdL1;
-            float thL2 = inputs.Tunables.hillsThresholdL2;
+            // F3b′: resolve area fractions → per-run Height-space thresholds via
+            // order statistics over the Land population. Deterministic: same
+            // Height + Land ⇒ same sorted array ⇒ same thresholds. The whole tie
+            // class at each cut is included (realized fraction >= target; no
+            // spatially biased tie-breaking).
+            HillsThresholdOps2D.ComputeAreaThresholds(
+                in height, in land, inputs.Tunables.hillsL1, inputs.Tunables.hillsL2,
+                out float thL1, out float thL2);
             float blend = inputs.Tunables.hillsNoiseBlend;
 
             // N5.d: optional noise modulation of thresholds.

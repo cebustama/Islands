@@ -13,10 +13,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const int H = 64;
         private const uint Seed = 42u;
 
-        // N5.e: zeroed for re-lock. Walkable/Stairs depend on HillsL2 which shifts
-        // due to the hills threshold remap (effective L2 ≈ 0.8005 vs old 0.80).
-        private const ulong ExpectedWalkableHash = 0xA9A213FFB5842CF7UL;
-        private const ulong ExpectedStairsHash = 0x678993F8298D975FUL;
+        // F3b′ re-anchor (area-quantile hill thresholds). Walkable and Stairs both
+        // derive from the hills masks, so both move with them.
+        //   Walkable 0x1B6B5A207F0961FA -> 0x72217820D251DCCB
+        //   Stairs   0x169920A412C17B67 -> 0xA54060EDAB8B497C
+        private const ulong ExpectedWalkableHash = 0x72217820D251DCCBUL;
+        private const ulong ExpectedStairsHash = 0xA54060EDAB8B497CUL;
 
         [Test]
         public void Pipeline_F6_GoldenHash_IsLocked()

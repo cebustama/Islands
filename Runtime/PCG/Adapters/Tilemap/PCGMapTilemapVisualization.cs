@@ -123,9 +123,20 @@ namespace Islands.PCG.Adapters.Tilemap
         [Range(0f, 1f)][SerializeField] private float islandSmoothTo01 = 0.70f;
 
         [Header("Water & Shore")]
-        [Range(0f, 1f)][SerializeField] private float waterThreshold01 = 0.50f;
+        // W-aux.f: mirrors MapTunables2D.Default / MapGenerationPreset. Height is
+        // normalized by (1 + amplitude/2), so a fresh component at 0.50f would show a
+        // shrunken island. Serialized scene instances keep their own saved value.
+        [Range(0f, 1f)][SerializeField] private float waterThreshold01 = 0.42553192f;
         [Range(0f, 0.5f)][SerializeField] private float shallowWaterDepth01 = 0f;
         [Range(0f, 0.5f)][SerializeField] private float midWaterDepth01 = 0f;
+
+        [Header("Sea Floor (W-aux.b)")]
+        [Tooltip("Mean sea-floor elevation as a fraction of Water Threshold.\n" +
+                 "0 = flat ocean (golden-safe default). Lower bound on water cells only.")]
+        [Range(0f, 1f)][SerializeField] private float seaFloorLevel01 = 0f;
+        [Tooltip("Sea-floor relief amplitude as a fraction of Water Threshold,\n" +
+                 "driven by the terrain noise already sampled (no extra RNG draws).")]
+        [Range(0f, 1f)][SerializeField] private float seaFloorAmplitude01 = 0f;
 
         // N5.b: noise settings assets (optional override)
         [Header("Noise Settings Assets (N5.b)")]
@@ -353,6 +364,8 @@ namespace Islands.PCG.Adapters.Tilemap
         private int lastResolution;
         private bool lastEnableHillsStage, lastEnableShoreStage;
         private float lastShallowWaterDepth01, lastMidWaterDepth01;
+        // W-aux.b: sea-floor relief dirty tracking
+        private float lastSeaFloorLevel01, lastSeaFloorAmplitude01;
         private bool lastEnableVegetationStage, lastEnableTraversalStage, lastEnableMorphologyStage, lastEnableBiomeStage;
         private bool lastEnableRegionsStage;
         private bool lastEnableHydrologyStage;
@@ -500,7 +513,9 @@ namespace Islands.PCG.Adapters.Tilemap
                       hillsNoise: hillsNoiseAsset != null
                           ? hillsNoiseAsset.Settings
                           : hillsNoiseSettings,
-                      shapeMode: shapeMode);
+                      shapeMode: shapeMode,
+                      seaFloorLevel01: seaFloorLevel01,
+                      seaFloorAmplitude01: seaFloorAmplitude01);
 
             EnsureContextAllocated(eRes);
 
@@ -698,10 +713,398 @@ namespace Islands.PCG.Adapters.Tilemap
                 return;
             }
             MapDataExport statsExport = MapExporter2D.Export(ctx);
+            float effectiveWaterThreshold01 =
+                preset != null ? preset.waterThreshold01 : waterThreshold01;
             Debug.Log(
                 $"[PCGMapTilemapVisualization] mapstats seed={statsExport.Seed} " +
                 $"res={statsExport.Width}x{statsExport.Height}\n" +
-                MapStatsExporter2D.ToJson(statsExport), this);
+                                MapStatsExporter2D.ToJson(statsExport, effectiveWaterThreshold01), this);
+        }
+
+        // =====================================================================
+        // TEMPORARY probe — vegetation noise distribution (quantile batch, step 1).
+        // NOT a governed surface. Delete once the mapping is anchored.
+        // Reads the map as last built: no rebuild, no RNG, no core changes.
+        // =====================================================================
+
+        /// <summary>
+        /// Dumps the distribution of the Stage_Vegetation2D noise field over three
+        /// populations (all cells / LandInterior / stage-eligible), plus a preview of
+        /// what a global-quantile cut would produce per biome with today's densities.
+        /// The noise constants below MUST mirror Stage_Vegetation2D exactly.
+        /// </summary>
+        public void LogVegetationNoiseHistogram()
+        {
+            if (ctx == null)
+            {
+                Debug.LogWarning("[vegprobe] No map context — let the component build once first.", this);
+                return;
+            }
+
+            MapDataExport ex = MapExporter2D.Export(ctx);
+            if (!ex.HasField(MapFieldId.Biome)
+             || !ex.HasLayer(MapLayerId.LandInterior)
+             || !ex.HasLayer(MapLayerId.HillsL2))
+            {
+                Debug.LogWarning("[vegprobe] Needs Biome + LandInterior + HillsL2 in the current build.", this);
+                return;
+            }
+
+            // MIRROR of Stage_Vegetation2D private constants. Must not diverge.
+            const uint NoiseSeedSalt = 0xB7C2F1A4u;
+            const int NoiseFrequency = 4;
+            const int NoiseOctaves = 3;
+            const int NoiseLacunarity = 2;
+            const float NoisePersistence = 0.5f;
+            const int QuantSteps = 1024;
+
+            var domain = new GridDomain2D(ex.Width, ex.Height);
+            float[] biome = ex.GetField(MapFieldId.Biome);
+            bool[] li = ex.GetLayer(MapLayerId.LandInterior);
+            bool[] l2 = ex.GetLayer(MapLayerId.HillsL2);
+
+            int biomeCount = (int)BiomeType.COUNT;
+            int[] hAll = new int[QuantSteps];
+            int[] hInt = new int[QuantSteps];
+            int[] hElig = new int[QuantSteps];
+            int[][] hBiome = new int[biomeCount][];
+            int[] nBiome = new int[biomeCount];
+            int nAll = 0, nInt = 0, nElig = 0;
+            double sumElig = 0.0;
+            int minK = QuantSteps, maxK = -1;
+
+            var noise01 = new NativeArray<float>(domain.Length, Allocator.Temp,
+                NativeArrayOptions.UninitializedMemory);
+            try
+            {
+                MapNoiseBridge2D.FillSimplexPerlin01(
+                    in domain, noise01,
+                    seed: ex.Seed, seedSalt: NoiseSeedSalt,
+                    frequency: NoiseFrequency, octaves: NoiseOctaves,
+                    lacunarity: NoiseLacunarity, persistence: NoisePersistence,
+                    quantSteps: QuantSteps);
+
+                for (int i = 0; i < domain.Length; i++)
+                {
+                    float v = noise01[i];
+                    int k = math.clamp((int)(v * QuantSteps), 0, QuantSteps - 1);
+                    hAll[k]++; nAll++;
+
+                    if (!li[i]) continue;
+                    hInt[k]++; nInt++;
+
+                    int b = (int)biome[i];
+                    if (b <= 0 || b >= biomeCount) continue;
+                    BiomeDef def = BiomeTable.Definitions[b];
+                    if (def.vegetationDensity <= 0f) continue;
+                    if (l2[i] && !def.vegetatesOnPeaks) continue;
+
+                    hElig[k]++; nElig++; sumElig += v;
+                    if (k < minK) minK = k;
+                    if (k > maxK) maxK = k;
+                    if (hBiome[b] == null) hBiome[b] = new int[QuantSteps];
+                    hBiome[b][k]++;
+                    nBiome[b]++;
+                }
+            }
+            finally { if (noise01.IsCreated) noise01.Dispose(); }
+
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new System.Text.StringBuilder(8192);
+            sb.AppendFormat(ci, "[vegprobe] seed={0} res={1}x{2}\n", ex.Seed, ex.Width, ex.Height);
+            sb.AppendFormat(ci, "populations: all={0} landInterior={1} eligible={2}\n", nAll, nInt, nElig);
+            if (nElig == 0) { Debug.Log(sb.ToString(), this); return; }
+
+            sb.AppendFormat(ci, "eligible noise01: min={0:F4} max={1:F4} mean={2:F4}\n",
+                minK / (float)QuantSteps, maxK / (float)QuantSteps, sumElig / nElig);
+
+            sb.Append("\nhistogram (20 coarse bins over the 1024 quantized buckets)\n");
+            sb.Append("range            all   interior   eligible   pctElig\n");
+            for (int bin = 0; bin < 20; bin++)
+            {
+                int lo = bin * QuantSteps / 20;
+                int hi = (bin + 1) * QuantSteps / 20;
+                int cAll = 0, cInt = 0, cElig = 0;
+                for (int k = lo; k < hi; k++) { cAll += hAll[k]; cInt += hInt[k]; cElig += hElig[k]; }
+                sb.AppendFormat(ci, "[{0:F3},{1:F3}) {2,8} {3,8} {4,8}   {5,6:F2}\n",
+                    lo / (float)QuantSteps, hi / (float)QuantSteps,
+                    cAll, cInt, cElig, 100f * cElig / nElig);
+            }
+
+            sb.Append("\nglobal-quantile preview — cut computed over the ELIGIBLE population\n");
+            sb.Append("biome                  dens   cutK  cutVal   predCnt  pctOfBiome  pctOfElig\n");
+            for (int b = 1; b < biomeCount; b++)
+            {
+                if (nBiome[b] == 0) continue;
+                float density = BiomeTable.Definitions[b].vegetationDensity;
+                int cut = VegProbeCutBucket(hElig, nElig, density, QuantSteps);
+                int predBiome = 0, predElig = 0;
+                for (int k = cut; k < QuantSteps; k++) { predBiome += hBiome[b][k]; predElig += hElig[k]; }
+                sb.AppendFormat(ci, "{0,-22} {1:F2}  {2,5}  {3:F4}  {4,8}  {5,9:F2}  {6,9:F2}\n",
+                    (BiomeType)b, density, cut, cut / (float)QuantSteps,
+                    predBiome, 100f * predBiome / nBiome[b], 100f * predElig / nElig);
+            }
+
+            Debug.Log(sb.ToString(), this);
+        }
+
+        /// <summary>
+        /// TEMPORARY. Descending-cumulative quantile cut over a 1024-bucket histogram.
+        /// Returns the bucket index k such that accepting every cell with
+        /// noise01 &gt;= k/quantSteps yields at least topFraction of the population.
+        /// Tie-break: whole buckets are accepted, so realized coverage &gt;= nominal.
+        /// </summary>
+        private static int VegProbeCutBucket(int[] hist, int n, float topFraction, int quantSteps)
+        {
+            if (n <= 0 || topFraction <= 0f) return quantSteps;
+            int target = (int)math.ceil(topFraction * n);
+            int acc = 0;
+            for (int k = quantSteps - 1; k >= 0; k--)
+            {
+                acc += hist[k];
+                if (acc >= target) return k;
+            }
+            return 0;
+        }
+
+        // =====================================================================
+        // TEMPORARY probe — Height distribution + saturation attribution
+        // (threshold-mapping audit batch). NOT a governed surface.
+        // Reads the map as last built; re-derives the BaseTerrain shaping chain
+        // adapter-side to attribute Height==1.0 saturation and to sweep pow/spline
+        // variants in memory. No rebuild, no RNG, no core changes.
+        // Bucket contract: 1024 bins over [0,1] — any coordinate read off the
+        // histogram carries <= 1/1024 error. Exact-value counters and direct
+        // threshold comparisons are bin-free.
+        // =====================================================================
+
+        /// <summary>
+        /// Dumps the fine distribution of Height over three populations
+        /// (all / Land / below water threshold), attributes Height==1.0 saturation
+        /// to a concrete shaping step by per-cell counting, reports the height cuts
+        /// that would realize 15% and 30% of Land as HillsL2, and sweeps
+        /// pow/spline variants to measure Land drift at fixed waterThreshold01.
+        /// Requires a preset: the shaping-chain mirror needs its exact tunables.
+        /// </summary>
+        public void LogHeightHistogram()
+        {
+            if (ctx == null)
+            {
+                Debug.LogWarning("[hprobe] No map context — let the component build once first.", this);
+                return;
+            }
+            if (preset == null)
+            {
+                Debug.LogWarning("[hprobe] Reference run must use a preset — the shaping-chain mirror needs its effective tunables.", this);
+                return;
+            }
+
+            MapDataExport ex = MapExporter2D.Export(ctx);
+            if (!ex.HasField(MapFieldId.Height) || !ex.HasLayer(MapLayerId.Land))
+            {
+                Debug.LogWarning("[hprobe] Needs Height + Land in the current build.", this);
+                return;
+            }
+
+            MapTunables2D t = preset.ToTunables();
+            float wt = t.waterThreshold01;
+            const int Bins = 1024;
+
+            float[] hgt = ex.GetField(MapFieldId.Height);
+            bool[] landArr = ex.GetLayer(MapLayerId.Land);
+            bool[] l2Arr = ex.HasLayer(MapLayerId.HillsL2) ? ex.GetLayer(MapLayerId.HillsL2) : null;
+            int len = ex.Width * ex.Height;
+
+            // ---- Pass 1: exported-Height histogram over three populations ----
+            int[] hAll = new int[Bins];
+            int[] hLand = new int[Bins];
+            int[] hSub = new int[Bins];
+            int nLand = 0, nSub = 0;
+            double sAll = 0, sLand = 0, sSub = 0;
+            float minAll = float.MaxValue, maxAll = float.MinValue;
+            float minLand = float.MaxValue, maxLand = float.MinValue;
+            float minSub = float.MaxValue, maxSub = float.MinValue;
+            int exact1 = 0, exact0 = 0, over1 = 0;
+            int bandL2 = 0, bandL1 = 0, layerL2 = 0;
+
+            // F3b′: thresholds are per-run quantiles, not tunables. Recompute via
+            // the SAME operator the stage uses — one implementation, no mirror drift.
+            Islands.PCG.Layout.Maps.Operators.HillsThresholdOps2D.ComputeAreaThresholds(
+                hgt, landArr, len, t.hillsL1, t.hillsL2, out float thL1Run, out float thL2Run);
+
+            for (int i = 0; i < len; i++)
+            {
+                float v = hgt[i];
+                int k = math.clamp((int)(v * Bins), 0, Bins - 1);
+                hAll[k]++; sAll += v;
+                if (v < minAll) minAll = v;
+                if (v > maxAll) maxAll = v;
+                if (v == 1f) exact1++;
+                if (v == 0f) exact0++;
+                if (v > 1f) over1++;
+
+                if (landArr[i])
+                {
+                    hLand[k]++; nLand++; sLand += v;
+                    if (v < minLand) minLand = v;
+                    if (v > maxLand) maxLand = v;
+                    if (v >= thL2Run) bandL2++;
+                    else if (v >= thL1Run) bandL1++;
+                    if (l2Arr != null && l2Arr[i]) layerL2++;
+                }
+                else
+                {
+                    hSub[k]++; nSub++; sSub += v;
+                    if (v < minSub) minSub = v;
+                    if (v > maxSub) maxSub = v;
+                }
+            }
+
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new System.Text.StringBuilder(16384);
+            sb.AppendFormat(ci, "[hprobe] seed={0} res={1}x{2} bins={3} (coord err <= {4:F5})\n",
+                ex.Seed, ex.Width, ex.Height, Bins, 1f / Bins);
+            sb.AppendFormat(ci,
+                "tunables: wt={0:F4} f1={1:F2} f2={2:F2} thL1_run={3:F4} thL2_run={4:F4} pow={5:F3} splineIdentity={6} quant={7} blend={8:F2} shape={9}\n",
+                wt, t.hillsL1, t.hillsL2, thL1Run, thL2Run, t.heightRedistributionExponent,
+                t.heightRemapSpline.IsIdentity, t.heightQuantSteps, t.hillsNoiseBlend, t.shapeMode);
+            sb.AppendFormat(ci, "populations: all={0} land={1} ({2:F2}%) subWater={3}\n",
+                len, nLand, 100f * nLand / len, nSub);
+            sb.AppendFormat(ci, "Height all : min={0:F5} max={1:F5} mean={2:F5}\n", minAll, maxAll, sAll / len);
+            if (nLand > 0)
+                sb.AppendFormat(ci, "Height land: min={0:F5} max={1:F5} mean={2:F5}\n", minLand, maxLand, sLand / nLand);
+            if (nSub > 0)
+                sb.AppendFormat(ci, "Height sub : min={0:F5} max={1:F5} mean={2:F5}\n", minSub, maxSub, sSub / nSub);
+            sb.AppendFormat(ci, "exact: ==0.0 {0} | ==1.0 {1} ({2:F2}% of land) | >1.0 {3}\n",
+                exact0, exact1, nLand > 0 ? 100f * exact1 / nLand : 0f, over1);
+
+            sb.Append("\nhistogram (32 coarse bins over 1024)\n");
+            sb.Append("range              all      land   subWater   pctLand\n");
+            for (int bin = 0; bin < 32; bin++)
+            {
+                int lo = bin * Bins / 32;
+                int hi = (bin + 1) * Bins / 32;
+                int cAll = 0, cLand = 0, cSub = 0;
+                for (int k = lo; k < hi; k++) { cAll += hAll[k]; cLand += hLand[k]; cSub += hSub[k]; }
+                sb.AppendFormat(ci, "[{0:F4},{1:F4}) {2,8} {3,8} {4,8}   {5,6:F2}\n",
+                    lo / (float)Bins, hi / (float)Bins, cAll, cLand, cSub,
+                    nLand > 0 ? 100f * cLand / nLand : 0f);
+            }
+
+            // ---- Declared window: cuts realizing 15% / 30% of Land as peaks ----
+            sb.Append("\nHillsL2 realized vs nominal (bin-free direct comparison)\n");
+            sb.AppendFormat(ci, "band >=thL2: {0} ({1:F2}% of land) | band [thL1,thL2): {2} ({3:F2}% of land)\n",
+                bandL2, nLand > 0 ? 100f * bandL2 / nLand : 0f,
+                bandL1, nLand > 0 ? 100f * bandL1 / nLand : 0f);
+            if (l2Arr != null)
+                sb.AppendFormat(ci, "exported HillsL2 layer: {0} ({1:F2}% of land){2}\n",
+                    layerL2, nLand > 0 ? 100f * layerL2 / nLand : 0f,
+                    t.hillsNoiseBlend > 0f ? "  [blend>0: layer != pure threshold band]" : "");
+            int cut15 = VegProbeCutBucket(hLand, nLand, 0.15f, Bins);
+            int cut30 = VegProbeCutBucket(hLand, nLand, 0.30f, Bins);
+            sb.AppendFormat(ci, "cut for 15% of land: Height >= {0:F4} (+/-{1:F5}) | cut for 30%: Height >= {2:F4}\n",
+                cut15 / (float)Bins, 1f / Bins, cut30 / (float)Bins);
+
+            // ---- Pass 2: shaping-chain mirror — saturation attribution + sweep ----
+            var noiseF = new float[len];
+            var maskF = new float[len];
+            FillFromNoise(noiseF, ex.Width, ex.Seed, TerrainNoiseSalt, in t.terrainNoise);
+            FillShapeMask(maskF, ex.Width, t, ex.Seed);
+
+            float terrainAmp = math.max(0f, t.terrainNoise.amplitude);
+            // W-aux.f: must mirror Stage_BaseTerrain2D's normalization token for token.
+            float terrainNormScale = 1f / (1f + terrainAmp * 0.5f);
+            int qs = t.heightQuantSteps;
+            float invQuant = (qs > 1) ? (1f / qs) : 0f;
+            float redistExp = t.heightRedistributionExponent;
+            var spline = t.heightRemapSpline;
+            bool splineActive = !spline.IsIdentity;
+            bool noShape = t.shapeMode == IslandShapeMode.NoShape;
+            const float SeaFloorEpsilon = 1e-4f;
+            bool applySeaFloor = t.seaFloorLevel01 > 0f || t.seaFloorAmplitude01 > 0f;
+            float seaFloorCeil = math.max(0f, wt - SeaFloorEpsilon);
+
+            // Sweep variants: index 0 == actual settings (used for attribution+mismatch).
+            float[] vExp = { redistExp, 1.0f, redistExp, 1.0f, 0.75f, 1.5f };
+            bool[] vSpl = { true, true, false, false, true, true };
+            string[] vName = { "actual", "pow=1.0+spline", "actual pow, no spline",
+                               "pow=1.0, no spline", "pow=0.75+spline", "pow=1.5+spline" };
+            int[] vLand = new int[6];
+            int[] vL2 = new int[6];
+            int[] vSat = new int[6];
+
+            int mirrorMismatch = 0, mirrorSat = 0;
+            int satRawOver = 0, satRawExact = 0, satPow = 0, satSpline = 0, satOther = 0;
+            float maxAbsDiff = 0f;
+
+            for (int i = 0; i < len; i++)
+            {
+                float n = noiseF[i];
+                float mask01 = maskF[i];
+                float raw = noShape ? n : (mask01 + (n - 0.5f) * terrainAmp * mask01) * terrainNormScale;
+                float s1 = math.saturate(raw);
+                float q = (qs > 1) ? math.floor(s1 * qs) * invQuant : s1;
+
+                for (int vi = 0; vi < 6; vi++)
+                {
+                    float p = (vExp[vi] != 1.0f) ? math.pow(q, vExp[vi]) : q;
+                    float f = (vSpl[vi] && splineActive) ? spline.Evaluate(p) : p;
+                    if (f >= wt)
+                    {
+                        vLand[vi]++;
+                        // F3b′: actual-run quantile threshold. For sweep variants this is
+                        // a distribution-shift indicator, NOT a realized quantile.
+                        if (f >= thL2Run) vL2[vi]++;
+                    }
+                    if (f >= 1f) vSat[vi]++;
+
+                    if (vi == 0)
+                    {
+                        float final = f;
+                        if (applySeaFloor && final < wt)
+                        {
+                            float floor01 = (t.seaFloorLevel01 + (n - 0.5f) * t.seaFloorAmplitude01) * wt;
+                            final = math.max(final, math.clamp(floor01, 0f, seaFloorCeil));
+                        }
+                        float diff = math.abs(final - hgt[i]);
+                        if (diff > maxAbsDiff) maxAbsDiff = diff;
+                        if (diff > 1e-6f) mirrorMismatch++;
+                        if (final >= 1f)
+                        {
+                            mirrorSat++;
+                            if (raw > 1f) satRawOver++;             // pre-quant saturate() clip
+                            else if (raw == 1f) satRawExact++;       // landed exactly on 1.0
+                            else if (q < 1f && p >= 1f) satPow++;    // pow created it (needs exp<=0)
+                            else if (p < 1f && f >= 1f) satSpline++; // spline created it
+                            else satOther++;
+                        }
+                    }
+                }
+            }
+
+            sb.Append("\nshaping-chain mirror (adapter-side re-derivation)\n");
+            sb.AppendFormat(ci, "mismatch vs exported Height: {0} cells (maxAbsDiff={1:E2})",
+                mirrorMismatch, maxAbsDiff);
+            sb.Append(mirrorMismatch > 0
+                ? "  *** MIRROR INVALID — attribution below is NOT trustworthy ***\n"
+                : "  [mirror valid]\n");
+            sb.AppendFormat(ci,
+                "saturation attribution (final>=1.0: {0} cells): saturate-clip(raw>1)={1} raw==1={2} pow={3} spline={4} other={5}\n",
+                mirrorSat, satRawOver, satRawExact, satPow, satSpline, satOther);
+
+            sb.Append("\nsweep — Land / L2 drift at fixed wt and fixed effective thresholds (no sea-floor, cannot affect Land)\n");
+            sb.Append("variant                     land%dom   L2%land   sat%dom\n");
+            for (int vi = 0; vi < 6; vi++)
+            {
+                sb.AppendFormat(ci, "{0,-26} {1,8:F2} {2,9:F2} {3,8:F2}\n",
+                    vName[vi], 100f * vLand[vi] / len,
+                    vLand[vi] > 0 ? 100f * vL2[vi] / vLand[vi] : 0f,
+                    100f * vSat[vi] / len);
+            }
+            if (!splineActive)
+                sb.Append("note: preset spline is identity — 'spline' variants duplicate their 'no spline' pair.\n");
+
+            Debug.Log(sb.ToString(), this);
         }
 
         private static ulong GoldenFnvMixU64(ulong h, ulong value, ulong fnvPrime)
@@ -1113,6 +1516,8 @@ namespace Islands.PCG.Adapters.Tilemap
             lastEnableShoreStage = preset != null ? preset.enableShoreStage : enableShoreStage;
             lastShallowWaterDepth01 = preset != null ? preset.shallowWaterDepth01 : shallowWaterDepth01;
             lastMidWaterDepth01 = preset != null ? preset.midWaterDepth01 : midWaterDepth01;
+            lastSeaFloorLevel01 = preset != null ? preset.seaFloorLevel01 : seaFloorLevel01;
+            lastSeaFloorAmplitude01 = preset != null ? preset.seaFloorAmplitude01 : seaFloorAmplitude01;
             lastEnableVegetationStage = preset != null ? preset.enableVegetationStage : enableVegetationStage;
             lastEnableTraversalStage = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
@@ -1196,6 +1601,8 @@ namespace Islands.PCG.Adapters.Tilemap
                 || (preset != null ? preset.enableShoreStage : enableShoreStage) != lastEnableShoreStage
                 || !Mathf.Approximately(preset != null ? preset.shallowWaterDepth01 : shallowWaterDepth01, lastShallowWaterDepth01)
                 || !Mathf.Approximately(preset != null ? preset.midWaterDepth01 : midWaterDepth01, lastMidWaterDepth01)
+                || !Mathf.Approximately(preset != null ? preset.seaFloorLevel01 : seaFloorLevel01, lastSeaFloorLevel01)
+                || !Mathf.Approximately(preset != null ? preset.seaFloorAmplitude01 : seaFloorAmplitude01, lastSeaFloorAmplitude01)
                 || (preset != null ? preset.enableVegetationStage : enableVegetationStage) != lastEnableVegetationStage
                 || (preset != null ? preset.enableTraversalStage : enableTraversalStage) != lastEnableTraversalStage
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage

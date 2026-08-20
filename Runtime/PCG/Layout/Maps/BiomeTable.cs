@@ -1,4 +1,5 @@
-﻿using Unity.Mathematics;
+﻿using Islands.PCG.Layout.Maps;
+using Unity.Mathematics;
 
 namespace Islands.PCG.Layout.Maps
 {
@@ -18,6 +19,14 @@ namespace Islands.PCG.Layout.Maps
         /// Consumed by Phase M2 to replace the global noise threshold in Stage_Vegetation2D.
         /// </summary>
         public float vegetationDensity;
+
+        /// <summary>
+        /// W-aux.c block 3: whether this biome vegetates on HillsL2 (peak band).
+        /// Replaces the former global HillsL2 exclusion in Stage_Vegetation2D with
+        /// a per-biome policy. false = the old exclusion applies to this biome.
+        /// The legacy fallback path (no Biome field) keeps the global exclusion.
+        /// </summary>
+        public bool vegetatesOnPeaks;
     }
 
     /// <summary>
@@ -91,19 +100,19 @@ namespace Islands.PCG.Layout.Maps
         /// </summary>
         public static readonly BiomeDef[] Definitions = new BiomeDef[]
         {
-            new() { type = BiomeType.Unclassified,           displayName = "Unclassified",              vegetationDensity = 0.0f },
-            new() { type = BiomeType.Snow,                   displayName = "Snow",                      vegetationDensity = 0.0f },
-            new() { type = BiomeType.Tundra,                 displayName = "Tundra",                    vegetationDensity = 0.05f },
-            new() { type = BiomeType.BorealForest,           displayName = "Boreal Forest",             vegetationDensity = 0.6f },
-            new() { type = BiomeType.TemperateDesert,        displayName = "Temperate Desert",          vegetationDensity = 0.05f },
-            new() { type = BiomeType.Shrubland,              displayName = "Shrubland",                 vegetationDensity = 0.25f },
-            new() { type = BiomeType.TemperateForest,        displayName = "Temperate Forest",          vegetationDensity = 0.65f },
-            new() { type = BiomeType.TemperateRainforest,    displayName = "Temperate Rainforest",      vegetationDensity = 0.85f },
-            new() { type = BiomeType.SubtropicalDesert,      displayName = "Subtropical Desert",        vegetationDensity = 0.02f },
-            new() { type = BiomeType.Grassland,              displayName = "Grassland",                 vegetationDensity = 0.15f },
-            new() { type = BiomeType.TropicalSeasonalForest, displayName = "Tropical Seasonal Forest",  vegetationDensity = 0.7f },
-            new() { type = BiomeType.TropicalRainforest,     displayName = "Tropical Rainforest",       vegetationDensity = 0.9f },
-            new() { type = BiomeType.Beach,                  displayName = "Beach",                     vegetationDensity = 0.02f },
+            new() { type = BiomeType.Unclassified,           displayName = "Unclassified",              vegetationDensity = 0.0f,  vegetatesOnPeaks = false },
+            new() { type = BiomeType.Snow,                   displayName = "Snow",                      vegetationDensity = 0.0f,  vegetatesOnPeaks = false },
+            new() { type = BiomeType.Tundra,                 displayName = "Tundra",                    vegetationDensity = 0.05f, vegetatesOnPeaks = true  },
+            new() { type = BiomeType.BorealForest,           displayName = "Boreal Forest",             vegetationDensity = 0.6f,  vegetatesOnPeaks = true  },
+            new() { type = BiomeType.TemperateDesert,        displayName = "Temperate Desert",          vegetationDensity = 0.05f, vegetatesOnPeaks = false },
+            new() { type = BiomeType.Shrubland,              displayName = "Shrubland",                 vegetationDensity = 0.25f, vegetatesOnPeaks = true  },
+            new() { type = BiomeType.TemperateForest,        displayName = "Temperate Forest",          vegetationDensity = 0.65f, vegetatesOnPeaks = true  },
+            new() { type = BiomeType.TemperateRainforest,    displayName = "Temperate Rainforest",      vegetationDensity = 0.85f, vegetatesOnPeaks = true  },
+            new() { type = BiomeType.SubtropicalDesert,      displayName = "Subtropical Desert",        vegetationDensity = 0.02f, vegetatesOnPeaks = false },
+            new() { type = BiomeType.Grassland,              displayName = "Grassland",                 vegetationDensity = 0.15f, vegetatesOnPeaks = true  },
+            new() { type = BiomeType.TropicalSeasonalForest, displayName = "Tropical Seasonal Forest",  vegetationDensity = 0.7f,  vegetatesOnPeaks = true  },
+            new() { type = BiomeType.TropicalRainforest,     displayName = "Tropical Rainforest",       vegetationDensity = 0.9f,  vegetatesOnPeaks = true  },
+            new() { type = BiomeType.Beach,                  displayName = "Beach",                     vegetationDensity = 0.02f, vegetatesOnPeaks = false },
         };
     }
 }

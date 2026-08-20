@@ -14,7 +14,8 @@ Purpose: Explicit index of current documentary authority inside Islands.
 
 ## Current promoted subsystem authorities
 - `systems/pcg-core-ssot.md`
-- `systems/map-pipeline-by-layers-ssot.md` (implemented slice currently F0–F3)
+- `systems/map-pipeline-by-layers-ssot.md` (implemented slice: see `CURRENT_STATE.md` for the
+  exact chain — the index owns authority order, not implementation state)
 
 ## Current staged support surfaces not promoted to subsystem authority
 - GraphLibrary
@@ -26,12 +27,29 @@ Purpose: Explicit index of current documentary authority inside Islands.
 
 ## Current active planning docs
 - `planning/active/PCG_Roadmap.md`
+- `planning/active/Phase_Q_Pending_Doc_Updates.md` (partially applied — §3.1 blocked)
+- `planning/active/Phase_W_Pending_Doc_Updates.md` (partially applied — §3 blocked)
+
+Note: the six W-aux.c…W-aux.f / X1.a doc-update queues were applied on 2026-08-20 and moved
+to `planning/archive/`. The two queues above remain **live** because each still carries
+unapplied content that exists nowhere else: `Phase_Q` §3.1 (the proposed starter-asset
+correction) and `Phase_W` §3 (the reserved W.a golden slot). Do not archive either until its
+blocker is resolved.
 
 ## Current closed / archived planning docs
 - `planning/archive/Islands_Governance_Migration_Roadmap.md`
+- `planning/archive/Phase_W_aux_Pending_Doc_Updates.md`
+- `planning/archive/Phase_W_aux_b_Pending_Doc_Updates.md`
 - `planning/archive/Islands_PCG_MapPipelineByLayers_Roadmap_v0.1.0_2026-01-29.md`
 - `planning/archive/Islands_PCG_Roadmap_Integrated_With_MapLayers_v0.2.4_2026-02-03.md`
 - `planning/archive/PhaseF_Planning_Report_MapPipeline_F3_F6_NoiseJobs_2026-02-03_v2.md`
+- `planning/archive/W-aux_c_Pending_Doc_Updates.md` (applied 2026-08-20)
+- `planning/archive/W-aux_c_Blocks_2_3_Pending_Doc_Updates.md` (applied 2026-08-20)
+- `planning/archive/W-aux_d_Vegetation_Quantile_Pending_Doc_Updates.md` (applied 2026-08-20)
+- `planning/archive/W-aux_e_Threshold_Mapping_Audit_Pending_Doc_Updates.md` (applied 2026-08-20)
+- `planning/archive/W-aux_f_Height_Ceiling_Desaturation_Pending_Doc_Updates.md` (applied 2026-08-20)
+- `planning/archive/X1_Pending_Doc_Updates.md` (applied 2026-08-20)
+- `Application_Ledger_2026-08-20.md` — item-by-item disposition of all eight queues
 
 ## Current governed reference docs called out explicitly
 - `reference/overview.md`
@@ -42,6 +60,7 @@ Purpose: Explicit index of current documentary authority inside Islands.
 - `reference/graphs.md`
 - `reference/legacy-map-generation-reference.md`
 - `reference/pcg-layout-strategies-reference.md`
+- `reference/tileset-import-guide.md`
 
 ## Current governed historical-support docs called out explicitly
 - `reference/GraphLibrary_Pipeline_Technical_Doc.md`

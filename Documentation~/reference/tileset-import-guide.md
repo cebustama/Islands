@@ -248,6 +248,22 @@ falls through silently to the base tile.
 **When to use:** When you want different tile art per biome (snow ground, desert sand, jungle
 canopy) without duplicating the entire `TilesetConfig` for each biome.
 
+**Placeholder-first workflow (Q-aux.a).** Real tile art is not required to validate a
+biome-conditional setup. After running *Populate Default Biome Groups*, use the Inspector
+header context menu → **Generate Placeholder Tiles (empty slots)**. This creates
+flat-color `Tile` assets under `<override folder>/Placeholders/`, one per (biome, layer)
+slot, colored from the `BiomeColorPalette` defaults with per-layer brightness and border
+modulation. Every biome present in the map becomes immediately visible, which makes the
+smoke test independent of which biomes a given seed happens to produce.
+
+`HillsL2` placeholders carry a 4px white border by design: `HillsL2` is in
+`s_colliderLayers`, so a white-bordered tile appearing on the collider tilemap is the
+visual signature of a Q-BUG-2 regression.
+
+**Generate Placeholder Tiles (overwrite all)** replaces every slot including real art
+(confirmation dialog). **Clear Placeholder Tiles** removes placeholder references while
+leaving real art untouched; delete the `Placeholders/` folder to remove the assets.
+
 **Creating the asset:**
 
 1. Right-click in Project → **Create → Islands → PCG → Biome Tile Override**.
@@ -346,6 +362,11 @@ different climate bands:
 
 Cross-reference against the Biome scalar overlay to confirm cells switch correctly.
 
+**Note (Q-aux.a).** The three-pair minimum assumes the target biomes actually exist in the
+generated map — which depends on the seed, the preset and the resolution. With placeholder
+generation (§Phase 7) that constraint disappears: all 48 default slots are filled at once,
+so whatever biomes the map does contain are visible immediately.
+
 ### Layers NOT recommended for biome override
 
 These layers are biome-independent and should stay in the base TilesetConfig only:
@@ -382,3 +403,5 @@ These layers are biome-independent and should stay in the base TilesetConfig onl
 | Biome override has no visible effect | Override asset not assigned | Drag the BiomeTileOverride SO into the component's field |
 | Override affects wrong cells | Biome field mismatch | Enable the Biome scalar overlay to verify biome boundaries |
 | Changing override tile doesn't regenerate | Dirty tracking miss | Modify any tunable to force regeneration, or toggle a stage off/on |
+| Override assigned but a layer never varies by biome | Base `TilesetConfig` entry for that layer has no tile — pre-Q-fix.a behavior skipped it | Update to Q-fix.a; overrides now apply to layers with no base art |
+| Biome art appears on the collider tilemap | Collider group routed through the biome-aware path | Q-fix.a fixes this; the collider group must be stamped via `ApplyLayered` |

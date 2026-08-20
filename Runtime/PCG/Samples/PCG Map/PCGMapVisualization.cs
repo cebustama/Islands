@@ -138,7 +138,10 @@ namespace Islands.PCG.Samples
 
         [Header("F2 Tunables (Shape + Threshold)")]
         [Range(0f, 1f)][SerializeField] private float islandRadius01 = 0.45f;
-        [Range(0f, 1f)][SerializeField] private float waterThreshold01 = 0.50f;
+        // W-aux.f: mirrors MapTunables2D.Default / MapGenerationPreset. Height is
+        // normalized by (1 + amplitude/2), so a fresh component at 0.50f would show a
+        // shrunken island. Serialized scene instances keep their own saved value.
+        [Range(0f, 1f)][SerializeField] private float waterThreshold01 = 0.42553192f;
         [Range(0f, 1f)][SerializeField] private float islandSmoothFrom01 = 0.30f;
         [Range(0f, 1f)][SerializeField] private float islandSmoothTo01 = 0.70f;
 

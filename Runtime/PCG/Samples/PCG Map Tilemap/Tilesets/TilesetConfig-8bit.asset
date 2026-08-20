@@ -21,15 +21,15 @@ MonoBehaviour:
     enabled: 1
   - label: MidWater
     layerId: 12
-    tile: {fileID: 11400000, guid: 48efa363f7477264d94e14daf96293d9, type: 2}
-    animatedTile: {fileID: 0}
-    ruleTile: {fileID: 0}
-    enabled: 1
-  - label: ShallowWater
-    layerId: 2
     tile: {fileID: 11400000, guid: 1c1903108de27e545801fa09b849f03f, type: 2}
     animatedTile: {fileID: 0}
     ruleTile: {fileID: 11400000, guid: 26e3cfeacc92dbf408d4f85408c93025, type: 2}
+    enabled: 1
+  - label: ShallowWater
+    layerId: 2
+    tile: {fileID: 11400000, guid: 34b7b2fc5957d6e4c9d6d106e725eaac, type: 2}
+    animatedTile: {fileID: 0}
+    ruleTile: {fileID: 0}
     enabled: 1
   - label: Land
     layerId: 0

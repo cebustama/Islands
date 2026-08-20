@@ -4,6 +4,7 @@ using Islands.PCG.Core;
 using Islands.PCG.Fields;
 using Islands.PCG.Grids;
 using Islands.PCG.Layout.Maps;
+using Islands.PCG.Layout.Maps.Operators;
 using Islands.PCG.Layout.Maps.Stages;
 
 namespace Islands.PCG.Tests.EditMode.Maps
@@ -18,9 +19,9 @@ namespace Islands.PCG.Tests.EditMode.Maps
     /// - HillsL1/L2 ⊆ Land (was HillsL1 ⊆ LandInterior).
     /// - Hills are derived from Height field thresholds (was independent noise on LandInterior).
     ///
-    /// N5.e: hillsL1/L2 are relative fractions remapped in MapTunables2D ctor.
-    /// Effective thresholds stored in hillsThresholdL1/L2 fields, consumed by stage.
-    /// L2 >= L1 guaranteed by construction (no clamping needed).
+    /// F3b′: hillsL1/L2 are AREA fractions of Land; per-run thresholds computed
+    /// by HillsThresholdOps2D inside the stage (order statistics over Land).
+    /// f2 clamped <= f1 (peaks ⊆ hills budget).
     /// </summary>
     public sealed class StageHills2DTests
     {
@@ -34,8 +35,11 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // re-locked together for a clean capture cycle.
         private const ulong ExpectedLandEdgeHash64 = 0x17D1FE919DCC3C33UL;
         private const ulong ExpectedLandInteriorHash64 = 0x228E6C047D7792EFUL;
-        private const ulong ExpectedHillsL1Hash64 = 0xD8B3DCF4A4AC3BA0UL;
-        private const ulong ExpectedHillsL2Hash64 = 0x29F3B1EA4B818E4FUL;
+        // F3b′ re-anchor: HillsL1 0xCB0433856C6A4A3B -> 0x532B332F40A43C82.
+        //                 HillsL2 0xA6E4DF1C6BE62012 -> 0xB05ADEBE66AE4D5C.
+        // LandEdge / LandInterior unchanged — hills does not derive them.
+        private const ulong ExpectedHillsL1Hash64 = 0x532B332F40A43C82UL;
+        private const ulong ExpectedHillsL2Hash64 = 0xB05ADEBE66AE4D5CUL;
 
         [Test]
         public void Stage_Hills2D_IsDeterministic()
@@ -142,9 +146,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
                 ref MaskGrid2D hillsL2 = ref ctx.GetLayer(MapLayerId.HillsL2);
                 ref ScalarField2D height = ref ctx.GetField(MapFieldId.Height);
 
-                // N5.e: thresholds are effective raw values computed by the remap.
-                float thL1 = tunables.hillsThresholdL1;
-                float thL2 = tunables.hillsThresholdL2;
+                // F3b′: thresholds are per-run quantiles — recompute via the same
+                // operator the stage uses (blend = 0 in Default, so classification
+                // must match these thresholds exactly).
+                HillsThresholdOps2D.ComputeAreaThresholds(
+                    in height, in land, tunables.hillsL1, tunables.hillsL2,
+                    out float thL1, out float thL2);
 
                 int w = domain.Width;
                 int h = domain.Height;
@@ -187,101 +194,41 @@ namespace Islands.PCG.Tests.EditMode.Maps
         }
 
         // =================================================================
-        // N5.e — Hills Threshold UX Remap
+        // F3b′ — Area-fraction tunables (quantile thresholds)
         // =================================================================
 
         [Test]
-        public void N5e_Remap_ProducesExpectedEffectiveThresholds()
+        public void F3bPrime_Tunables_StoreClampedAreaFractions()
         {
-            // Known inputs: hillsL1 = 0.60, hillsL2 = 0.50, waterThreshold = 0.50.
-            // L1_eff = 0.50 + 0.60 * 0.50 = 0.80
-            // L2_eff = 0.80 + 0.50 * 0.20 = 0.90
             var tunables = new MapTunables2D(
                 islandRadius01: 0.45f,
                 waterThreshold01: 0.50f,
                 islandSmoothFrom01: 0.30f,
                 islandSmoothTo01: 0.70f,
                 hillsL1: 0.60f,
-                hillsL2: 0.50f);
+                hillsL2: 0.25f);
 
-            Assert.AreEqual(0.80f, tunables.hillsThresholdL1, 1e-5f,
-                "L1 effective should be waterThreshold + hillsL1 * (1 - waterThreshold).");
-            Assert.AreEqual(0.90f, tunables.hillsThresholdL2, 1e-5f,
-                "L2 effective should be L1_eff + hillsL2 * (1 - L1_eff).");
+            Assert.AreEqual(0.60f, tunables.hillsL1, 1e-6f,
+                "hillsL1 is stored as a raw area fraction (no remap).");
+            Assert.AreEqual(0.25f, tunables.hillsL2, 1e-6f,
+                "hillsL2 is stored as a raw area fraction (no remap).");
         }
 
         [Test]
-        public void N5e_Remap_L2AlwaysGreaterOrEqualL1()
+        public void F3bPrime_Tunables_L2ClampedToL1()
         {
-            // Even with extreme inputs, L2 >= L1 is guaranteed by construction.
+            // Peaks are a subset of the hills budget: f2 > f1 clamps to f1.
             var tunables = new MapTunables2D(
                 islandRadius01: 0.45f,
                 waterThreshold01: 0.50f,
                 islandSmoothFrom01: 0.30f,
                 islandSmoothTo01: 0.70f,
-                hillsL1: 0.99f,
-                hillsL2: 0.0f);
+                hillsL1: 0.30f,
+                hillsL2: 0.90f);
 
-            Assert.GreaterOrEqual(tunables.hillsThresholdL2, tunables.hillsThresholdL1,
-                "Remap must guarantee L2_eff >= L1_eff.");
-        }
-
-        [Test]
-        public void N5e_Remap_ZeroInputs_ThresholdsAtWaterThreshold()
-        {
-            // hillsL1 = 0 → L1_eff = waterThreshold (all land is hills).
-            // hillsL2 = 0 → L2_eff = L1_eff (all hills are L2, L1 band empty).
-            var tunables = new MapTunables2D(
-                islandRadius01: 0.45f,
-                waterThreshold01: 0.50f,
-                islandSmoothFrom01: 0.30f,
-                islandSmoothTo01: 0.70f,
-                hillsL1: 0.0f,
-                hillsL2: 0.0f);
-
-            Assert.AreEqual(0.50f, tunables.hillsThresholdL1, 1e-5f,
-                "hillsL1=0 should place L1 at waterThreshold.");
-            Assert.AreEqual(0.50f, tunables.hillsThresholdL2, 1e-5f,
-                "hillsL2=0 should place L2 at L1_eff (L1 band empty).");
-        }
-
-        [Test]
-        public void N5e_Remap_OneInputs_ThresholdsAtMaximum()
-        {
-            // hillsL1 = 1 → L1_eff = 1.0 (no hills).
-            // hillsL2 = 1 → L2_eff = 1.0.
-            var tunables = new MapTunables2D(
-                islandRadius01: 0.45f,
-                waterThreshold01: 0.50f,
-                islandSmoothFrom01: 0.30f,
-                islandSmoothTo01: 0.70f,
-                hillsL1: 1.0f,
-                hillsL2: 1.0f);
-
-            Assert.AreEqual(1.0f, tunables.hillsThresholdL1, 1e-5f,
-                "hillsL1=1 should place L1 at maximum height.");
-            Assert.AreEqual(1.0f, tunables.hillsThresholdL2, 1e-5f,
-                "hillsL2=1 should place L2 at maximum height.");
-        }
-
-        [Test]
-        public void N5e_Remap_DifferentWaterThresholds()
-        {
-            // With waterThreshold = 0.30:
-            // L1_eff = 0.30 + 0.50 * 0.70 = 0.65
-            // L2_eff = 0.65 + 0.50 * 0.35 = 0.825
-            var tunables = new MapTunables2D(
-                islandRadius01: 0.45f,
-                waterThreshold01: 0.30f,
-                islandSmoothFrom01: 0.30f,
-                islandSmoothTo01: 0.70f,
-                hillsL1: 0.50f,
-                hillsL2: 0.50f);
-
-            Assert.AreEqual(0.65f, tunables.hillsThresholdL1, 1e-5f,
-                "Remap should respect non-default waterThreshold for L1.");
-            Assert.AreEqual(0.825f, tunables.hillsThresholdL2, 1e-5f,
-                "Remap should respect non-default waterThreshold for L2.");
+            Assert.AreEqual(0.30f, tunables.hillsL2, 1e-6f,
+                "hillsL2 must be clamped to hillsL1 (peaks ⊆ hills budget).");
+            Assert.LessOrEqual(tunables.hillsL2, tunables.hillsL1);
         }
 
         // =================================================================
@@ -379,7 +326,11 @@ namespace Islands.PCG.Tests.EditMode.Maps
             RunOnce(in inputs0, out _, out _, out _, out _, out ulong h1_0, out ulong h2_0, out _);
 
             var tunablesBlend = new MapTunables2D(
-                islandRadius01: 0.45f, waterThreshold01: 0.50f,
+                islandRadius01: 0.45f,
+                // W-aux.f: must track Default — this test compares against
+                // MapTunables2D.Default and only isolates the blend when every other
+                // tunable matches. A hardcoded 0.50f makes it pass for the wrong reason.
+                waterThreshold01: MapTunables2D.Default.waterThreshold01,
                 islandSmoothFrom01: 0.30f, islandSmoothTo01: 0.70f,
                 hillsNoiseBlend: 0.5f);
             var inputsBlend = new MapInputs(Seed, domain, tunablesBlend);

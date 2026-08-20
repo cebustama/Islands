@@ -28,8 +28,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 12345u;
 
         // ── Golden constants — set to 0UL until first green run ───────────────
-        private const ulong GoldenFlowAccumulation = 0xD549F3F32D57C771UL;
-        private const ulong GoldenRivers = 0x7BE94E82265A2FEAUL;
+        private const ulong GoldenFlowAccumulation = 0xFF413C94785FCEACUL;
+        private const ulong GoldenRivers = 0xA14DDE84505F6876UL;
         private const ulong GoldenLakes = 0x31F98F699FC42573UL;
 
         // =====================================================================

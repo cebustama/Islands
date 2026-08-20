@@ -1,4 +1,4 @@
-using Islands.PCG.Core;
+ï»¿using Islands.PCG.Core;
 using Islands.PCG.Fields;
 using Islands.PCG.Grids;
 using Islands.PCG.Layout.Maps;
@@ -25,6 +25,11 @@ namespace Islands.PCG.Samples
     /// Rectangle, NoShape, and Custom (falls back to Ellipse). F2c external shape not supported
     /// in the configurable stage (lanterns do not inject MapShapeInput).
     ///
+    /// W-aux.b: sea-floor relief step added â€” must stay identical to Stage_BaseTerrain2D.
+    ///
+    /// W-aux.f: height ceiling de-saturation (normalize by 1 + terrainAmp/2) â€” the
+    /// expression must match Stage_BaseTerrain2D token for token in BOTH shape branches,
+    /// or the lantern preview diverges from the governed pipeline.
     /// IMPORTANT: Keep this class in sync with Stage_BaseTerrain2D whenever the shape
     /// pipeline changes. The two implementations must produce identical outputs for the
     /// same inputs when configurable field values match the governed defaults.
@@ -39,7 +44,7 @@ namespace Islands.PCG.Samples
     /// Previously each consumer held a private nested copy; consolidated in J2.
     ///
     /// Lives in Islands.PCG.Samples.Shared asmdef (Runtime/PCG/Samples/Presets/).
-    /// Sample-side only — not a runtime pipeline contract.
+    /// Sample-side only ï¿½ not a runtime pipeline contract.
     /// </summary>
     public sealed class BaseTerrainStage_Configurable : IMapStage2D
     {
@@ -50,7 +55,7 @@ namespace Islands.PCG.Samples
         public TerrainNoiseSettings warpNoise = TerrainNoiseSettings.DefaultWarp;
         public int heightQuantSteps = 1024;
 
-        // Stage salts — must match Stage_BaseTerrain2D exactly.
+        // Stage salts ï¿½ must match Stage_BaseTerrain2D exactly.
         private const uint TerrainNoiseSalt = 0xF2A10001u;
         private const uint WarpXNoiseSalt = 0xF2A20002u;
         private const uint WarpYNoiseSalt = 0xF2A30003u;
@@ -83,6 +88,16 @@ namespace Islands.PCG.Samples
             int qs = heightQuantSteps;
             float invQuant = (qs > 1) ? (1f / qs) : 0f;
 
+            // W-aux.f: height ceiling de-saturation â€” mirrors Stage_BaseTerrain2D exactly.
+            float terrainNormScale = 1f / (1f + terrainAmp * 0.5f);
+
+            // W-aux.b: sea-floor relief â€” mirrors Stage_BaseTerrain2D exactly.
+            const float SeaFloorEpsilon = 1e-4f;
+            float seaFloorLevel = t.seaFloorLevel01;
+            float seaFloorAmp = t.seaFloorAmplitude01;
+            bool applySeaFloor = seaFloorLevel > 0f || seaFloorAmp > 0f;
+            float seaFloorCeil = math.max(0f, waterThreshold - SeaFloorEpsilon);
+
             float minDim = math.min((float)w, (float)h);
             float radius = math.max(1f, minDim * t.islandRadius01);
             float invRadiusSq = 1f / (radius * radius);
@@ -110,7 +125,7 @@ namespace Islands.PCG.Samples
                 warpX = new NativeArray<float>(cellCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
                 warpY = new NativeArray<float>(cellCount, Allocator.Temp, NativeArrayOptions.UninitializedMemory);
 
-                // N4: coordinate-hashed noise — matches governed stage exactly.
+                // N4: coordinate-hashed noise ï¿½ matches governed stage exactly.
                 MapNoiseBridge2D.FillNoise01(in d, noise, inputs.Seed, TerrainNoiseSalt, in terrainNoise);
                 MapNoiseBridge2D.FillNoise01(in d, warpX, inputs.Seed, WarpXNoiseSalt, in warpNoise);
                 MapNoiseBridge2D.FillNoise01(in d, warpY, inputs.Seed, WarpYNoiseSalt, in warpNoise);
@@ -126,7 +141,7 @@ namespace Islands.PCG.Samples
 
                         float h01;
 
-                        // N5.a: NoShape — height IS pure noise.
+                        // N5.a: NoShape ï¿½ height IS pure noise.
                         if (shapeMode == IslandShapeMode.NoShape)
                         {
                             h01 = n;
@@ -151,7 +166,7 @@ namespace Islands.PCG.Samples
                             float s = math.smoothstep(fromSq, toSq, rectDistSq);
                             float mask01 = 1f - s;
 
-                            h01 = mask01 + (n - 0.5f) * terrainAmp * mask01;
+                            h01 = (mask01 + (n - 0.5f) * terrainAmp * mask01) * terrainNormScale;
                         }
                         else
                         {
@@ -169,7 +184,7 @@ namespace Islands.PCG.Samples
                             float s = math.smoothstep(fromSq, toSq, radial01Sq);
                             float mask01 = 1f - s;
 
-                            h01 = mask01 + (n - 0.5f) * terrainAmp * mask01;
+                            h01 = (mask01 + (n - 0.5f) * terrainAmp * mask01) * terrainNormScale;
                         }
 
                         h01 = math.saturate(h01);
@@ -184,6 +199,18 @@ namespace Islands.PCG.Samples
                         // N2: spline remapping.
                         if (applySpline)
                             h01 = heightSpline.Evaluate(h01);
+
+                        // W-aux.b: sea-floor relief â€” lower bound on sub-threshold
+                        // cells only, applied after quant / redistribution / spline.
+                        // Reuses the already-sampled noise value n (no extra draws).
+                        // Hard clamp below waterThreshold keeps Land bit-identical.
+                        // MUST stay byte-for-byte equivalent to Stage_BaseTerrain2D.
+                        if (applySeaFloor && h01 < waterThreshold)
+                        {
+                            float floor01 = (seaFloorLevel + (n - 0.5f) * seaFloorAmp)
+                                            * waterThreshold;
+                            h01 = math.max(h01, math.clamp(floor01, 0f, seaFloorCeil));
+                        }
 
                         height.Values[idx] = h01;
                         land.SetUnchecked(x, y, h01 >= waterThreshold);

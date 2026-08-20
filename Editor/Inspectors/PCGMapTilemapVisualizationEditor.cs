@@ -73,6 +73,8 @@ namespace Islands.PCG.Editor
         private SerializedProperty shapeMode;
         private SerializedProperty islandRadius01, islandAspectRatio, warpAmplitude01, islandSmoothFrom01, islandSmoothTo01;
         private SerializedProperty waterThreshold01, shallowWaterDepth01, midWaterDepth01;
+        // W-aux.b: sea-floor relief
+        private SerializedProperty seaFloorLevel01, seaFloorAmplitude01;
         // N5.b: noise settings assets
         private SerializedProperty terrainNoiseAsset, warpNoiseAsset;
         // N5.d: hills noise asset
@@ -138,6 +140,8 @@ namespace Islands.PCG.Editor
             waterThreshold01 = serializedObject.FindProperty("waterThreshold01");
             shallowWaterDepth01 = serializedObject.FindProperty("shallowWaterDepth01");
             midWaterDepth01 = serializedObject.FindProperty("midWaterDepth01");
+            seaFloorLevel01 = serializedObject.FindProperty("seaFloorLevel01");
+            seaFloorAmplitude01 = serializedObject.FindProperty("seaFloorAmplitude01");
             // N5.b: noise settings assets
             terrainNoiseAsset = serializedObject.FindProperty("terrainNoiseAsset");
             warpNoiseAsset = serializedObject.FindProperty("warpNoiseAsset");
@@ -233,6 +237,8 @@ namespace Islands.PCG.Editor
                 EditorGUILayout.PropertyField(waterThreshold01);  // draws [Header("Water & Shore")]
                 EditorGUILayout.PropertyField(shallowWaterDepth01);
                 EditorGUILayout.PropertyField(midWaterDepth01);
+                EditorGUILayout.PropertyField(seaFloorLevel01);   // draws [Header("Sea Floor (W-aux.b)")]
+                EditorGUILayout.PropertyField(seaFloorAmplitude01);
 
                 // N5.b: noise settings assets
                 EditorGUILayout.PropertyField(terrainNoiseAsset); // draws [Header("Noise Settings Assets (N5.b)")]
@@ -419,6 +425,18 @@ namespace Islands.PCG.Editor
             if (GUILayout.Button("Log Map Stats (JSON to Console)"))
             {
                 ((PCGMapTilemapVisualization)target).LogMapStats();
+            }
+
+            // TEMPORARY (vegetation quantile batch, step 1). Remove with the probe.
+            if (GUILayout.Button("Log Vegetation Noise Histogram (TEMP)"))
+            {
+                ((PCGMapTilemapVisualization)target).LogVegetationNoiseHistogram();
+            }
+
+            // TEMPORARY (threshold-mapping audit batch). Remove with the probe.
+            if (GUILayout.Button("Log Height Histogram (TEMP)"))
+            {
+                ((PCGMapTilemapVisualization)target).LogHeightHistogram();
             }
 
             serializedObject.ApplyModifiedProperties();

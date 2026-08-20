@@ -302,7 +302,10 @@ namespace Islands.PCG.Tests.EditMode.Maps
 
         private static MapTunables2D RectangleTunables() => new MapTunables2D(
             islandRadius01: 0.45f,
-            waterThreshold01: 0.50f,
+            // W-aux.f: derived from Default, not copied. This fixture means "Default but
+            // Rectangle"; a hardcoded literal silently turned it into a DIFFERENT
+            // configuration when the default was recalibrated for the height normalization.
+            waterThreshold01: MapTunables2D.Default.waterThreshold01,
             islandSmoothFrom01: 0.30f,
             islandSmoothTo01: 0.70f,
             islandAspectRatio: 1.00f,
@@ -403,6 +406,9 @@ namespace Islands.PCG.Tests.EditMode.Maps
 
         private static MapTunables2D NoShapeTunables() => new MapTunables2D(
             islandRadius01: 0.45f,
+            // W-aux.f: intentionally NOT tracking Default. NoShape sets h01 = n and never
+            // reaches the normalized mask+perturbation formula, so this fixture needs no
+            // compensation. Deriving from Default here would break green goldens.
             waterThreshold01: 0.50f,
             islandSmoothFrom01: 0.30f,
             islandSmoothTo01: 0.70f,
@@ -525,7 +531,10 @@ namespace Islands.PCG.Tests.EditMode.Maps
             var domain = new GridDomain2D(W, H);
             var customTunables = new MapTunables2D(
                 islandRadius01: 0.45f,
-                waterThreshold01: 0.50f,
+                // W-aux.f: must track Default — this test asserts Custom == Ellipse where
+                // Ellipse comes from MapTunables2D.Default, so the comparison is only
+                // meaningful when both sides use the same water threshold.
+                waterThreshold01: MapTunables2D.Default.waterThreshold01,
                 islandSmoothFrom01: 0.30f,
                 islandSmoothTo01: 0.70f,
                 islandAspectRatio: 1.00f,
