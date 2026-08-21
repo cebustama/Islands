@@ -3,13 +3,17 @@
 |   +---archive
 |   |   +---pending doc updates
 |   |   |   +---Phase_Q_Pending_Doc_Updates.md
+|   |   |   +---Phase_T2_Pending_Doc_Updates.md
 |   |   |   +---Phase_W_Pending_Doc_Updates.md
+|   |   |   +---W_b_Pending_Doc_Updates.md
 |   |   |   +---W-aux_c_Pending_Doc_Updates.md
 |   |   |   +---W-aux_d_Vegetation_Quantile_Pending_Doc_Updates.md
 |   |   |   +---W-aux_e_Threshold_Mapping_Audit_Pending_Doc_Updates.md
 |   |   |   +---W-aux_f_Height_Ceiling_Desaturation_Pending_Doc_Updates.md
+|   |   |   +---W-aux_h_status_header_PATCH.md
 |   |   |   \---X1_Pending_Doc_Updates.md
 |   |   +---Application_Ledger_2026-08-20.md
+|   |   +---Application_Ledger_2026-08-21.md
 |   |   +---Islands_PCG_Pipeline_SSoT_v0_1_16.md
 |   |   +---Islands_SSoT_Technical_Bible.md
 |   |   +---PCG_Pipeline_Technical_Snapshot.md
@@ -225,7 +229,9 @@
 |   |   |   +---IMapContextSource.cs
 |   |   |   +---Islands.PCG.Inspection.asmdef
 |   |   |   +---MapStatsExporter2D.cs
-|   |   |   \---PCGHoverTooltip.cs
+|   |   |   +---PCGHoverTooltip.cs
+|   |   |   +---PCGSteppedReliefGizmoPreview.cs
+|   |   |   \---SteppedHeightSampler2D.cs
 |   |   +---Layout
 |   |   |   +---Bsp
 |   |   |   |   \---BspPartition2D.cs
@@ -342,7 +348,7 @@
 |   |   |   |   |   |   +---PH_Tundra_HillsL2.asset
 |   |   |   |   |   |   +---PH_Tundra_Land.asset
 |   |   |   |   |   |   \---PH_Tundra_Vegetation.asset
-|   |   |   |   |   +---TestBiomeTileOverride.asset
+|   |   |   |   |   +---Overworld16bit_BiomeOverride.asset
 |   |   |   |   |   +---TilesetConfig_BaseSet.asset
 |   |   |   |   |   +---TilesetConfig_Winlu.asset
 |   |   |   |   |   +---TilesetConfig-8bit.asset
@@ -371,7 +377,8 @@
 |   |   |   \---EditMode
 |   |   |       +---Inspection
 |   |   |       |   +---BiomeColorPaletteTests.cs
-|   |   |       |   \---IMapContextSourceTryWorldToCellTests.cs
+|   |   |       |   +---IMapContextSourceTryWorldToCellTests.cs
+|   |   |       |   \---SteppedHeightSampler2DTests.cs
 |   |   |       +---Maps
 |   |   |       |   +---Tilemap
 |   |   |       |   |   +---BiomeTileOverrideTests.cs
