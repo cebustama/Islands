@@ -1,15 +1,16 @@
 # Phase W — Pending Documentation Updates
 
-Status: **PARTIALLY APPLIED — 2026-08-18; re-verified 2026-08-20.** 7 of 8 items applied;
-**1 blocked**.
-Re-verification 2026-08-20: §1.1–1.4 confirmed present in `Phase_W_Design.md`. §3 remains
-blocked for the same reason — the W.a hash values exist in no governed file, no test constant
-and no captured log. A documentation session cannot fill them without inventing them; the
-reserved slot in `changelog-ssot.md` is retained.
-Blocked: **§3** (W.a golden registration). The blocker has *changed*: the governed
-changelog path is now resolved (`Documentation~/changelog-ssot.md`), but the W.a golden
-hash values were never written to a governed file, so the entry cannot be filled without
-re-running the capture. A reserved-slot note is recorded in `changelog-ssot.md`.
+Status: **CLOSED — 2026-08-21. 8 of 8 items disposed; ready to archive.** 7 applied
+2026-08-18 and re-verified 2026-08-20; §3 **closed as irrecoverable by user decision
+2026-08-21** rather than applied.
+§3 disposition: the W.a hash values existed only in the 2026-08-09 session console. They are
+in no governed file, test constant or captured log, and re-capture cannot restore them —
+five batches (W-aux.b, W-aux.d, W-aux.f, W-aux.g, W.b) changed the pipeline afterwards, and
+the `Showcase` world preset is absent from the package tree (re-verified against the
+directory listing, 2026-08-21). Writing today's numbers under a 2026-08-09 label would make
+the changelog lie about when a measurement was taken. The reserved slot in
+`changelog-ssot.md` has been replaced by a closure note stating all of this.
+No item remains blocked. **Do not re-apply anything from this queue.**
 Applied by: Islands.PCG documentation-application session, 2026-08-18.
 Session (origin): Islands.PCG Phase W kickoff, 2026-08-09.
 Scope: register the P→W sequencing deviation, close the five §9 open design questions,
@@ -132,9 +133,18 @@ the governed changelog is `Documentation~/changelog-ssot.md`
 governed file, no test constant and no captured console log available to the
 documentation session. No value can be written without inventing it.
 
-A reserved-slot note has been recorded in `changelog-ssot.md` so the gap is visible.
-**To unblock:** re-run seed 56 @ 64×64 with the world preset, capture the ten hashes, and
-fill this item.
+**Status 2026-08-21 — CLOSED AS IRRECOVERABLE (user decision).** Not applied, not blocked
+any more: disposed. Re-capture was considered and rejected, for two reasons that hold
+independently. (1) The pipeline changed in five subsequent batches — W-aux.b, W-aux.d,
+W-aux.f (`waterThreshold01` 0.472 → 0.412119, which moves `Land` and every field derived
+from it), W-aux.g and W.b — so a capture taken now is a different measurement, not this one.
+(2) The `Showcase` world preset asset does not exist in the package tree, so the input side
+of the run is missing too. The reserved slot in `changelog-ssot.md` was replaced by a closure
+note recording the loss and its cause.
+
+A world-scale reference capture against the **current** pipeline is still worth taking and
+remains unscheduled; the `logGoldenHashes` toggle on `PCGMapTilemapVisualization` emits the
+ten-hash line. It would be a new dated entry, not this slot.
 
 ---
 
@@ -152,7 +162,8 @@ fill this item.
       only)" with W.a, W-aux.a and W-aux.b closed would have been worse drift than
       applying it, and W-aux §8 requires the Phase W entry to exist as a host for the
       W-aux track. Confirmed by the user as decision D-3.
-- [ ] 3 W.a golden registration — **BLOCKED: hash values unavailable** (see §3)
+- [x] 3 W.a golden registration — **CLOSED as irrecoverable 2026-08-21**, not applied
+      (see §3). User decision; the changelog reserved slot became a closure note
 - [x] 4 coordination note (no action)
 
 ---

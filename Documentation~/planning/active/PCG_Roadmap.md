@@ -123,9 +123,10 @@ present, both additive and golden-neutral.
 - Phase N: later (planning only)
 - Phase O: later (planning only)
 - Phase P: paused (resumes with rubric derived from Phase W output)
-- Phase T1: planning (design complete — adapter track)
-- Phase W: active (W.a complete 2026-08-09; W-aux.a…W-aux.g closed 2026-08-17…20;
-  next: W.b — scope defined 2026-08-20)
+- Phase T1: planning (design complete — adapter track; see Phase T2 open decision)
+- Phase T2: planning (not designed — adapter track, 3D relief family)
+- Phase W: active (W.a complete 2026-08-09; W-aux.a…W-aux.h and W.b closed
+  2026-08-17…20; next: W.c — F2c shape-mask builder)
   - W-aux.a: done (measurement — statistics exporter + measured preset baselines)
   - W-aux.b: done (submarine relief — first core change of the milestone, identity by default)
   - W-aux.c: done (calibration instrumentation, preset wizard, per-biome vegetation policy)
@@ -781,6 +782,12 @@ Target dimensions: 1×2, 2×1, 2×3, 3×2, 3×3.
 **Planning. Design complete. Sequenced on adapter track, parallel to mainline.**
 **See [`Phase_T1_Design.md`](Phase_T1_Design.md) for detailed design.**
 
+**Relationship to Phase T2 is an open decision (2026-08-20).** Phase T2 proposes a family
+of 3D relief emitters sharing one sampling and assembly core, in which this phase's smooth
+surface is one emitter (T2.2). Whether T1 is absorbed, ships first, or stays a separate
+adapter is unresolved. Do not implement either phase past the point where that choice
+binds asmdef ownership and type names.
+
 3D mesh visualization adapter for the PCG map pipeline. Reads `MapDataExport` and
 produces a Unity `Mesh` with height-displaced vertices and per-layer vertex colors.
 Design-iteration companion to the existing tilemap visualization — not a gameplay surface.
@@ -811,6 +818,83 @@ Design-iteration companion to the existing tilemap visualization — not a gamep
 - Does not block or depend on N4, F3b, or any mainline pipeline phase.
 - No new `MapLayerId`, `MapFieldId`, or runtime contracts. Pure adapter/sample-side.
   Adapters-last invariant preserved.
+
+### Phase T2 — 3D Relief Adapters (stepped, corner-height, voxel, wireframe)
+**Planning. Not designed. Sequenced on adapter track, parallel to mainline.**
+
+A family of 3D relief views over the same `MapDataExport`, sharing one sampling and
+assembly core. The branch exists because the four candidate styles — smooth surface,
+stepped tiles, corner-height (RollerCoaster Tycoon / Transport Tycoon model), and voxel —
+differ only in how a cell becomes triangles. Everything else is common: reading the
+export, deriving and quantizing height, resolving colour by layer priority, assembling
+the `Mesh`, determinism guarantees, and the `[ExecuteAlways]` host with dirty tracking.
+
+**Layered structure (proposed, not designed):**
+
+- **Layer 0 — height sampling.** `MapDataExport` + policy → per-cell heights, continuous
+  or quantized to integer levels. Owns the missing-`Height` guard, the normalization
+  range and the quantization rule. Pure; testable without a `Mesh` or a scene.
+  Rationale for centralizing: quantization has measurable consequences (post-W-aux.f,
+  land `Height` occupies roughly [0.41, 0.96], not [0, 1]), and if each emitter quantized
+  independently, two styles would disagree on elevation for the same seed — which
+  defeats side-by-side comparison, the purpose of the whole branch.
+- **Layer 1 — geometry emitters.** Pure functions `(heights, colours, params) → MeshBuffers`,
+  where `MeshBuffers` is a flat vertex / index / colour struct. One emitter per style,
+  sharing a quad-append helper that owns index bookkeeping and winding.
+- **Layer 2 — one adapter facade** taking a style selector, so the host, material
+  handling, preset wiring, null guards and determinism tests exist once.
+- **Layer 3 — hosts.** The mesh host is one component. **Wireframe is not a fifth style**
+  — it is an alternative renderer that draws `MeshBuffers` edges as gizmo lines, and
+  therefore works for every emitter at no extra cost.
+
+**Slice sequence:**
+
+- **T2.0 — Gizmo relief preview.** Layer 0 plus a gizmo host, written concretely with no
+  emitter seam. One flat horizontal surface per cell at a quantized base height, with
+  configurable step size and offset. No `Mesh`, no material, no shader, no normals, no
+  index format. Deliverable: the relief of an already-generated map, visible in the Scene
+  view.
+- **T2.1 — `MeshBuffers` + stepped emitter + mesh host.** Extracts Layers 1 and 2 now that
+  a second consumer exists. The gizmo host is retargeted to draw `MeshBuffers` edges,
+  which generalizes wireframe to every later emitter.
+- **T2.2 — Smooth emitter.** Phase T1's design, as an emitter. See the open decision below.
+- **T2.3 — Corner-height emitter.** Four corner heights per tile, the "adjacent corners
+  differ by at most one step" constraint enforced by an iterative clamp with a
+  configurable policy (smooth, or accept the jump and emit a vertical wall quad), and
+  per-tile water level from the water mask.
+- **T2.4 — Voxel emitter.** Speculative, not scheduled. Reuses Layer 0's integer levels
+  extruded to a floor; greedy meshing and chunking are optimizations, not requirements.
+
+**Structural limit, carried from the research:** a heightfield admits one surface per
+column. Caves, arches and overhangs do not fit this model — in RCT, tunnels are separate
+track/path elements clipped by the surface, not terrain geometry. If volumetric caves
+become a requirement, T2.3 is not the path; T2.4 or a multi-layer model would be.
+
+**Open decision — relationship to Phase T1.** Options: (a) T1 is absorbed as the T2.2
+emitter and its entry is annotated superseded; (b) T1 ships first as its own adapter and
+T2 refactors afterwards; (c) both remain separate adapters and the duplication is
+accepted. This determines asmdef ownership, type names and test placement. Unresolved —
+do not start T2.1 without resolving it.
+
+**Open decision — height parameterization.** Phase T1 uses a continuous `heightScale`;
+the stepped and corner styles need levels plus a world-space step. Whether these coexist
+or one derives from the other must be settled before Layer 0 is written.
+
+**Extraction trigger already recorded.** `Phase_T1_Design.md` §2.1 chose to duplicate the
+layer→colour entry type rather than couple adapter asmdefs, and stated that a third
+adapter makes extraction a mechanical refactor. Phase T2 is that third adapter, and the
+priority-resolution logic is already duplicated between `TilemapAdapter2D` and the T1
+design. T2.1 is the point at which that extraction is due.
+
+**Reference:** `Corner-Height_Terrain_in_RCT__Transport_Tycoon__OpenTTD_and_OpenRCT2__Data_Model__Legal_Slopes_and_Rendering.md`
+— external comparative evidence for the corner-height model (data layout, the closed set
+of legal slopes, cliff generation, per-tile water, tunnels as separate elements).
+Reference tier only; not implementation authority.
+
+- Depends on: Phase H2 (`MapDataExport`), Phase H3 (`MapGenerationPreset`). Both done.
+- Does not block or depend on any mainline phase.
+- No new `MapLayerId`, `MapFieldId` or runtime contract. Pure adapter/sample-side.
+  Adapters-last invariant preserved; golden-neutral by construction.
 
 ### Phase I
 Burst / SIMD upgrades
@@ -1237,7 +1321,8 @@ Planning only.
 - Depends on: at least Phase M for biome diversity validation.
 
 ### Phase W — Hierarchical World-to-Local Generation (Zoom-In)
-**Active. W.a complete 2026-08-09; W-aux.a through W-aux.g closed. Next: W.b.**
+**Active. W.a complete 2026-08-09; W-aux.a through W-aux.h and W.b closed.
+Next: W.c — the F2c shape-mask builder, which resumes the world→local sequence.**
 Not implementation authority.
 **See [`Phase_W_Design.md`](Phase_W_Design.md) for detailed design.**
 
@@ -1256,7 +1341,7 @@ cancelled; it resumes with criteria derived from W output.
 `MapGenerationPreset`, visually smoke-validated. World identity is `shapeMode = Ellipse`.
 The console golden for the run is captured but not yet registered in a governed surface.
 
-**W.b — parameter surface consolidation (scope defined 2026-08-20, not started).**
+**W.b — parameter surface consolidation (complete 2026-08-20).**
 This entry is the single definition of W.b's scope; other documents point here rather than
 restating it.
 
@@ -1274,15 +1359,32 @@ than assumed: `Stage_Regions2D.SpeckThreshold` (a stage constant, not a componen
 anything in the construction path — see `CURRENT_STATE.md` §Open observations).
 
 Two destinations, with different consequences. Stage toggles sit beside the six already in
-the preset and do not enter `MapTunables2D`, so they cannot move a golden. The three
-`hydro*` values are algorithm tunables and **do** enter the `MapTunables2D` constructor;
-identity defaults are the strategy that let W-aux.b close without breaking a single golden,
-and the same discipline applies here.
+the preset and do not enter `MapTunables2D`, so they cannot move a golden.
+
+**Corrected at W.b execution (2026-08-20).** This entry previously stated that the three
+`hydro*` values enter the `MapTunables2D` constructor. They do not, and were not made to:
+`Stage_Hydrology2D` reads `epsilon` / `riverThresholdFraction` / `minLakeArea` as instance
+fields, never from `inputs.Tunables`, and the pre-existing wiring already assigned them
+that way. Routing them through `MapTunables2D` would have added three constructor
+parameters no consumer reads, on a struct every golden traverses. The planning claim is
+superseded by implementation evidence; identity defaults remained the strategy and no
+golden moved.
 
 Closure conditions beyond the code: `ToJson()` and the importer table change **together**
 (the round-trip gate fails until both do — that is the gate working, not a bug), and the
 wizard's `HelpBox` declaring this gap is retired in the same batch. Leaving it is worse than
 never having written it: the tool would be lying about its own limitations.
+
+**Outcome (2026-08-20).** Seven fields adjudicated, five promoted to
+`MapGenerationPreset`: `enableRegionsStage`, `enableHydrologyStage`,
+`hydroRiverThresholdFraction`, `hydroMinLakeArea`, and
+`Stage_Vegetation2D.moistureModulation` (as `vegetationMoistureModulation`). Two
+retained with reason: `hydroEpsilon` stays component-scoped (Priority-Flood numeric
+plumbing, not an authoring knob) and `Stage_Regions2D.SpeckThreshold` stays stage-local
+(constant since inception, underpins invariant R-8, no authoring demand). The wizard
+`HelpBox` was narrowed rather than retired, since one field still is not carried.
+Additive JSON schema extension, not a serialization break. Zero goldens moved; no unit
+test edited. See `changelog-ssot.md` §W.b.
 
 **W-aux track (opened 2026-08-17):** measurement and calibration sub-batches running
 alongside Phase W's world→local sequence.
@@ -1329,6 +1431,28 @@ alongside Phase W's world→local sequence.
   default's compensated value instead of its own.
   Related and separate: `BiomeTable` vegetation densities have not been recalibrated since
   W-aux.d changed what they mean.
+
+- **W-aux.h — hydrology instrumentation (closed 2026-08-20).** Read-only adapter-side
+  probe (`PCGMapTilemapVisualization.LogHydrologyReport()`, `hydroprobe`) plus diagnostic
+  rule `R7.RiverFlowNormDecoupled`. No core change, no golden moved. Measured at seeds
+  56 / 8 / 243, res 256, `Default_MapPreset`.
+
+  **The finding that matters for the roadmap:** the river threshold is expressed as a
+  fraction of *total land*, but the island's drainage is fragmented into 1270 / 1766 / 1813
+  basins, of which only 45 / 40 / 32 reach 50 cells. The largest basin drains
+  4.09 % / 3.98 % / 6.30 % of the land. Since a cell's accumulation cannot exceed its own
+  basin's size, `riverThresholdFraction` has a hard ceiling equal to
+  `largestBasin / totalLand`: above it, **zero rivers is arithmetically unavoidable**. The
+  declared range `[0.005, 0.10]` therefore has its upper half dead in every geometry this
+  shaping chain produces. The sweep confirms the ceiling in all six test cases (`f = 0.05`
+  gives 0 rivers at seeds 56 and 8, whose ceilings are below 5 %, and 9 rivers at seed 243,
+  whose ceiling is 6.30 %; `f = 0.10` gives 0 everywhere).
+
+  **Redefining the divisor is a contract change and remains unscheduled** — but it no
+  longer needs measurement, only a decision. Convenient property for whoever takes it:
+  accumulation at a basin root equals that basin's size, so the largest basin is already
+  exposed as `max(FlowAccumulation)` by `MapStatsExporter2D` — no instrumentation needed
+  to implement a per-basin divisor.
 
 **Authority note:** the W-aux track is roadmap-scoped only. It is **not** implementation
 authority.

@@ -9,6 +9,91 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## W-aux.h — Hydrology instrumentation (probe + diagnostic rule R7)
+Date: 2026-08-20
+
+**Cause.** `Default_MapPreset` produced a single skeletal river and no lakes, and no one
+could say why: the arithmetic was known (threshold ≈ 400 cells against a maximum
+accumulation of 1259 at seed 243) but the cause behind it was inferred, never measured. The
+batch's premise was that no hydrology parameter should be touched until the system was
+instrumented.
+
+**Change.** Read-only, adapter-side. `PCGMapTilemapVisualization.LogHydrologyReport()`
+(`hydroprobe`) with an Inspector button; `R7.RiverFlowNormDecoupled` in
+`MapGenerationPresetDiagnostics` with three gates. The probe re-derives `filledHeight` and
+`flowDir` — both stage-local, neither surviving `Execute` — by calling the stage's own
+operators rather than mirroring them, and self-validates by checking that the stored
+`FlowAccumulation` satisfies the accumulation recurrence under the re-derived directions
+(0 mismatches in all three runs). Basin census declared as tree-per-root, cross-checked by
+asserting basin sizes sum to the Land count.
+
+**Finding.** Drainage is fragmented into 1270 / 1766 / 1813 basins (45 / 40 / 32 of ≥ 50
+cells) at seeds 56 / 8 / 243. The largest basin drains 4.09 / 3.98 / 6.30 % of the land.
+`riverThresholdFraction` therefore carries a hard ceiling of `largestBasin / totalLand`;
+above it zero rivers is unavoidable, which kills the upper half of the declared
+`[0.005, 0.10]` range. Verified against the sweep in all six upper-range cases. Two carried
+UNVERIFIED items resolved: `Lakes = 0` refuted as structural (seed 56 has an interior
+90-cell lake), and `hydroEpsilon` measured as marginal (fill depth 1700–2500× the epsilon).
+
+**Not changed.** No hydrology parameter, in any asset. Redefining the river threshold's
+divisor is a contract change with its own batch; it now has its measurement and needs only
+a decision.
+
+**Behavior.** No golden moved, no core file touched, no unit test edited — 6 search/replace
+pairs across 4 files, all adapter- or Editor-side. Suite green including the three R7 gates
+— user confirmation, 2026-08-20.
+
+**Debt incurred.** A third temporary probe on `PCGMapTilemapVisualization`, and the first
+with a written retirement criterion. The other two (`LogVegetationNoiseHistogram`,
+`LogHeightHistogram`) still have none.
+
+## W.b — Parameter surface consolidation (component/stage fields → preset)
+Date: 2026-08-20
+
+**Cause.** Five tunables lived only on the visualization components and two more only on
+stage instances, so a `MapGenerationPreset` was not a complete description of a map.
+`Stage_Vegetation2D.moistureModulation` was worse than component-scoped: verified this
+session to have zero assignments anywhere in the corpus, meaning an implemented feature
+had been unreachable since it was written. Phase W's later steps assume a preset fully
+describes a map, so the gap was closed before W.c.
+
+**Verdicts.** Adjudicated per field, not by uniformity — five promoted, two retained.
+See `SSoT_CONTRACTS.md` §M2.a for the table and reasons. Retained: `hydroEpsilon`
+(numeric plumbing of the depression solver) and `Stage_Regions2D.SpeckThreshold`
+(constant since inception, underpins R-8).
+
+**Destination.** Preset with component→stage wiring, **not** `MapTunables2D`. The
+consuming stages read instance fields, never `inputs.Tunables`; routing through the
+tunables struct would have added three constructor parameters no consumer reads, on a
+struct every golden traverses. This corrects a `PCG_Roadmap.md` claim to the contrary —
+planning superseded by implementation evidence.
+
+**Serialization.** Additive extension, **not a serialization break**: five new keys
+(`stageToggles.regions`, `stageToggles.hydrology`, `hydrology.riverThresholdFraction`,
+`hydrology.minLakeArea`, `vegetation.moistureModulation`). Absent keys import as
+`AbsentPreserved`, so pre-W.b JSON stays importable and existing assets stay valid.
+`stageTogglesNote` narrowed from five fields to one. `MapGenerationPresetWizard`'s
+`HelpBox` narrowed to `hydroEpsilon` rather than retired, since one field genuinely is
+still not carried.
+
+**Behavior.** No golden moved and no unit test was edited. Every promoted default equals
+the value the pipeline effectively used before promotion, asserted against fresh stage
+instances by `Defaults_WbPromotedFields_MatchPrePromotionEffectiveValues`. Console
+goldens at seed 243 res 256 identical before and after — user confirmation, 2026-08-20.
+
+**Scene-level caveat (not covered by any test).** The preset now wins over the
+component's inline `enableRegionsStage` / `enableHydrologyStage`. A saved scene whose
+component values differed from its assigned preset's changes behavior. No golden can
+detect this; it is an authoring-surface consequence, recorded deliberately.
+
+**Contract amendment.** `map-pipeline-by-layers-ssot.md` §M2a-9 gains clause (d-bis):
+non-zero `moistureModulation` suspends (a) exactness and (c) floor by construction, since
+the cut stops being uniform over the eligible population. Nesting (b) is unaffected. No
+golden is captured with a non-zero value.
+
+**Files.** 30 search/replace pairs across 9 files — see §File manifest in
+`W_b_Pending_Doc_Updates.md`.
+
 ## W-aux.g — Hills window recalibration (area-quantile thresholds, F3b′)
 Date: 2026-08-20
 
@@ -375,9 +460,10 @@ Lakes=4AE4FA4CE128DE82 Height=196AF8D87C1D19EC CoastDist=D42E6A25948E95BA
 Temperature=2A03BEBEFF59EE4A Moisture=40B88763F80C4851 Biome=9C63E816DF9FD0CA
 FlowAccum=782B1DC3502E64A0`
 
-Note: this does **not** close the Phase W §3 blocker in `Phase_W_Pending_Doc_Updates.md`.
-That reserved slot is for the W.a golden at res **64** with the pre-W-aux.b preset; these
-hashes are res 256 with a different preset and are not substitutable.
+Note: these do **not** substitute for the Phase W §3 reserved slot — that slot was for the
+W.a golden at res **64** with the pre-W-aux.b preset, and these hashes are res 256 with a
+different preset. **The §3 slot was closed as irrecoverable on 2026-08-21**; see the
+"Reserved slot CLOSED as irrecoverable" note in the W-aux.b entry below.
 
 - No new subsystem SSoTs created. No authority decisions changed.
 - No governed contract changed: `MapStatsExporter2D` is an inspection surface, not a
@@ -431,11 +517,28 @@ captured 2026-08-18 (`Runtime/PCG/Samples/Presets/` contains `Default.asset` and
 `WarpTest.asset` only). Until that asset is committed under a confirmed name and path,
 these numbers cannot be reproduced from the repository alone.
 
-### Still pending in this file
-The Phase W.a world-scale console golden (seed 56, 64×64, world preset) is **not
-recorded**. `Phase_W_Pending_Doc_Updates.md` §3 reserves the slot; the hash values were
-captured in-session but are not available in any governed file, so the entry cannot be
-written without re-running the capture.
+### Reserved slot CLOSED as irrecoverable (user decision, 2026-08-21)
+The Phase W.a world-scale console golden (seed 56, 64×64, world preset) **was never
+recorded and will not be**. The run happened on 2026-08-09 and was smoke-validated
+visually; its ten hashes existed only in that session's console and are in no governed
+file, test constant or captured log.
+
+Re-running the capture cannot fill this slot, for two independent reasons:
+
+1. **The pipeline is no longer the one that produced those values.** W-aux.b (submarine
+   relief), W-aux.d (vegetation quantile mapping), W-aux.f (`waterThreshold01`
+   0.472 → 0.412119, which moves `Land` and therefore every field derived from it),
+   W-aux.g (Hills area-quantile window) and W.b all landed afterwards. Any capture taken
+   now would be a different measurement wearing a 2026-08-09 label.
+2. **The input is missing.** The `Showcase` world preset asset is not in the package tree
+   — re-verified against the directory listing on 2026-08-21: `Runtime/PCG/Samples/Presets/`
+   holds `Default.asset` and `WarpTest.asset` only.
+
+The slot is therefore closed rather than left open. `Phase_W_Pending_Doc_Updates.md` §3 is
+closed with it and the queue is archived. A world-scale reference capture remains worth
+taking against the *current* pipeline — the `logGoldenHashes` toggle on
+`PCGMapTilemapVisualization` still emits the ten-hash line — but it would be a new entry
+with today's date, not this one.
 
 
 ## Phase N6 — Noise Preview Visualization

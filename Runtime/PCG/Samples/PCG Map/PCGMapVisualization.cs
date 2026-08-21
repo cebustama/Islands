@@ -230,6 +230,9 @@ namespace Islands.PCG.Samples
         private bool lastEnableBiomeStage;
         private bool lastEnableRegionsStage;
         private bool lastEnableHydrologyStage;
+        private float lastHydroRiverThresholdFraction;
+        private int lastHydroMinLakeArea;
+        private float lastVegetationMoistureModulation;
         private PCGViewMode lastViewMode;
         private MapLayerId lastViewLayer;
         private MapFieldId lastViewField;
@@ -427,12 +430,16 @@ namespace Islands.PCG.Samples
                     domain: new GridDomain2D(resolution, resolution),
                     tunables: eTun);
 
-                bool eHydro = enableHydrologyStage;
-                hydrologyStage.epsilon = 1e-5f;
-                hydrologyStage.riverThresholdFraction = 0.02f;
-                hydrologyStage.minLakeArea = 0;
+                bool eRegions = preset != null ? preset.enableRegionsStage : enableRegionsStage;
+                bool eHydro = preset != null ? preset.enableHydrologyStage : enableHydrologyStage;
+                hydrologyStage.epsilon = 1e-5f; // component-scoped (W.b verdict)
+                hydrologyStage.riverThresholdFraction = preset != null ? preset.hydroRiverThresholdFraction : 0.02f;
+                hydrologyStage.minLakeArea = preset != null ? preset.hydroMinLakeArea : 0;
 
-                var stages = (enableBiomeStage && eVeg && enableRegionsStage) ? (eHydro ? stagesLM2b : stagesM2b)
+                // W.b: vegetation moisture modulation; 0 = disabled (legacy).
+                vegetationStage.moistureModulation = preset != null ? preset.vegetationMoistureModulation : 0f;
+
+                var stages = (enableBiomeStage && eVeg && eRegions) ? (eHydro ? stagesLM2b : stagesM2b)
                            : (enableBiomeStage && eVeg) ? (eHydro ? stagesLM2a : stagesM2a)
                            : enableBiomeStage ? (eHydro ? stagesLM : stagesM)
                            : eMorph ? (eHydro ? stagesL : stagesG)
@@ -625,8 +632,11 @@ namespace Islands.PCG.Samples
             lastEnableTraversalStage = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
             lastEnableBiomeStage = enableBiomeStage;
-            lastEnableRegionsStage = enableRegionsStage;
-            lastEnableHydrologyStage = enableHydrologyStage;
+            lastEnableRegionsStage = preset != null ? preset.enableRegionsStage : enableRegionsStage;
+            lastEnableHydrologyStage = preset != null ? preset.enableHydrologyStage : enableHydrologyStage;
+            lastHydroRiverThresholdFraction = preset != null ? preset.hydroRiverThresholdFraction : 0.02f;
+            lastHydroMinLakeArea = preset != null ? preset.hydroMinLakeArea : 0;
+            lastVegetationMoistureModulation = preset != null ? preset.vegetationMoistureModulation : 0f;
             lastViewMode = viewMode;
             lastViewLayer = viewLayer;
             lastViewField = viewField;
@@ -668,8 +678,11 @@ namespace Islands.PCG.Samples
                 || (preset != null ? preset.enableTraversalStage : enableTraversalStage) != lastEnableTraversalStage
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
                 || enableBiomeStage != lastEnableBiomeStage
-                || enableRegionsStage != lastEnableRegionsStage
-                || enableHydrologyStage != lastEnableHydrologyStage
+                || (preset != null ? preset.enableRegionsStage : enableRegionsStage) != lastEnableRegionsStage
+                || (preset != null ? preset.enableHydrologyStage : enableHydrologyStage) != lastEnableHydrologyStage
+                || !Mathf.Approximately(preset != null ? preset.hydroRiverThresholdFraction : 0.02f, lastHydroRiverThresholdFraction)
+                || (preset != null ? preset.hydroMinLakeArea : 0) != lastHydroMinLakeArea
+                || !Mathf.Approximately(preset != null ? preset.vegetationMoistureModulation : 0f, lastVegetationMoistureModulation)
                 || viewMode != lastViewMode
                 || viewLayer != lastViewLayer
                 || viewField != lastViewField

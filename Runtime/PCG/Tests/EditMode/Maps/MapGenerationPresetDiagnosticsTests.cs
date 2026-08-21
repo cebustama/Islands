@@ -122,6 +122,42 @@ public sealed class MapGenerationPresetDiagnosticsTests
         Assert.AreEqual(PresetFindingBacking.Measured, f.Backing);
     }
 
+    [Test]
+    public void NonDefaultThresholdWithAutoFlowNorm_FiresR7_AsInferred()
+    {
+        var p = CleanPreset();
+        p.enableHydrologyStage = true;          // enableBiomeStage default true
+        p.hydroRiverThresholdFraction = 0.05f;  // biomeRiverFlowNorm default 0 (auto)
+
+        var findings = MapGenerationPresetDiagnostics.Diagnose(p);
+        var f = findings.Single(x => x.RuleId == "R7.RiverFlowNormDecoupled");
+        Assert.AreEqual(PresetFindingSeverity.Warning, f.Severity);
+        Assert.AreEqual(PresetFindingBacking.Inferred, f.Backing);
+        Assert.IsNull(f.BackingRun);
+    }
+
+    [Test]
+    public void ExplicitFlowNorm_SilencesR7()
+    {
+        var p = CleanPreset();
+        p.enableHydrologyStage = true;
+        p.hydroRiverThresholdFraction = 0.05f;
+        p.biomeRiverFlowNorm = 350f;
+
+        var findings = MapGenerationPresetDiagnostics.Diagnose(p);
+        Assert.AreEqual(0, findings.Count(x => x.RuleId == "R7.RiverFlowNormDecoupled"));
+    }
+
+    [Test]
+    public void DefaultThresholdFraction_SilencesR7()
+    {
+        var p = CleanPreset();
+        p.enableHydrologyStage = true;          // fraction stays at default 0.02
+
+        var findings = MapGenerationPresetDiagnostics.Diagnose(p);
+        Assert.AreEqual(0, findings.Count(x => x.RuleId == "R7.RiverFlowNormDecoupled"));
+    }
+
     // ------------------------------------------------------------------
     // Diff gates
     // ------------------------------------------------------------------

@@ -371,6 +371,7 @@ namespace Islands.PCG.Adapters.Tilemap
         private bool lastEnableHydrologyStage;
         private float lastHydroEpsilon, lastHydroRiverThresholdFraction;
         private int lastHydroMinLakeArea;
+        private float lastVegetationMoistureModulation;
         private float lastBiomeRiverMoistureBonus, lastBiomeRiverFlowNorm;
         private float lastIslandRadius01, lastWaterThreshold01;
         private float lastIslandSmoothFrom01, lastIslandSmoothTo01;
@@ -486,8 +487,8 @@ namespace Islands.PCG.Adapters.Tilemap
             bool eTrav = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             bool eMorph = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
             bool eBiome = preset != null ? preset.enableBiomeStage : enableBiomeStage;
-            bool eRegions = enableRegionsStage;
-            bool eHydro = enableHydrologyStage;
+            bool eRegions = preset != null ? preset.enableRegionsStage : enableRegionsStage;
+            bool eHydro = preset != null ? preset.enableHydrologyStage : enableHydrologyStage;
             bool eClear = preset != null ? preset.clearBeforeRun : clearBeforeRun;
 
             // N5.b: build tunables — preset handles its own asset resolution via ToTunables().
@@ -542,9 +543,13 @@ namespace Islands.PCG.Adapters.Tilemap
             biomeStage.moistureNoiseCellSize = preset != null ? preset.biomeMoistureNoiseCellSize : biomeMoistureNoiseCellSize;
 
             // Phase L: wire hydrology tunables to stage instance.
+            // W.b: fraction + lake area are preset-authorable; epsilon stays component-scoped.
             hydrologyStage.epsilon = hydroEpsilon;
-            hydrologyStage.riverThresholdFraction = hydroRiverThresholdFraction;
-            hydrologyStage.minLakeArea = hydroMinLakeArea;
+            hydrologyStage.riverThresholdFraction = preset != null ? preset.hydroRiverThresholdFraction : hydroRiverThresholdFraction;
+            hydrologyStage.minLakeArea = preset != null ? preset.hydroMinLakeArea : hydroMinLakeArea;
+
+            // W.b: vegetation moisture modulation is preset-authorable; 0 = disabled (legacy).
+            vegetationStage.moistureModulation = preset != null ? preset.vegetationMoistureModulation : 0f;
 
             // Phase L+M: wire river moisture tunables to biome stage.
             biomeStage.riverMoistureBonus = preset != null ? preset.biomeRiverMoistureBonus : biomeRiverMoistureBonus;
@@ -1107,6 +1112,302 @@ namespace Islands.PCG.Adapters.Tilemap
             Debug.Log(sb.ToString(), this);
         }
 
+        // =====================================================================
+        // TEMPORARY hydrology probe (W-aux.h). Read-only, adapter-side.
+        // Re-derives filledHeight/flowDir by calling the SAME operators the
+        // stage runs (HeightFieldHydrologyOps2D) — one implementation point,
+        // no mirror drift. Parity is asserted per run: the stored
+        // FlowAccumulation must satisfy the D8 accumulation recurrence
+        // (accum[i] == 1 + sum of upstream accum) under the re-derived flow
+        // directions. Mismatch count is reported; expected 0.
+        // Basin definition (declared): root = Land cell whose flowDir is -1 or
+        // whose D8 target is non-Land/OOB; basin = every Land cell whose
+        // drainage path terminates at that root (tree-per-root, standard GIS
+        // watershed delineation).
+        // Retirement criterion (W-aux.h decision): promote to a dedicated
+        // probe/stats surface when the map-evaluation phase opens, or retire
+        // when the river-threshold contract batch closes — whichever first.
+        // =====================================================================
+
+        /// <summary>
+        /// Dumps a hydrology instrumentation report: FlowAccumulation histogram
+        /// over Land (log2 bins), river-cell sweep across threshold fractions,
+        /// drainage-basin census (tree-per-root), Priority-Flood fill statistics,
+        /// and lake connected components with border contact. Requires a build
+        /// with the hydrology stage enabled.
+        /// </summary>
+        public void LogHydrologyReport()
+        {
+            if (ctx == null)
+            {
+                Debug.LogWarning("[hydroprobe] No map context — let the component build once first.", this);
+                return;
+            }
+
+            MapDataExport ex = MapExporter2D.Export(ctx);
+            if (!ex.HasField(MapFieldId.Height) || !ex.HasLayer(MapLayerId.Land)
+                || !ex.HasField(MapFieldId.FlowAccumulation)
+                || !ex.HasLayer(MapLayerId.Rivers) || !ex.HasLayer(MapLayerId.Lakes))
+            {
+                Debug.LogWarning("[hydroprobe] Needs Height + Land + FlowAccumulation + Rivers + Lakes — enable the hydrology stage and rebuild.", this);
+                return;
+            }
+
+            int w = ex.Width, hh = ex.Height, len = w * hh;
+            float[] hgt = ex.GetField(MapFieldId.Height);
+            float[] accum = ex.GetField(MapFieldId.FlowAccumulation);
+            bool[] landA = ex.GetLayer(MapLayerId.Land);
+            bool[] riversA = ex.GetLayer(MapLayerId.Rivers);
+            bool[] lakesA = ex.GetLayer(MapLayerId.Lakes);
+
+            float effFraction = preset != null ? preset.hydroRiverThresholdFraction : hydroRiverThresholdFraction;
+            int effMinLake = preset != null ? preset.hydroMinLakeArea : hydroMinLakeArea;
+
+            int nLand = 0, riverCells = 0, lakeCells = 0;
+            float maxAcc = 0f;
+            double sumAcc = 0;
+            for (int i = 0; i < len; i++)
+            {
+                if (landA[i])
+                {
+                    nLand++;
+                    sumAcc += accum[i];
+                    if (accum[i] > maxAcc) maxAcc = accum[i];
+                }
+                if (riversA[i]) riverCells++;
+                if (lakesA[i]) lakeCells++;
+            }
+
+            var ci = System.Globalization.CultureInfo.InvariantCulture;
+            var sb = new System.Text.StringBuilder(16384);
+            sb.AppendFormat(ci, "[hydroprobe] seed={0} res={1}x{2}\n", ex.Seed, w, hh);
+            sb.AppendFormat(ci,
+                "tunables: epsilon={0:E1} riverThresholdFraction={1:F4} (threshold={2:F1} cells) minLakeArea={3}\n",
+                hydroEpsilon, effFraction, nLand * effFraction, effMinLake);
+            sb.AppendFormat(ci,
+                "populations: land={0} ({1:F2}% of {2}) | Rivers={3} ({4:F2}% land) | Lakes={5}\n",
+                nLand, 100f * nLand / len, len, riverCells,
+                nLand > 0 ? 100f * riverCells / nLand : 0f, lakeCells);
+            sb.AppendFormat(ci, "FlowAccumulation on land: max={0:F0} mean={1:F4}\n",
+                maxAcc, nLand > 0 ? sumAcc / nLand : 0.0);
+
+            // ---- FlowAccumulation histogram over Land (log2 bins) ----
+            var hb = new int[32];
+            int topBin = 0;
+            for (int i = 0; i < len; i++)
+            {
+                if (!landA[i]) continue;
+                int v = (int)accum[i];
+                int k = 0;
+                while (v > 1) { v >>= 1; k++; }
+                hb[k]++;
+                if (k > topBin) topBin = k;
+            }
+            sb.Append("\naccumulation histogram (log2 bins over land)\n");
+            sb.Append("range                cells    %land   cells >= lo\n");
+            int suffix = nLand;
+            for (int k = 0; k <= topBin; k++)
+            {
+                int lo = 1 << k;
+                int hi = (1 << (k + 1)) - 1;
+                sb.AppendFormat(ci, "[{0},{1}] {2,10} {3,8:F2} {4,10}\n",
+                    lo, hi, hb[k], nLand > 0 ? 100f * hb[k] / nLand : 0f, suffix);
+                suffix -= hb[k];
+            }
+
+            // ---- River-cell sweep across threshold fractions ----
+            sb.Append("\nthreshold sweep: fraction -> threshold cells -> river cells (%land)\n");
+            float[] sweep = { 0.005f, 0.01f, 0.02f, 0.05f, 0.10f, effFraction };
+            for (int s = 0; s < sweep.Length; s++)
+            {
+                float thr = nLand * sweep[s];
+                int cells = 0;
+                for (int i = 0; i < len; i++)
+                    if (landA[i] && accum[i] >= thr) cells++;
+                sb.AppendFormat(ci, "{0}f={1:F4}  thr={2,8:F1}  rivers={3,6} ({4:F2}%)\n",
+                    s == sweep.Length - 1 ? "effective " : "          ",
+                    sweep[s], thr, cells, nLand > 0 ? 100f * cells / nLand : 0f);
+            }
+
+            // ---- Re-derivation via the stage's own operators (one impl point).
+            // epsilon: always component-scoped (mirrors wiring: hydrologyStage.epsilon = hydroEpsilon).
+            ref ScalarField2D heightF = ref ctx.GetField(MapFieldId.Height);
+            ref MaskGrid2D landM = ref ctx.GetLayer(MapLayerId.Land);
+            var filled = new float[len];
+            var fdir = new int[len];
+            Islands.PCG.Layout.Maps.Operators.HeightFieldHydrologyOps2D.FillDepressions(
+                ref heightF, ref landM, filled, w, hh, hydroEpsilon);
+            Islands.PCG.Layout.Maps.Operators.HeightFieldHydrologyOps2D.ComputeFlowDirectionsD8(
+                filled, ref landM, fdir, w, hh);
+
+            // Priority-Flood statistics: cells the fill raised above source Height.
+            int raised = 0;
+            float maxDepth = 0f;
+            double sumDepth = 0;
+            for (int i = 0; i < len; i++)
+            {
+                if (!landA[i]) continue;
+                float d0 = filled[i] - hgt[i];
+                if (d0 > 0f)
+                {
+                    raised++;
+                    sumDepth += d0;
+                    if (d0 > maxDepth) maxDepth = d0;
+                }
+            }
+            sb.AppendFormat(ci,
+                "\nPriority-Flood: raised={0} ({1:F2}% land) maxFillDepth={2:E3} meanFillDepth={3:E3}\n",
+                raised, nLand > 0 ? 100f * raised / nLand : 0f, maxDepth,
+                raised > 0 ? sumDepth / raised : 0.0);
+
+            // ---- Parity: stored FlowAccumulation must satisfy the accumulation
+            // recurrence under the re-derived directions. Local offset table
+            // mirrors the ops' declared convention (clockwise from N); any
+            // divergence — table, epsilon, or inputs — surfaces here as mismatches.
+            // Counts are integer-valued floats well below 2^24: exact equality is valid.
+            int[] dxT = { 0, 1, 1, 1, 0, -1, -1, -1 };
+            int[] dyT = { -1, -1, 0, 1, 1, 1, 0, -1 };
+            var inflow = new float[len];
+            for (int y = 0; y < hh; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (!landA[i]) continue;
+                    int d = fdir[i];
+                    if (d < 0) continue;
+                    int nx = x + dxT[d];
+                    int ny = y + dyT[d];
+                    if (nx < 0 || nx >= w || ny < 0 || ny >= hh) continue;
+                    int t = ny * w + nx;
+                    if (!landA[t]) continue;
+                    inflow[t] += accum[i];
+                }
+            }
+            int parityMismatch = 0;
+            for (int i = 0; i < len; i++)
+                if (landA[i] && accum[i] != inflow[i] + 1f) parityMismatch++;
+            sb.AppendFormat(ci, "parity (recurrence vs stored FlowAccumulation): {0} mismatches", parityMismatch);
+            sb.Append(parityMismatch > 0
+                ? "  *** MIRROR INVALID — basin census below is NOT trustworthy ***\n"
+                : "  [mirror valid]\n");
+
+            // ---- Basin census: tree-per-root over the re-derived directions ----
+            var basinRoot = new int[len];
+            for (int i = 0; i < len; i++) basinRoot[i] = -1;
+            var path = new System.Collections.Generic.List<int>(1024);
+            bool cycle = false;
+            for (int y = 0; y < hh && !cycle; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int i = y * w + x;
+                    if (!landA[i] || basinRoot[i] >= 0) continue;
+
+                    path.Clear();
+                    int c = i;
+                    int root;
+                    while (true)
+                    {
+                        if (basinRoot[c] >= 0) { root = basinRoot[c]; break; }
+                        path.Add(c);
+                        if (path.Count > len) { cycle = true; root = -1; break; }
+                        int d = fdir[c];
+                        if (d < 0) { root = c; break; }
+                        int cx = c % w, cy = c / w;
+                        int nx = cx + dxT[d], ny = cy + dyT[d];
+                        if (nx < 0 || nx >= w || ny < 0 || ny >= hh) { root = c; break; }
+                        int t = ny * w + nx;
+                        if (!landA[t]) { root = c; break; }
+                        c = t;
+                    }
+                    if (cycle) break;
+                    for (int p = 0; p < path.Count; p++) basinRoot[path[p]] = root;
+                }
+            }
+
+            if (cycle)
+            {
+                sb.Append("basin census ABORTED: drainage cycle detected (should be impossible post Priority-Flood).\n");
+            }
+            else
+            {
+                var sizes = new System.Collections.Generic.Dictionary<int, int>(256);
+                for (int i = 0; i < len; i++)
+                {
+                    if (!landA[i]) continue;
+                    int r = basinRoot[i];
+                    sizes.TryGetValue(r, out int cnt);
+                    sizes[r] = cnt + 1;
+                }
+                var list = new System.Collections.Generic.List<(int size, int root)>(sizes.Count);
+                int sumSizes = 0, big50 = 0;
+                foreach (var kv in sizes)
+                {
+                    list.Add((kv.Value, kv.Key));
+                    sumSizes += kv.Value;
+                    if (kv.Value >= 50) big50++;
+                }
+                list.Sort((a, b) => a.size != b.size ? b.size.CompareTo(a.size) : a.root.CompareTo(b.root));
+
+                sb.AppendFormat(ci,
+                    "\nbasins (root = Land cell draining to sea/OOB; basin = its upstream tree)\n"
+                    + "total={0} | >=50 cells: {1} | size sum={2} (land={3}{4})\n",
+                    sizes.Count, big50, sumSizes, nLand,
+                    sumSizes == nLand ? ", OK" : ", *** MISMATCH ***");
+                sb.Append("top-5: size (%land) @root(x,y) accumAtRoot\n");
+                for (int r = 0; r < list.Count && r < 5; r++)
+                {
+                    int rootIdx = list[r].root;
+                    sb.AppendFormat(ci, "  {0,7} ({1,5:F2}%) @({2},{3}) accum={4:F0}\n",
+                        list[r].size, nLand > 0 ? 100f * list[r].size / nLand : 0f,
+                        rootIdx % w, rootIdx / w, accum[rootIdx]);
+                }
+            }
+
+            // ---- Lake connected components (4-conn, matches FilterSmallLakes
+            // connectivity). Generic BFS over the exported mask — analysis,
+            // not chain re-derivation.
+            var seen = new bool[len];
+            var lakeQueue = new System.Collections.Generic.Queue<int>(256);
+            var comps = new System.Collections.Generic.List<(int size, bool border, int root)>(64);
+            for (int y = 0; y < hh; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int i0 = y * w + x;
+                    if (!lakesA[i0] || seen[i0]) continue;
+
+                    int size = 0;
+                    bool border = false;
+                    seen[i0] = true;
+                    lakeQueue.Clear();
+                    lakeQueue.Enqueue(i0);
+                    while (lakeQueue.Count > 0)
+                    {
+                        int c = lakeQueue.Dequeue();
+                        int cx = c % w, cy = c / w;
+                        size++;
+                        if (cx == 0 || cx == w - 1 || cy == 0 || cy == hh - 1) border = true;
+                        if (cx > 0 && lakesA[c - 1] && !seen[c - 1]) { seen[c - 1] = true; lakeQueue.Enqueue(c - 1); }
+                        if (cx < w - 1 && lakesA[c + 1] && !seen[c + 1]) { seen[c + 1] = true; lakeQueue.Enqueue(c + 1); }
+                        if (cy > 0 && lakesA[c - w] && !seen[c - w]) { seen[c - w] = true; lakeQueue.Enqueue(c - w); }
+                        if (cy < hh - 1 && lakesA[c + w] && !seen[c + w]) { seen[c + w] = true; lakeQueue.Enqueue(c + w); }
+                    }
+                    comps.Add((size, border, i0));
+                }
+            }
+            comps.Sort((a, b) => a.size != b.size ? b.size.CompareTo(a.size) : a.root.CompareTo(b.root));
+            sb.AppendFormat(ci, "\nlakes: components={0} cells={1}{2}\n",
+                comps.Count, lakeCells, effMinLake > 1 ? "" : " (unfiltered: minLakeArea<=1)");
+            for (int r = 0; r < comps.Count && r < 5; r++)
+                sb.AppendFormat(ci, "  {0,7} cells @({1},{2}){3}\n",
+                    comps[r].size, comps[r].root % w, comps[r].root / w,
+                    comps[r].border ? "  [touches border]" : "");
+
+            Debug.Log(sb.ToString(), this);
+        }
+
         private static ulong GoldenFnvMixU64(ulong h, ulong value, ulong fnvPrime)
         {
             h ^= (byte)(value); h *= fnvPrime;
@@ -1522,11 +1823,12 @@ namespace Islands.PCG.Adapters.Tilemap
             lastEnableTraversalStage = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
             lastEnableBiomeStage = preset != null ? preset.enableBiomeStage : enableBiomeStage;
-            lastEnableRegionsStage = enableRegionsStage;
-            lastEnableHydrologyStage = enableHydrologyStage;
+            lastEnableRegionsStage = preset != null ? preset.enableRegionsStage : enableRegionsStage;
+            lastEnableHydrologyStage = preset != null ? preset.enableHydrologyStage : enableHydrologyStage;
             lastHydroEpsilon = hydroEpsilon;
-            lastHydroRiverThresholdFraction = hydroRiverThresholdFraction;
-            lastHydroMinLakeArea = hydroMinLakeArea;
+            lastHydroRiverThresholdFraction = preset != null ? preset.hydroRiverThresholdFraction : hydroRiverThresholdFraction;
+            lastHydroMinLakeArea = preset != null ? preset.hydroMinLakeArea : hydroMinLakeArea;
+            lastVegetationMoistureModulation = preset != null ? preset.vegetationMoistureModulation : 0f;
             lastBiomeRiverMoistureBonus = preset != null ? preset.biomeRiverMoistureBonus : biomeRiverMoistureBonus;
             lastBiomeRiverFlowNorm = preset != null ? preset.biomeRiverFlowNorm : biomeRiverFlowNorm;
             lastIslandRadius01 = preset != null ? preset.islandRadius01 : islandRadius01;
@@ -1607,11 +1909,12 @@ namespace Islands.PCG.Adapters.Tilemap
                 || (preset != null ? preset.enableTraversalStage : enableTraversalStage) != lastEnableTraversalStage
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
                 || (preset != null ? preset.enableBiomeStage : enableBiomeStage) != lastEnableBiomeStage
-                || enableRegionsStage != lastEnableRegionsStage
-                || enableHydrologyStage != lastEnableHydrologyStage
+                || (preset != null ? preset.enableRegionsStage : enableRegionsStage) != lastEnableRegionsStage
+                || (preset != null ? preset.enableHydrologyStage : enableHydrologyStage) != lastEnableHydrologyStage
                 || !Mathf.Approximately(hydroEpsilon, lastHydroEpsilon)
-                || !Mathf.Approximately(hydroRiverThresholdFraction, lastHydroRiverThresholdFraction)
-                || hydroMinLakeArea != lastHydroMinLakeArea
+                || !Mathf.Approximately(preset != null ? preset.hydroRiverThresholdFraction : hydroRiverThresholdFraction, lastHydroRiverThresholdFraction)
+                || (preset != null ? preset.hydroMinLakeArea : hydroMinLakeArea) != lastHydroMinLakeArea
+                || !Mathf.Approximately(preset != null ? preset.vegetationMoistureModulation : 0f, lastVegetationMoistureModulation)
                 || !Mathf.Approximately(preset != null ? preset.biomeRiverMoistureBonus : biomeRiverMoistureBonus, lastBiomeRiverMoistureBonus)
                 || !Mathf.Approximately(preset != null ? preset.biomeRiverFlowNorm : biomeRiverFlowNorm, lastBiomeRiverFlowNorm)
                 || !Mathf.Approximately(preset != null ? preset.islandRadius01 : islandRadius01, lastIslandRadius01)

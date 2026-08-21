@@ -41,6 +41,12 @@ namespace Islands.PCG.Samples
     ///            parameter dumps. Includes a derived block with the N5.e effective
     ///            hills thresholds and the resolved noise source per slot, since
     ///            neither is visible in the Inspector. Read-only; no pipeline effect.
+    /// Phase W.b: regions + hydrology stage toggles, hydrology tunables
+    ///            (hydroRiverThresholdFraction, hydroMinLakeArea) and vegetation
+    ///            moistureModulation promoted from component/stage scope.
+    ///            hydroEpsilon stays component-scoped (numeric plumbing, not authoring).
+    ///            Additive JSON schema extension; NOT a serialization break — absent
+    ///            keys import as AbsentPreserved.
     /// </summary>
     [CreateAssetMenu(
         fileName = "MapGenerationPreset",
@@ -100,6 +106,16 @@ namespace Islands.PCG.Samples
                  "Requires Morphology enabled for CoastDist dependency.")]
         public bool enableBiomeStage = true;
 
+        [Tooltip("Include the Regions stage (M2.b).\n" +
+                 "Produces RegionId labeling over biome-classified land.\n" +
+                 "Requires Biome + Vegetation enabled to take effect.")]
+        public bool enableRegionsStage = true;
+
+        [Tooltip("Include the Hydrology stage (Phase L).\n" +
+                 "Produces FlowDir, FlowAccumulation, River and Lake layers.\n" +
+                 "Requires Morphology enabled. Default off (golden-safe).")]
+        public bool enableHydrologyStage = false;
+
         // ==================================================================
         // Biome Climate (Phase M / M-fix.a)
         // ==================================================================
@@ -157,6 +173,38 @@ namespace Islands.PCG.Samples
                  "0 = auto (totalLandCells × 0.02, matching Phase L river threshold).\n" +
                  "Override with an explicit value when using a non-default river threshold.")]
         public float biomeRiverFlowNorm = 0f;
+
+        // ==================================================================
+        // Hydrology (Phase L → W.b)
+        // ==================================================================
+
+        [Header("Hydrology (Phase L)")]
+        [Range(0.005f, 0.10f)]
+        [Tooltip("River threshold as a fraction of total Land cells.\n" +
+                 "Lower: more rivers. Higher: only major channels.\n" +
+                 "Auto-scales with resolution. Default 0.02 (2%).\n\n" +
+                 "Coupled: biomeRiverFlowNorm = 0 (auto) assumes this default;\n" +
+                 "override it explicitly when changing this value.\n" +
+                 "The Priority-Flood epsilon stays component-scoped (not authoring).")]
+        public float hydroRiverThresholdFraction = 0.02f;
+
+        [Min(0)]
+        [Tooltip("Minimum lake component size (cells). 0 = no filtering.\n" +
+                 "Removes noise-artifact puddles below this size.")]
+        public int hydroMinLakeArea = 0;
+
+        // ==================================================================
+        // Vegetation (W.b)
+        // ==================================================================
+
+        [Header("Vegetation (W.b)")]
+        [Range(0f, 0.5f)]
+        [Tooltip("Moisture modulation of the vegetation quantile cut. 0 = disabled\n" +
+                 "(default, preserves M2a-9 exactness/floor). > 0 shifts the per-cell\n" +
+                 "cut bucket: wetter cells gain vegetation, drier cells lose it.\n" +
+                 "Only active when the Biome stage runs before Vegetation\n" +
+                 "(M2a order) so the Moisture field exists.")]
+        public float vegetationMoistureModulation = 0.0f;
 
         // ==================================================================
         // Island Shape (N5.a)
@@ -480,10 +528,12 @@ namespace Islands.PCG.Samples
             sb.Append($"    \"vegetation\": {B(enableVegetationStage)},\n");
             sb.Append($"    \"traversal\": {B(enableTraversalStage)},\n");
             sb.Append($"    \"morphology\": {B(enableMorphologyStage)},\n");
-            sb.Append($"    \"biome\": {B(enableBiomeStage)}\n");
+            sb.Append($"    \"biome\": {B(enableBiomeStage)},\n");
+            sb.Append($"    \"regions\": {B(enableRegionsStage)},\n");
+            sb.Append($"    \"hydrology\": {B(enableHydrologyStage)}\n");
             sb.Append("  },\n");
-            sb.Append("  \"stageTogglesNote\": \"regions + hydrology are component-scoped; "
-                      + "this asset does not carry them\",\n");
+            sb.Append("  \"stageTogglesNote\": \"hydroEpsilon is component-scoped; "
+                      + "this asset does not carry it\",\n");
 
             sb.Append("  \"islandShape\": {\n");
             sb.Append($"    \"shapeMode\": {Q(shapeMode.ToString())},\n");
@@ -527,6 +577,15 @@ namespace Islands.PCG.Samples
             sb.Append($"    \"moistureNoiseCellSize\": {biomeMoistureNoiseCellSize},\n");
             sb.Append($"    \"riverMoistureBonus\": {F(biomeRiverMoistureBonus)},\n");
             sb.Append($"    \"riverFlowNorm\": {F(biomeRiverFlowNorm)}\n");
+            sb.Append("  },\n");
+
+            sb.Append("  \"hydrology\": {\n");
+            sb.Append($"    \"riverThresholdFraction\": {F(hydroRiverThresholdFraction)},\n");
+            sb.Append($"    \"minLakeArea\": {hydroMinLakeArea}\n");
+            sb.Append("  },\n");
+
+            sb.Append("  \"vegetation\": {\n");
+            sb.Append($"    \"moistureModulation\": {F(vegetationMoistureModulation)}\n");
             sb.Append("  },\n");
 
             sb.Append("  \"noise\": {\n");

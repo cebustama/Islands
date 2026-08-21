@@ -42,6 +42,8 @@ public sealed class MapGenerationPresetJsonRoundTripTests
         p.enableTraversalStage = false;
         p.enableMorphologyStage = true;
         p.enableBiomeStage = false;
+        p.enableRegionsStage = false;
+        p.enableHydrologyStage = true;
 
         p.shapeMode = IslandShapeMode.Rectangle;
         p.islandRadius01 = 0.37f;
@@ -79,6 +81,10 @@ public sealed class MapGenerationPresetJsonRoundTripTests
         p.biomeMoistureNoiseCellSize = 48;
         p.biomeRiverMoistureBonus = 0.31f;
         p.biomeRiverFlowNorm = 12.5f;
+
+        p.hydroRiverThresholdFraction = 0.035f;
+        p.hydroMinLakeArea = 6;
+        p.vegetationMoistureModulation = 0.25f;
 
         p.terrainNoiseSettings = new TerrainNoiseSettings
         {

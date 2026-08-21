@@ -37,13 +37,13 @@ namespace Islands.PCG.Editor
 
         private void OnGUI()
         {
-            // W.b gap — declared, not hidden (project decision: the wizard
-            // inherits the gap and must state it in its UI).
+            // W.b: the gap narrowed to a single field. hydroEpsilon stays
+            // component-scoped by verdict (numeric plumbing, not authoring);
+            // the other four promoted to MapGenerationPreset.
             EditorGUILayout.HelpBox(
-                "Not carried by this JSON: enableRegionsStage, enableHydrologyStage, "
-                + "hydroEpsilon, hydroRiverThresholdFraction, hydroMinLakeArea. "
-                + "These are component-scoped fields (closed by Phase W.b). "
-                + "Import/export here never touches them.",
+                "Not carried by this JSON: hydroEpsilon (component-scoped by "
+                + "W.b verdict — Priority-Flood numeric plumbing, not an authoring "
+                + "knob). Import/export here never touches it.",
                 MessageType.Warning);
 
             _target = (MapGenerationPreset)EditorGUILayout.ObjectField(

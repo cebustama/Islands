@@ -1,7 +1,8 @@
 # Current State
 
 Status date: 2026-08-20 (Phase W in progress — W.a, W-aux.a, W-aux.b, W-aux.c, W-aux.d closed;
-W-aux.e audit closed with no code change; W-aux.f and W-aux.g closed; authoring track X1.a closed)
+W-aux.e audit closed with no code change; W-aux.f, W-aux.g, W.b and W-aux.h closed;
+authoring track X1.a closed)
 
 ## What is active now
 - The Islands documentation migration was handled as Tier L and is now materially closed for the reviewed snapshot corpus.
@@ -11,9 +12,10 @@ W-aux.e audit closed with no code change; W-aux.f and W-aux.g closed; authoring 
 
 ## What is implemented now (confirmed for documentation authority purposes)
 - New PCG runtime direction: grid-first, deterministic, adapters-last.
-- Map Pipeline by Layers implemented slice: **F0–N6 + Phase M + M-fix.a/c + M2.a + M2.b + Phase L + L→M + L-fix.a (revised) + Phase V (read-only inspection tooling: V.a + V.b) + Phase Q (Q + Q-fix.a, adapter-side) + Phase W.a + W-aux.a + W-aux.b + W-aux.c (blocks 1–3) + W-aux.d + W-aux.f + W-aux.g (all golden-captured
-  where applicable; W-aux.e was a measurement audit with no code change)**, plus the authoring
-  track **X1.a** (Editor-only, golden-neutral).
+- Map Pipeline by Layers implemented slice: **F0–N6 + Phase M + M-fix.a/c + M2.a + M2.b + Phase L + L→M + L-fix.a (revised) + Phase V (read-only inspection tooling: V.a + V.b) + Phase Q (Q + Q-fix.a, adapter-side) + Phase W.a + W-aux.a + W-aux.b + W-aux.c (blocks 1–3) + W-aux.d + W-aux.f + W-aux.g + W.b (all golden-captured
+  where applicable; W-aux.e was a measurement audit with no code change, and W-aux.h was
+  read-only instrumentation with no core change)**, plus the authoring
+  track **X1.a** and its W-aux.h extension (Editor-only, golden-neutral).
 - Layout strategies are an implemented, test-gated support surface under PCG.
 - GraphLibrary runtime is a real implemented surface, but it is **not** promoted subsystem authority.
 - Noise runtime is real and coherent, but it is currently a governed reference / staged support surface, not a promoted subsystem SSoT.
@@ -142,7 +144,7 @@ W-aux.e audit closed with no code change; W-aux.f and W-aux.g closed; authoring 
   no asset mutation, no UI dependency. Golden-neutral: nothing in this surface can alter
   generation output.
 
-  Six rules, all computed from preset fields plus static tables:
+  Seven rules, all computed from preset fields plus static tables:
 
   | Rule | Fires when | Backing |
   |---|---|---|
@@ -152,6 +154,18 @@ W-aux.e audit closed with no code change; W-aux.f and W-aux.g closed; authoring 
   | `R4.ClampSaturationPlateau` | `islandSmoothFrom01 < 0.05` with terrain amplitude `> 0` | measured |
   | `R5.HotBandUnreachable` | land temperature ceiling `< 0.75` (Hot band lower bound) | measured |
   | `R6.ZeroCoverageDensities` | vegetation stage on, biomes with `0 < density < 0.4` | measured |
+  | `R7.RiverFlowNormDecoupled` | hydrology + biome stages on, `biomeRiverFlowNorm == 0`, `hydroRiverThresholdFraction != 0.02` | inferred |
+
+  **R7 (added W-aux.h, 2026-08-20).** `biomeRiverFlowNorm == 0` selects an auto mode that
+  normalizes river moisture by `totalLandCells × 0.02` — the **default** threshold fraction,
+  hardcoded in `Stage_Biome2D.ComputeMoisture`, not the configured one. A preset that moves
+  `hydroRiverThresholdFraction` therefore normalizes biome moisture against a river
+  definition the map is not using: the result stays deterministic and valid, but is drier or
+  wetter than the authoring intent implies, with no visible symptom. Warning severity,
+  `Inferred` backing. The rule duplicates the `0.02` default as
+  `RiverThresholdFractionDefault` because the diagnostics surface is pipeline-free by design
+  and cannot read the stage; the constant's doc-comment names `Stage_Biome2D.ComputeMoisture`
+  as its source so a future change to the auto mode has one obvious place to update.
 
   `PresetFinding` carries `RuleId`, severity, `Backing` (`Measured` / `Inferred`) and, for
   measured findings, the named run. The type makes an unbacked measured claim
@@ -454,7 +468,7 @@ W-aux.e audit closed with no code change; W-aux.f and W-aux.g closed; authoring 
 
 ## Temporary measurement probes (adapter-side, retained by decision 2026-08-19)
 
-Two non-governed probes live on `PCGMapTilemapVisualization`, each with an Inspector button
+Three non-governed probes live on `PCGMapTilemapVisualization`, each with an Inspector button
 on `PCGMapTilemapVisualizationEditor`:
 
 - `LogVegetationNoiseHistogram()` (W-aux.d) — vegetation noise distribution across three
@@ -465,6 +479,33 @@ on `PCGMapTilemapVisualizationEditor`:
   `Land` drift at fixed `waterThreshold01`. Its self-check reports a mismatch count against
   the exported field and declares itself invalid rather than reporting untrustworthy
   numbers — that counter is what caught the desynchronization during W-aux.f.
+
+- `LogHydrologyReport()` (W-aux.h) — `FlowAccumulation` histogram over `Land` in log2 bins,
+  a river-cell sweep across threshold fractions, a drainage-basin census, Priority-Flood
+  fill statistics, and lake connected components with border contact.
+
+  **It does not mirror the chain it measures.** `filledHeight` and `flowDir` are stage-local
+  and do not survive `Execute`, so the probe re-derives them by calling
+  `HeightFieldHydrologyOps2D.FillDepressions` / `ComputeFlowDirectionsD8` directly — the same
+  operators the stage calls, one implementation point, nothing to drift. Its self-check is
+  correspondingly stronger than a fixture parity test: it verifies that the *stored*
+  `FlowAccumulation` satisfies the accumulation recurrence (`accum[i] == 1 + Σ upstream`)
+  under the re-derived directions, which validates the real inputs of every run rather than
+  a captured pair. Counts are integer-valued floats well below 2²⁴, so exact equality is
+  valid without tolerance. A divergence in epsilon, neighbour table or inputs surfaces as a
+  non-zero mismatch count and the report declares the basin census untrustworthy.
+
+  **Basin definition (declared in the probe header):** root = a `Land` cell whose `flowDir`
+  is −1 or whose D8 target is non-`Land`/out-of-bounds; basin = every `Land` cell whose
+  drainage path terminates at that root. This is standard GIS watershed delineation over a
+  D8 direction grid, and `2b_Procedural_terrain_rivers…` lists drainage-basin labels as one
+  of the four standard outputs of a river pipeline — the one this slice did not previously
+  produce. The census memoizes whole downstream paths, so it is amortized O(n), and it
+  cross-checks itself by asserting that basin sizes sum to the `Land` count.
+
+  **Retirement criterion (the only one of the three probes that has one):** promote to a
+  dedicated probe or stats surface when the map-evaluation phase opens, or retire when the
+  river-threshold contract batch closes — whichever comes first.
 
 Both mirror private constants or arithmetic from the stages they measure and will drift
 silently if those stages change; each carries a `TEMPORARY` header saying so. Retained
@@ -485,11 +526,12 @@ Findings that surfaced during the W-aux.c…W-aux.f run with no owning batch, re
 they survive their originating sessions. **All are UNVERIFIED as stated** and none is fixed;
 each names where it would have to be checked.
 
-- **`Stage_Vegetation2D.moistureModulation` may be unreachable.** Public field, default
-  `0.0f`, gates the moisture modulation. Whether anything in the pipeline construction path
-  assigns it was never checked. If nothing does, it is the same pathology as the five
-  component-scoped fields and `Stage_Regions2D.SpeckThreshold`: a tunable that exists in code
-  but cannot be reached from a preset. **Belongs to the W.b field inventory.**
+- ~~**`Stage_Vegetation2D.moistureModulation` may be unreachable.**~~ **RESOLVED at W.b
+  (2026-08-20).** Confirmed unreachable — zero assignments anywhere in the corpus outside
+  its own declaration, so with the `> 0f` guard the branch had been inert since it was
+  written. Promoted to `MapGenerationPreset.vegetationMoistureModulation`, default 0, which
+  keeps it inert until authored. M2a-9 amended to name the suspension of clauses (a) and (c)
+  under non-zero modulation.
 - **Vegetation noise frequency as a spatial-character lever.** `Stage_Vegetation2D` uses
   `NoiseFrequency = 4` / 3 octaves. Its original motivation — the broken density semantics —
   died with W-aux.d, which proved the cause was value mapping, not grain. What remains is a
@@ -507,8 +549,12 @@ each names where it would have to be checked.
   and that density is asymmetric per seed. Declared targets are measured pre-blend by
   contract (`map-pipeline-by-layers-ssot.md` §F3b′), so this is a live expressiveness
   question, not a defect. Resolving it would mean resolving the quantile after the blend.
-- **`Default_MapPreset.waterThreshold01` may carry the wrong calibration value.** The asset
-  reads **0.425532**, which is the compensated value for the *code default* parameters
+- ~~**`Default_MapPreset.waterThreshold01` may carry the wrong calibration value.**~~
+  **RESOLVED 2026-08-20** — the asset was corrected to **0.412119** by user decision, the
+  value the arithmetic below predicted. Confirmed in the exported preset JSON
+  (`waterAndShore.waterThreshold01: 0.412119`) and in the `hprobe` header
+  (`wt=0.4121`, `underThreshold: 0`). Original finding retained for the record:
+  the asset read **0.425532**, which is the compensated value for the *code default* parameters
   (amp 0.35, exp 1.0). The asset's own parameters are amp 0.22 / exp 1.3, whose compensation
   factor is 0.873132. The value recorded for this asset at W-aux.f was 0.412119, and
   `0.412119 / 0.873132 = 0.47201` — consistent with a pre-W-aux.f asset threshold of 0.472.
@@ -531,6 +577,55 @@ each names where it would have to be checked.
 - **Optional test-hygiene edits from W-aux.f may or may not have been applied:**
   `StageHills2DTests.N5d_BlendPositive_DiffersFromBlend0` and the explanatory comment on
   `StageBaseTerrain2DTests.NoShapeTunables()`. Never confirmed.
+
+- **River threshold is a fraction of *total* land, but this island is not one basin.
+  MEASURED AND VERIFIED at W-aux.h (2026-08-20) — no longer an open observation; kept
+  here because the fix is unscheduled.** Measured at seeds 56 / 8 / 243, res 256,
+  `Default_MapPreset`, probe `LogHydrologyReport`:
+
+  | | seed 56 | seed 8 | seed 243 |
+  |---|---|---|---|
+  | Land | 22195 | 22386 | 19991 |
+  | Basins | 1270 | 1766 | 1813 |
+  | Basins ≥ 50 cells | 45 | 40 | 32 |
+  | Largest basin | 908 | 891 | 1259 |
+  | **Ceiling = largest / land** | **4.09 %** | **3.98 %** | **6.30 %** |
+  | Basins above threshold at `f = 0.02` | 4 | 1 | 2 |
+  | River cells | 37 | 23 | 34 |
+
+  The lobe hypothesis is **verified**: drainage is fragmented into more than a thousand
+  independent trees and the largest captures 4–6 % of the land, so `totalLand` is the wrong
+  divisor for a per-basin quantity. The consequence is arithmetic, not statistical: a cell's
+  accumulation cannot exceed its own basin's size, so `f > largestBasin / totalLand` yields
+  zero rivers necessarily. The sweep predicts all six upper-range cases correctly. Under
+  62–69 % of land carries accumulation ≤ 7, so a threshold near 400 sits two orders of
+  magnitude above the median — the hydrology is healthy; the yardstick is wrong.
+  **The measurement is done; only the contract decision remains, and it is unscheduled.**
+- **`Lakes = 0` is not structural — REFUTED at W-aux.h (2026-08-20).** Seed 56 produces one
+  lake component of 90 cells that does not touch the border: a genuine enclosed basin. Seeds
+  8 and 243 produce none. `minLakeArea = 0` throughout, so nothing was filtered in any run.
+  Interior lakes are rare (1 of 3 seeds) but the shaping chain does produce them, and the
+  one measured would survive any plausible `minLakeArea`.
+- **`hydroEpsilon` is marginal on this terrain — MEASURED at W-aux.h (2026-08-20).**
+  Priority-Flood raises 259 / 194 / 377 cells (0.87–1.89 % of land) with maximum fill depth
+  1.7 × 10⁻² to 2.5 × 10⁻² — between **1700× and 2500× the epsilon**. The epsilon operates
+  two orders of magnitude below the scale of the fill, so it affects tie-breaking inside
+  filled regions, not the amount of river. Its component-scoped status (not promoted at W.b)
+  is consistent with this: it is not an expressive lever on this terrain.
+- **The expressive range for `riverThresholdFraction` sits near 0.005, not 0.02 —
+  MEASURED at W-aux.h.** `f = 0.005` yields 355 / 219 / 211 river cells
+  (1.60 / 0.98 / 1.06 % of land), a visible and seed-stable network; `f = 0.02` yields
+  37 / 23 / 34. **Recorded as measurement, not as a recommendation**: changing the asset was
+  explicitly out of scope at W-aux.h, and the value question is entangled with the divisor
+  question above. Note that `f != 0.02` with `biomeRiverFlowNorm == 0` fires R7.
+- **`PCGMapVisualization` and `PCGMapCompositeVisualization` ignore the preset for biome
+  climate.** Both assign the ten `biome*` climate fields and `enableBiomeStage` from
+  inline component fields with no `preset != null ?` ternary
+  (`PCGMapVisualization` L452–461, `PCGMapCompositeVisualization` L407–416), while
+  `PCGMapTilemapVisualization` resolves all of them from the preset. The same preset
+  therefore produces different climate on different components. Surfaced during the W.b
+  inventory; deliberately not fixed there (out of batch scope). Verified by reading the
+  three components, 2026-08-20.
 
 ## Measured calibration baselines and climate reachability
 
@@ -870,11 +965,11 @@ that arc continues at W.c.
 
 The previously documented Phase P → Phase W sequencing is paused, not cancelled: no rubric
 yet exists for what distinguishes a good world from a bad one, and that rubric is to be
-distilled from observing W-generated worlds. Adapter-track phases T1 and Q2 remain
+distilled from observing W-generated worlds. Adapter-track phases T1, T2 and Q2 remain
 independent and can be picked up at any time. X1.b remains blocked on measured runs beyond
 vegetation and height.
 
-Deferred / optional: H8b, T1, J, K, P, Q2, X1.b.
+Deferred / optional: H8b, T1, T2, J, K, P, Q2, X1.b.
 
 Minimum path to W: M → W. Enriched path: M → M2 → L → V → P → W.
 Adapter-side enrichment (independent of W path): Q (biome-conditional tiles — DONE), Q2 (composite-condition tiles).

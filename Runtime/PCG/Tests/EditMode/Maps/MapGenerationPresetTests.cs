@@ -1,5 +1,6 @@
 ﻿using Islands;
 using Islands.PCG.Layout.Maps;
+using Islands.PCG.Layout.Maps.Stages;
 using Islands.PCG.Samples;
 using NUnit.Framework;
 using UnityEngine;
@@ -16,6 +17,7 @@ using UnityEngine;
 ///             embedded TerrainNoiseSettings structs. New field defaults.
 /// Phase N5.d: hillsNoiseBlend + hillsNoiseSettings / hillsNoiseAsset.
 /// Phase N5.e: Hills threshold UX remap — hillsThresholdL1/L2 → hillsL1/L2 (relative fractions).
+/// Phase W.b: stage-scoped field promotion — defaults-match gate against fresh stage instances.
 /// </summary>
 [TestFixture]
 public class MapGenerationPresetTests
@@ -131,6 +133,31 @@ public class MapGenerationPresetTests
     {
         Assert.IsNull(_preset.terrainNoiseAsset);
         Assert.IsNull(_preset.warpNoiseAsset);
+    }
+
+    // ------------------------------------------------------------------
+    // W.b — promoted stage-scoped fields: defaults preserve behavior
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// W.b gate: every promoted field's preset default equals the value the
+    /// pipeline effectively used before promotion (stage field initializers,
+    /// or the component defaults for the two toggles). If this fails, exposing
+    /// the field silently changed default generations.
+    /// </summary>
+    [Test]
+    public void Defaults_WbPromotedFields_MatchPrePromotionEffectiveValues()
+    {
+        var hydro = new Stage_Hydrology2D();
+        Assert.AreEqual(hydro.riverThresholdFraction, _preset.hydroRiverThresholdFraction);
+        Assert.AreEqual(hydro.minLakeArea, _preset.hydroMinLakeArea);
+
+        var veg = new Stage_Vegetation2D();
+        Assert.AreEqual(veg.moistureModulation, _preset.vegetationMoistureModulation);
+        Assert.AreEqual(0f, _preset.vegetationMoistureModulation);
+
+        Assert.IsTrue(_preset.enableRegionsStage);
+        Assert.IsFalse(_preset.enableHydrologyStage);
     }
 
     // ------------------------------------------------------------------

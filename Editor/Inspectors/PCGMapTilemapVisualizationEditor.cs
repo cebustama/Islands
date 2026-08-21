@@ -439,6 +439,13 @@ namespace Islands.PCG.Editor
                 ((PCGMapTilemapVisualization)target).LogHeightHistogram();
             }
 
+            // TEMPORARY (W-aux.h hydrology instrumentation). Retire or promote
+            // per the probe's written criterion.
+            if (GUILayout.Button("Log Hydrology Report (TEMP)"))
+            {
+                ((PCGMapTilemapVisualization)target).LogHydrologyReport();
+            }
+
             serializedObject.ApplyModifiedProperties();
         }
     }

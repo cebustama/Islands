@@ -60,6 +60,13 @@ namespace Islands.PCG.Editor
         /// <summary>Below this, the geometric plateau is considered removed (R4 trigger).</summary>
         public const float SmoothFromEpsilon = 0.05f;
 
+        /// <summary>
+        /// Stage_Hydrology2D.riverThresholdFraction default. The biomeRiverFlowNorm
+        /// auto mode (0) normalizes by totalLandCells × this DEFAULT — not by the
+        /// configured fraction (Stage_Biome2D.ComputeMoisture). R7 trigger anchor.
+        /// </summary>
+        public const float RiverThresholdFractionDefault = 0.02f;
+
         public static List<PresetFinding> Diagnose(MapGenerationPreset preset)
         {
             if (preset == null) throw new ArgumentNullException(nameof(preset));
@@ -70,6 +77,7 @@ namespace Islands.PCG.Editor
             CheckClampSaturationPlateau(preset, findings);
             CheckHotBandUnreachable(preset, findings);
             CheckZeroCoverageVegetationDensities(preset, findings);
+            CheckRiverFlowNormDecoupled(preset, findings);
             return findings;
         }
 
@@ -222,6 +230,37 @@ namespace Islands.PCG.Editor
                         + string.Join(", ", affected) + ". "
                         + "threshold = 1 − density is NOT a per-cell probability "
                         + "(measured: density 0.25 → 0.26% coverage, 0.05 → 0%)."
+            });
+        }
+
+        // ------------------------------------------------------------------
+        // R7 — river-flow normalization decoupled from the configured river
+        // threshold. biomeRiverFlowNorm = 0 (auto) normalizes river moisture
+        // by totalLandCells × the DEFAULT threshold fraction (0.02), not the
+        // configured one (Stage_Biome2D.ComputeMoisture). If the preset
+        // changes hydroRiverThresholdFraction, biome moisture is normalized
+        // against a river definition the map is not actually using.
+        // ------------------------------------------------------------------
+        private static void CheckRiverFlowNormDecoupled(MapGenerationPreset p, List<PresetFinding> o)
+        {
+            if (!p.enableHydrologyStage || !p.enableBiomeStage)
+                return;
+            if (p.biomeRiverFlowNorm != 0f)
+                return;
+            if (p.hydroRiverThresholdFraction == RiverThresholdFractionDefault)
+                return;
+
+            o.Add(new PresetFinding
+            {
+                RuleId = "R7.RiverFlowNormDecoupled",
+                Severity = PresetFindingSeverity.Warning,
+                Backing = PresetFindingBacking.Inferred,
+                Message = $"biomeRiverFlowNorm = 0 (auto) normalizes river moisture by "
+                        + $"totalLandCells × {F(RiverThresholdFractionDefault)} — the DEFAULT "
+                        + $"threshold fraction — but hydroRiverThresholdFraction is "
+                        + $"{F(p.hydroRiverThresholdFraction)}. Biome moisture is normalized "
+                        + "against a river definition this preset does not use. Set an "
+                        + "explicit biomeRiverFlowNorm or keep the default threshold."
             });
         }
 

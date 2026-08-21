@@ -259,24 +259,23 @@ No new assembly definition. `BiomeTileOverride.cs` needs `Islands.PCG.Layout.Map
 
 ### 3.1 Starter Asset
 
-> ⚠️ **NOT UPDATED — blocked by an open decision (`Phase_Q_Pending_Doc_Updates.md` §9.1:
-> starter asset naming and path).** The text below is known to be wrong on two counts and
-> is left unedited deliberately, so the correction lands in one pass once the decision is
-> made. (a) The path `Samples~/0.1.0-preview/PCG Map Tilemap/` does not exist in the
-> package tree; the real location is `Runtime/PCG/Samples/PCG Map Tilemap/Tilesets/`, and
-> `reference/tileset-import-guide.md` §Phase 7 specifies the naming convention
-> `<SetName>_BiomeOverride`. Adopting the guide's convention would require renaming the
-> existing `TestBiomeTileOverride.asset`. (b) The "5 temperature clusters" description
-> below does not match the implemented `Populate Default Biome Groups`, which creates 12
-> groups (one per biome except `Unclassified`) with 4 recommended layer slots each — as
-> the context-menu paragraph immediately after it already states correctly.
+> **Corrected 2026-08-21** (open decision `Phase_Q_Pending_Doc_Updates.md` §9.1 resolved by
+> the user). Two errors were fixed together, as the blocking note said they would be: the
+> path `Samples~/0.1.0-preview/PCG Map Tilemap/` does not exist — verified against the
+> package directory listing, which shows `Samples~/0.1.0-preview/` containing Fractal, Hash,
+> Noise, Procedural Meshes and ProceduralSurface only — and the "5 temperature clusters"
+> description did not match the implemented `Populate Default Biome Groups`.
 
-`BiomeTileOverride-Starter.asset` under `Samples~/0.1.0-preview/PCG Map Tilemap/`.
-Pre-populated with empty `BiomeGroup` entries for the 5 biome temperature clusters
-(Cold: Snow/Tundra/BorealForest; Cool: TemperateDesert/Shrubland; Warm:
-TemperateForest/TemperateRainforest/Grassland; Hot: SubtropicalDesert/
-TropicalSeasonalForest/TropicalRainforest; Special: Beach). Layer slots left
-unassigned — artists fill in per-biome tile art.
+`Overworld16bit_BiomeOverride.asset` under
+`Runtime/PCG/Samples/PCG Map Tilemap/Tilesets/`, following the naming convention
+`<SetName>_BiomeOverride` specified in `reference/tileset-import-guide.md` §Phase 7. One
+override asset per tileset; the set name in the filename is what keeps them apart once more
+than one exists.
+
+Pre-populated by the context menu below with one `BiomeGroup` per `BiomeType` except
+`Unclassified` — **12 groups**, each carrying 4 recommended layer slots (`Land`,
+`Vegetation`, `HillsL1`, `HillsL2`). Tile references are left null; artists fill in
+per-biome tile art, or generate placeholders with the Q-aux.a context menu.
 
 Context menu on `BiomeTileOverride`: **"Populate Default Biome Groups"** — creates
 one `BiomeGroup` per `BiomeType` (excluding `Unclassified`) with recommended layer

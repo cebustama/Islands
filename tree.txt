@@ -1,6 +1,15 @@
 ﻿Islands
 +---Documentation~
 |   +---archive
+|   |   +---pending doc updates
+|   |   |   +---Phase_Q_Pending_Doc_Updates.md
+|   |   |   +---Phase_W_Pending_Doc_Updates.md
+|   |   |   +---W-aux_c_Pending_Doc_Updates.md
+|   |   |   +---W-aux_d_Vegetation_Quantile_Pending_Doc_Updates.md
+|   |   |   +---W-aux_e_Threshold_Mapping_Audit_Pending_Doc_Updates.md
+|   |   |   +---W-aux_f_Height_Ceiling_Desaturation_Pending_Doc_Updates.md
+|   |   |   \---X1_Pending_Doc_Updates.md
+|   |   +---Application_Ledger_2026-08-20.md
 |   |   +---Islands_PCG_Pipeline_SSoT_v0_1_16.md
 |   |   +---Islands_SSoT_Technical_Bible.md
 |   |   +---PCG_Pipeline_Technical_Snapshot.md
@@ -222,7 +231,8 @@
 |   |   |   |   \---BspPartition2D.cs
 |   |   |   +---Maps
 |   |   |   |   +---Operators
-|   |   |   |   |   \---HeightFieldHydrologyOps2D.cs
+|   |   |   |   |   +---HeightFieldHydrologyOps2D.cs
+|   |   |   |   |   \---HillsThresholdOps2D.cs
 |   |   |   |   +---Stages
 |   |   |   |   |   +---Stage_BaseTerrain2D.cs
 |   |   |   |   |   +---Stage_Biome2D.cs
@@ -368,6 +378,7 @@
 |   |   |       |   |   +---ProceduralTileFactoryTests.cs
 |   |   |       |   |   \---TilesetConfigTests.cs
 |   |   |       |   +---HeightFieldHydrologyOps2DTests.cs
+|   |   |       |   +---HillsThresholdOps2DTests.cs
 |   |   |       |   +---MapExporter2DTests.cs
 |   |   |       |   +---MapGenerationPresetDiagnosticsTests.cs
 |   |   |       |   +---MapGenerationPresetTests.cs

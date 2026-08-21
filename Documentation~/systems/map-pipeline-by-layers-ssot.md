@@ -126,6 +126,24 @@ Current `MapFieldId` (COUNT = 7):
 - Override-at-resolve pattern: when assigned to a visualization component noise slot,
   the asset's settings replace inline values. When null, inline values are used unchanged.
 
+`MapGenerationPreset` — W.b parameter surface (2026-08-20).
+- Stage toggles carried: hills, shore, vegetation, traversal, morphology, biome,
+  **regions**, **hydrology** (the last two promoted at W.b).
+- Hydrology tunables carried: `hydroRiverThresholdFraction`, `hydroMinLakeArea`.
+  **`hydroEpsilon` is deliberately not carried** — Priority-Flood numeric plumbing,
+  not an authoring parameter (M2.a verdict). It stays a component field on
+  `PCGMapTilemapVisualization`; `PCGMapVisualization` hardcodes `1e-5f`.
+- Vegetation: `vegetationMoistureModulation` → `Stage_Vegetation2D.moistureModulation`.
+- Resolution follows the override-at-resolve pattern: components read
+  `preset != null ? preset.X : inlineX` and assign to stage instances. Promoted fields
+  are NOT routed through `MapTunables2D` — the consuming stages read instance fields,
+  not `inputs.Tunables`.
+- Dirty-tracking consequence: each promoted field carries a `last*` entry compared by
+  effective value. Editing a field on an assigned preset does not change the preset
+  reference, so without the per-field comparison the map would not regenerate.
+- `Stage_Regions2D.SpeckThreshold` remains stage-local by M2.a verdict (constant since
+  inception; underpins invariant R-8).
+
 `TilesetConfig` — multi-layer stamping maintenance rule:
 - `ToLayerEntries()` builds a keyed lookup by `MapLayerId`. Robust against assets with
   fewer entries than `MapLayerId.COUNT` — missing layers produce null tile entries
@@ -256,6 +274,8 @@ consumer; see `SSoT_CONTRACTS.md` §Calibration entry points.
   `QuantSteps = 1024`. For density `d`, `cut(d)` is the largest bucket `k` such that
   `|{ c ∈ E : bucket(c) >= k }| >= ceil(d * |E|)`.
   - (a) **Exactness.** `c ∈ E` is vegetated ⟺ `bucket(c) >= cut(density(c))`.
+    Holds for `moistureModulation = 0` — the default, and the configuration every
+    vegetation golden and gate is captured under.
   - (b) **Nesting.** `d1 > d2 ⟹ cut(d1) <= cut(d2)`, so accepted sets are nested over
     `E`. This is a deterministic set-inclusion property, replacing the former
     statistical "denser biomes cover more" formulation, which held by accident while
@@ -275,6 +295,21 @@ consumer; see `SSoT_CONTRACTS.md` §Calibration entry points.
     biome's population size first: biomes with a handful of cells (Grassland: 12, 15
     and 0 cells at the three seeds tested) report 0.00% for ordinary small-sample
     reasons, not because of this clause.
+  - (d-bis) **Moisture modulation (W.b — reachable since 2026-08-20).**
+    `Stage_Vegetation2D.moistureModulation` became preset-authorable at W.b
+    (`MapGenerationPreset.vegetationMoistureModulation`, default 0 = disabled). A
+    non-zero value shifts the cut **per cell** rather than applying one cut to the
+    population: `bucketShift = round(moistureModulation * (moisture - 0.5) * QuantSteps)`,
+    `effectiveCut = clamp(cut - bucketShift, 0, QuantSteps)`. Wetter cells get a lower
+    cut, drier cells a higher one. This **suspends (a) and (c) by construction** — the
+    cut is no longer uniform over `E`, so neither exactness against a single `cut(d)`
+    nor the coverage floor survives. It remains fully deterministic: modulation reads
+    the `Moisture` field, which requires `Stage_Biome2D` to run before
+    `Stage_Vegetation2D` (M2.a order); when `Moisture` is absent the branch is inert
+    regardless of the value. Nesting (b) is unaffected — it is a property of `cut(d)`,
+    which modulation shifts uniformly per cell rather than reordering.
+    No golden or gate is captured with a non-zero value; doing so requires re-anchoring
+    as its own step.
   - (e) **COUPLING — contract surface, not an implementation detail.** `cut(d)` is a
     function of `E`. Any change to the eligibility policy — including flipping
     `vegetatesOnPeaks` on a single biome, or changing one biome's density to or from
@@ -485,6 +520,16 @@ violating the no-RNG invariant. Deferred to Phase L2 if visually problematic.
 - `StageHydrology2DTests.cs` — stage invariants L-1..L-10 + goldens captured
 - `MapPipelineRunner2DGoldenLTests.cs` — F0→G→L pipeline golden captured
 - `MapPipelineRunner2DGoldenLMTests.cs` — F0→G→L→M pipeline golden captured
+
+**Authoring coupling (W.b).** `riverThresholdFraction` is preset-authorable. The river
+mask is `FlowAccumulation >= totalLandCells × riverThresholdFraction`, so the fraction
+sets river *count*, not river *shape*. `MapGenerationPreset.biomeRiverFlowNorm = 0`
+means "auto", and auto is defined as `totalLandCells × 0.02` — the **default** fraction,
+not the configured one. Changing `riverThresholdFraction` while leaving
+`biomeRiverFlowNorm` at 0 therefore normalizes river moisture against the wrong divisor:
+lowering the fraction saturates `riverMoistureBonus` on cells that are not rivers.
+Authors changing one must set the other explicitly. This asymmetry is recorded, not
+fixed — resolving it means redefining "auto", which is a contract change.
 
 ### Phase M2.b — Contiguous Region Detection + Naming
 `Stage_Regions2D`

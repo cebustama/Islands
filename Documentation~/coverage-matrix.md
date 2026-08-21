@@ -51,10 +51,13 @@ Purpose: Map each important concept to its primary documentary owner.
 | Phase Q — biome-conditional tile selection (adapter-side) | `planning/active/Phase_Q_Design.md` | design authority for implemented adapter slice | Active |
 | Tileset import and biome tile authoring workflow | `reference/tileset-import-guide.md` | governed reference / implementation-time support | Active |
 | Phase W-aux documentation-application record (W-aux.a + W-aux.b) | `planning/archive/Phase_W_aux_Pending_Doc_Updates.md`, `planning/archive/Phase_W_aux_b_Pending_Doc_Updates.md` | planning history / applied-record support | Historical support |
-| Blocked documentation items (Phase Q §3.1 — starter asset naming/path; Phase W §3 — W.a golden hashes unavailable) | `planning/active/Phase_Q_Pending_Doc_Updates.md`, `planning/active/Phase_W_Pending_Doc_Updates.md` | live pending-work record, blocked | Active |
+| ~~Blocked documentation items (Phase Q §3.1; Phase W §3)~~ **both disposed 2026-08-21** | `archive/pending doc updates/Phase_Q_Pending_Doc_Updates.md` (applied in full), `archive/pending doc updates/Phase_W_Pending_Doc_Updates.md` (§3 closed as irrecoverable) | consumed input — not authority | Historical support |
 | Authoring tools (preset diagnostics, preset diff) | `planning/active/PCG_Roadmap.md` (Phase X1) + `CURRENT_STATE.md` | planning + implemented truth | Active |
 | Preset calibration values for `Default_MapPreset` | `changelog-ssot.md` (per-batch measured deltas) + `CURRENT_STATE.md` (current values) | governance support / implemented truth | Active |
-| W-aux.c…W-aux.f + X1.a documentation-application record | the six `*_Pending_Doc_Updates.md` queues under `planning/active/` | consumed input, applied 2026-08-20 — not authority | Active until archived |
+| W-aux.c…W-aux.f + X1.a documentation-application record | `archive/pending doc updates/` (five queues) + `archive/Application_Ledger_2026-08-20.md` | consumed input, applied 2026-08-20 — not authority | Historical support |
+| W.b + W-aux.h + Phase T2 documentation-application record | `W_b_Pending_Doc_Updates.md`, `W-aux_h_Pending_Doc_Updates.md`, `Phase_T2_Pending_Doc_Updates.md` + `Application_Ledger_2026-08-21.md` | consumed input, applied 2026-08-21 — not authority | Historical support, except the live T2 queue |
+| Phase T2 planning branch (3D relief adapters) | `planning/active/PCG_Roadmap.md` (Phase T2) + `Phase_T2_Pending_Doc_Updates.md` | planning only — asserts no implemented truth | Active, 2 items blocked on `Phase_T2_Design.md` |
+| Hydrology instrumentation (`hydroprobe`, R7) | `CURRENT_STATE.md` §Temporary measurement probes + §Preset diagnostics | implemented truth, adapter/Editor-side | Active, probe has a written retirement criterion |
 
 ## Test coverage and known gaps
 

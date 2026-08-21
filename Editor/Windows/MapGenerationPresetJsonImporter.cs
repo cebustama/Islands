@@ -124,6 +124,8 @@ namespace Islands.PCG.Editor
                 ["stageToggles.traversal"] = raw => PB(raw, v => p.enableTraversalStage = v),
                 ["stageToggles.morphology"] = raw => PB(raw, v => p.enableMorphologyStage = v),
                 ["stageToggles.biome"] = raw => PB(raw, v => p.enableBiomeStage = v),
+                ["stageToggles.regions"] = raw => PB(raw, v => p.enableRegionsStage = v),
+                ["stageToggles.hydrology"] = raw => PB(raw, v => p.enableHydrologyStage = v), 
 
                 // islandShape
                 ["islandShape.shapeMode"] = raw => PE<IslandShapeMode>(raw, v => p.shapeMode = v),
@@ -163,6 +165,13 @@ namespace Islands.PCG.Editor
                 ["biomeClimate.moistureNoiseCellSize"] = raw => PI(raw, v => p.biomeMoistureNoiseCellSize = v),
                 ["biomeClimate.riverMoistureBonus"] = raw => PF(raw, v => p.biomeRiverMoistureBonus = v),
                 ["biomeClimate.riverFlowNorm"] = raw => PF(raw, v => p.biomeRiverFlowNorm = v),
+
+                // hydrology (W.b)
+                ["hydrology.riverThresholdFraction"] = raw => PF(raw, v => p.hydroRiverThresholdFraction = v),
+                ["hydrology.minLakeArea"] = raw => PI(raw, v => p.hydroMinLakeArea = v),
+
+                // vegetation (W.b)
+                ["vegetation.moistureModulation"] = raw => PF(raw, v => p.vegetationMoistureModulation = v),
 
                 // runBehavior
                 ["runBehavior.clearBeforeRun"] = raw => PB(raw, v => p.clearBeforeRun = v),

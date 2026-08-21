@@ -1,8 +1,15 @@
 # Phase Q — Pending Documentation Updates
 
-Status: **PARTIALLY APPLIED — 2026-08-18; re-verified 2026-08-20.** 16 of 17 items applied;
-**1 blocked**.
-Blocked: **§3.1** (starter asset naming and path) — blocked by open decision §9.1.
+Status: **APPLIED — 2026-08-21. Closed; ready to archive.** 17 of 17 items applied.
+§3.1 was unblocked on 2026-08-21 by the user resolving open decision §9.1 (adopt the guide's
+`<SetName>_BiomeOverride` convention; the concrete name chosen is
+`Overworld16bit_BiomeOverride`) and applied to `Phase_Q_Design.md` §3.1 together with the
+group-count correction, in the single pass the blocking note reserved for it.
+**Do not re-apply anything from this queue.**
+
+Historical status line, retained: PARTIALLY APPLIED — 2026-08-18; re-verified 2026-08-20;
+16 of 17 items applied, **1 blocked**.
+Was blocked: **§3.1** (starter asset naming and path) — blocked by open decision §9.1.
 Re-verification 2026-08-20: the 16 applied items were checked against the governed files
 themselves (`Phase_Q_Design.md` §3.2–3.5, `coverage-matrix.md`, `tileset-import-guide.md`,
 `SSoT_INDEX.md`) and are present. Nothing was re-applied. §3.1 remains blocked; the
@@ -170,6 +177,14 @@ specifies the naming convention `<SetName>_BiomeOverride`.
 **Decision needed — recommended:** adopt the guide's convention and path, since both match
 the real tree. Update §3.1 accordingly.
 
+> **RESOLVED and APPLIED 2026-08-21.** User adopted the guide's convention. `Phase_Q_Design.md`
+> §3.1 now reads `Overworld16bit_BiomeOverride.asset` under
+> `Runtime/PCG/Samples/PCG Map Tilemap/Tilesets/`, and the "5 temperature clusters" text was
+> replaced by the 12-group description that matches `Populate Default Biome Groups`. The
+> package asset `TestBiomeTileOverride.asset` must be renamed to match — a user action, not
+> performed by the documentation session. Both paths in this item were verified against the
+> package directory listing on 2026-08-21.
+
 **Also:** §3.1 describes a starter with 5 temperature clusters. The implemented
 `Populate Default Biome Groups` creates 12 groups (one per biome except `Unclassified`),
 each with 4 recommended layer slots. Align the text with the code.
@@ -319,10 +334,11 @@ change is deliberate rather than an omission.
 
 ## 9. Open decisions blocking full application
 
-1. **Starter asset naming and path** (§3.1). Recommended: adopt
-   `<SetName>_BiomeOverride` under `Runtime/PCG/Samples/PCG Map Tilemap/Tilesets/`,
-   matching both the guide and the real tree. Requires renaming
-   `TestBiomeTileOverride.asset`.
+1. ~~**Starter asset naming and path** (§3.1).~~ **RESOLVED 2026-08-21 by user decision.**
+   Adopted: `<SetName>_BiomeOverride` under
+   `Runtime/PCG/Samples/PCG Map Tilemap/Tilesets/`, concrete name
+   `Overworld16bit_BiomeOverride`. §3.1 applied. The package rename of
+   `TestBiomeTileOverride.asset` is a user action and is not itself a documentation item.
 2. **Q-BUG-2 test seam** (§3.4). Accept smoke-only verification, or add a declarative
    `BiomeAware` flag to `TilemapLayerGroup`.
 3. ~~**Whether a changelog entry is required.**~~ **RESOLVED 2026-08-18.** The governed
@@ -332,5 +348,7 @@ change is deliberate rather than an omission.
    **not** unblock `Phase_W_Pending_Doc_Updates.md` §3, which is blocked for a different
    reason: the W.a golden hash values themselves are not available in any governed file.
 
-**Status of decisions 1 and 2 at 2026-08-18: both still open.** Decision 1 blocks §3.1.
-Decision 2 does not block any item — §3.4 records it rather than resolving it.
+**Status of decisions 1 and 2 at 2026-08-21: decision 1 RESOLVED and applied; decision 2
+still open.** Decision 1 no longer blocks §3.1. Decision 2 (Q-BUG-2 test seam) does not
+block any item — §3.4 records it rather than resolving it — and travels with
+`Phase_Q_Design.md` §12 rather than with this queue, which is now closed.

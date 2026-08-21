@@ -96,9 +96,11 @@ namespace Islands.PCG.Layout.Maps.Stages
         /// cells a higher one. Direct analogue of the pre-quantile behaviour.
         ///   bucketShift = round(moistureModulation * (moisture - 0.5) * QuantSteps)
         ///   effectiveCut = clamp(cut - bucketShift, 0, QuantSteps)
-        /// Nothing in the pipeline assigns this field today; the branch is inert.
-        /// Note: a non-zero value breaks M2a-9(a) and (c) by construction — the cut
-        /// stops being uniform across the population. Wiring it up is a contract change.
+        /// W.b: assigned by visualization components from MapGenerationPreset
+        /// (vegetationMoistureModulation). Default 0 preserves legacy behaviour.
+        /// Note: a non-zero value suspends M2a-9(a) and (c) by construction — the cut
+        /// stops being uniform across the population. See the M2a-9 modulation note
+        /// in map-pipeline-by-layers-ssot.md.
         /// </summary>
         public float moistureModulation = 0.0f;
 

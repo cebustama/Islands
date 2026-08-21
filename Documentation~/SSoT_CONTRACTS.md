@@ -28,6 +28,18 @@ Purpose: Cross-cutting package contracts and governance-relevant technical rules
   never lazily or asynchronously.
 - Serialization format changes on governed configuration types must be documented in the
   changelog with explicit "serialization break" notice.
+- **Additive key extension is not a serialization break.** Adding a key to
+  `MapGenerationPreset.ToJson()` plus its importer-table entry, where absent keys import
+  as `AbsentPreserved` and the field's default preserves prior behavior, does not require
+  the "serialization break" notice — old JSON remains importable and old assets remain
+  valid. It must still be recorded in the changelog as an additive extension naming the
+  keys. Applied at W.b for five keys: `stageToggles.regions`, `stageToggles.hydrology`,
+  `hydrology.riverThresholdFraction`, `hydrology.minLakeArea`,
+  `vegetation.moistureModulation`.
+- `ToJson()` and the importer table change **together**. The round-trip gate
+  (`MapGenerationPresetJsonRoundTripTests`) fails while only one has changed; that is the
+  gate working. A promoted field must also be added to the non-default fixture, or the
+  round-trip can pass by matching defaults.
 
 ## PCG stage-field dependency contracts (M2.a)
 - Stages may declare optional field reads gated by `MapContext2D.IsFieldCreated(MapFieldId)`.
@@ -37,6 +49,25 @@ Purpose: Cross-cutting package contracts and governance-relevant technical rules
   not be promoted to `MapTunables2D` or `MapGenerationPreset` unless they become cross-stage
   or user-authored. Defaults must preserve prior behavior when a stage is reordered or
   gains new optional inputs.
+- **Promotion is adjudicated per field, with a stated reason. Uniformity is not a
+  reason.** Verdicts recorded at W.b (2026-08-20):
+  | Field | Verdict | Reason |
+  |---|---|---|
+  | `enableRegionsStage` | → preset | authoring decision of the same class as the six toggles already carried |
+  | `enableHydrologyStage` | → preset | same; default `false` keeps it golden-safe |
+  | `hydroRiverThresholdFraction` | → preset | cross-stage: `biomeRiverFlowNorm = 0` (auto) is defined against it, so the preset already depended on a value it could not author |
+  | `hydroMinLakeArea` | → preset | already user-authored on one component; leaving it out made the same preset generate different hydrology per component |
+  | `hydroEpsilon` | stays component-scoped | numeric plumbing of the depression solver, not a design parameter |
+  | `Stage_Vegetation2D.moistureModulation` | → preset | implemented feature unreachable from any construction path; default 0 keeps it inert |
+  | `Stage_Regions2D.SpeckThreshold` | stays stage-local | constant since inception, underpins invariant R-8, no authoring demand |
+- **Promotion of a previously unreachable field is an authoring-surface change, not a
+  refactor.** Its preset default must equal the value the pipeline effectively used
+  before promotion, asserted against a fresh stage instance rather than a literal — see
+  `MapGenerationPresetTests.Defaults_WbPromotedFields_MatchPrePromotionEffectiveValues`.
+  A literal would drift silently when the stage default changes.
+- **Tooling that declares a gap must be retired or narrowed in the batch that closes it.**
+  `MapGenerationPresetWizard`'s `HelpBox` listing the unreachable fields was narrowed at
+  W.b to the one field still not carried (`hydroEpsilon`).
 - Stage reordering that introduces a new upstream field producer (e.g. `Stage_Biome2D`
   placed before `Stage_Vegetation2D` in M2.a) must be accompanied by a companion pipeline
   golden test asserting that pre-reorder stage outputs (Land, LandCore, Height, CoastDist,

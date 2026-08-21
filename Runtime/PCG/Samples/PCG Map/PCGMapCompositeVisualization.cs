@@ -253,6 +253,7 @@ namespace Islands.PCG.Samples
         private bool lastEnableMorphologyStage;
         private bool lastEnableBiomeStage;
         private bool lastEnableRegionsStage;
+        private float lastVegetationMoistureModulation;
         private IslandShapeMode lastShapeMode;
         private float lastIslandRadius01;
         private float lastWaterThreshold01;
@@ -351,6 +352,7 @@ namespace Islands.PCG.Samples
             bool eVeg = preset != null ? preset.enableVegetationStage : enableVegetationStage;
             bool eTrav = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             bool eMorph = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
+            bool eRegions = preset != null ? preset.enableRegionsStage : enableRegionsStage;
             bool eClear = preset != null ? preset.clearBeforeRun : clearBeforeRun;
 
             // N5.b: build tunables — preset handles its own asset resolution via ToTunables().
@@ -392,7 +394,7 @@ namespace Islands.PCG.Samples
                 domain: new GridDomain2D(eRes, eRes),
                 tunables: eTun);
 
-            var stages = (enableBiomeStage && eVeg && enableRegionsStage) ? stagesM2b
+            var stages = (enableBiomeStage && eVeg && eRegions) ? stagesM2b
                        : (enableBiomeStage && eVeg) ? stagesM2a
                        : enableBiomeStage ? stagesM
                        : eMorph ? stagesG
@@ -412,6 +414,9 @@ namespace Islands.PCG.Samples
             biomeStage.coastDecayRate = biomeCoastDecayRate;
             biomeStage.moistureNoiseAmplitude = biomeMoistureNoiseAmplitude;
             biomeStage.moistureNoiseCellSize = biomeMoistureNoiseCellSize;
+
+            // W.b: vegetation moisture modulation; 0 = disabled (legacy).
+            vegetationStage.moistureModulation = preset != null ? preset.vegetationMoistureModulation : 0f;
 
             MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: eClear);
 
@@ -634,7 +639,8 @@ namespace Islands.PCG.Samples
             lastEnableTraversalStage = preset != null ? preset.enableTraversalStage : enableTraversalStage;
             lastEnableMorphologyStage = preset != null ? preset.enableMorphologyStage : enableMorphologyStage;
             lastEnableBiomeStage = enableBiomeStage;
-            lastEnableRegionsStage = enableRegionsStage;
+            lastEnableRegionsStage = preset != null ? preset.enableRegionsStage : enableRegionsStage;
+            lastVegetationMoistureModulation = preset != null ? preset.vegetationMoistureModulation : 0f;
             lastShapeMode = preset != null ? preset.shapeMode : shapeMode;
             lastIslandRadius01 = preset != null ? preset.islandRadius01 : islandRadius01;
             lastWaterThreshold01 = preset != null ? preset.waterThreshold01 : waterThreshold01;
@@ -675,7 +681,8 @@ namespace Islands.PCG.Samples
                 || (preset != null ? preset.enableTraversalStage : enableTraversalStage) != lastEnableTraversalStage
                 || (preset != null ? preset.enableMorphologyStage : enableMorphologyStage) != lastEnableMorphologyStage
                 || enableBiomeStage != lastEnableBiomeStage
-                || enableRegionsStage != lastEnableRegionsStage
+                || (preset != null ? preset.enableRegionsStage : enableRegionsStage) != lastEnableRegionsStage
+                || !Mathf.Approximately(preset != null ? preset.vegetationMoistureModulation : 0f, lastVegetationMoistureModulation)
                 || (preset != null ? preset.shapeMode : shapeMode) != lastShapeMode
                 || !Mathf.Approximately(preset != null ? preset.islandRadius01 : islandRadius01, lastIslandRadius01)
                 || !Mathf.Approximately(preset != null ? preset.waterThreshold01 : waterThreshold01, lastWaterThreshold01)
