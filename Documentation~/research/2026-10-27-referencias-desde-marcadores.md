@@ -95,3 +95,18 @@ Es la base teórica de SmallXXHash (DONE) y de la regla de no colocar cosas con 
 - **1373** (Library of Babel): mundos como función pura de coordenadas, el mismo principio que 128.
 - **Sin aporte o con problemas:** 1500 (isla 2D en Unity; la fase W.c ya lo cubre), 1037 (sitio secuestrado), 1119 (texto de otra lista).
 - Vida artificial y emergencia (1544, 1741, 1760...): no son de Islands; van a la nota de la web.
+
+## Addendum 2026-10-27: transcripciones leídas
+
+Fichas completas en `D:\Projects\marcadores-chrome\profundo\fichas_videos.md`.
+
+- **1484 (erosión por gotas, comprobado):** 70.000 gotas en un mapa de 255×255 tardan unos 0,75 s. La regla de no erosionar más que la diferencia de altura sirve como test de oro. La erosión sigue en NONE.
+- **1412 (Wolverson):** DLA como pseudoerosión y mapas de Dijkstra con un «camino caliente» para comprobar que todo es alcanzable y colocar objetivos.
+- **1463, 1469 y 1400 (WFC):**
+  - 1463 aporta navegabilidad por tesela y reglas de prioridad.
+  - 1469 aporta el patrón segmentar + WFC + A* (Caves of Qud).
+  - 1400 es una introducción.
+  - Confirman que falta en el catálogo.
+- **1500:** máscara circular más ruido en el borde, capas por pasos y A* para verificar. Coincide con W.c (máscara de forma) y sirve para contrastarla.
+- **1470:** detalle de las funciones de densidad 3D y de los splines sobre tres ruidos. Solo si se reabre la técnica, que está en OUT.
+- **1165:** esfera a partir de un cubo, base para ruido sobre esfera, que el catálogo no tiene.
