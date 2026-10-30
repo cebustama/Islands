@@ -104,6 +104,22 @@ namespace Islands.PCG.Adapters.Tilemap
                  "per field on every dirty-rebuild. Enable only to capture goldens.")]
         [SerializeField] private bool logGoldenHashes = false;
 
+        // ---- W.c: world→local shape input (F2c) ----
+        [Header("W.c — World Shape Input (F2c)")]
+        [Tooltip("When ON, runs a headless world-scale base-terrain pass from World Preset, " +
+                 "derives this tile's coastal silhouette (3×3 bilinear + threshold) and injects " +
+                 "it as the F2c shape input. OFF = default F2b silhouette, bit-identical to before.")]
+        [SerializeField] private bool useWorldShapeInput = false;
+        [Tooltip("World-scale preset: seed, resolution and tunables of the world map.")]
+        [SerializeField] private MapGenerationPreset worldPreset;
+        [Min(0)][SerializeField] private int worldTileX = 0;
+        [Min(0)][SerializeField] private int worldTileY = 0;
+        [Tooltip("Land threshold on the interpolated 3×3 field. 0.5 puts a straight coast on " +
+                 "the map edge; higher pulls the coastline inland (more visible sea).")]
+        [Range(0f, 1f)][SerializeField] private float shapeThreshold01 = 0.5f;
+        [Tooltip("Log the 3×3 samples, land cell count and mask hash on each rebuild.")]
+        [SerializeField] private bool logShapeMaskInfo = false;
+
         [Header("Stage Toggles")]
         [SerializeField] private bool enableHillsStage = true;
         [SerializeField] private bool enableShoreStage = true;
@@ -350,6 +366,7 @@ namespace Islands.PCG.Adapters.Tilemap
         private Stage_Biome2D biomeStage;
         private Stage_Regions2D regionsStage;
         private Stage_Hydrology2D hydrologyStage;
+        private Stage_BaseTerrain2D governedBaseStage;   // W.c: consumes MapShapeInput (Configurable does not)
 
         private IMapStage2D[] stagesF2, stagesF3, stagesF4, stagesF5, stagesF6, stagesG, stagesM, stagesM2a, stagesM2b;
         private IMapStage2D[] stagesL, stagesLM, stagesLM2a, stagesLM2b;
@@ -358,6 +375,12 @@ namespace Islands.PCG.Adapters.Tilemap
         // Dirty tracking cache
         // =====================================================================
         private MapGenerationPreset _lastPreset;
+        // W.c: world shape input
+        private bool lastUseWorldShapeInput;
+        private MapGenerationPreset lastWorldPreset;
+        private int lastWorldTileX;
+        private int lastWorldTileY;
+        private float lastShapeThreshold01;
         private TilesetConfig _lastTilesetConfig;
         private ulong _lastTilesetConfigHash;
         private uint lastSeed;
@@ -451,6 +474,7 @@ namespace Islands.PCG.Adapters.Tilemap
             biomeStage = null;
             regionsStage = null;
             hydrologyStage = null;
+            governedBaseStage = null;
             stagesF2 = stagesF3 = stagesF4 = stagesF5 = stagesF6 = stagesG = stagesM = stagesM2a = stagesM2b = null;
             stagesL = stagesLM = stagesLM2a = stagesLM2b = null;
         }
@@ -555,16 +579,42 @@ namespace Islands.PCG.Adapters.Tilemap
             biomeStage.riverMoistureBonus = preset != null ? preset.biomeRiverMoistureBonus : biomeRiverMoistureBonus;
             biomeStage.riverFlowNorm = preset != null ? preset.biomeRiverFlowNorm : biomeRiverFlowNorm;
 
-            var inputs = new MapInputs(eSeed, new GridDomain2D(eRes, eRes), eTun);
             var stages = (eBiome && eVeg && eRegions) ? (eHydro ? stagesLM2b : stagesM2b)
-                       : (eBiome && eVeg) ? (eHydro ? stagesLM2a : stagesM2a)
-                       : eBiome ? (eHydro ? stagesLM : stagesM)
-                       : eMorph ? (eHydro ? stagesL : stagesG)
-                       : eTrav ? stagesF6 : eVeg ? stagesF5
-                       : eShore ? stagesF4 : eHills ? stagesF3 : stagesF2;
+           : (eBiome && eVeg) ? (eHydro ? stagesLM2a : stagesM2a)
+           : eBiome ? (eHydro ? stagesLM : stagesM)
+           : eMorph ? (eHydro ? stagesL : stagesG)
+           : eTrav ? stagesF6 : eVeg ? stagesF5
+           : eShore ? stagesF4 : eHills ? stagesF3 : stagesF2;
 
-            MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: eClear);
-            MapDataExport export = MapExporter2D.Export(ctx);
+            // ---- W.c: optional world→local shape input (F2c) ----
+            // Mask ownership is scoped to this run: built, kept alive through Run,
+            // disposed in finally. MapInputs holds it by value and does not dispose.
+            MaskGrid2D worldShapeMask = default;
+            MapDataExport export;
+            try
+            {
+                MapShapeInput shapeInput = useWorldShapeInput
+                    ? BuildWorldShapeInput(eRes, out worldShapeMask)
+                    : MapShapeInput.None;
+
+                if (shapeInput.HasShape)
+                {
+                    // BaseTerrainStage_Configurable does not consume MapShapeInput;
+                    // swap slot 0 for the governed stage so the F2c contract applies.
+                    var swapped = (IMapStage2D[])stages.Clone();
+                    swapped[0] = governedBaseStage;
+                    stages = swapped;
+                }
+
+                var inputs = new MapInputs(eSeed, new GridDomain2D(eRes, eRes), eTun, shapeInput);
+
+                MapPipelineRunner2D.Run(ref ctx, in inputs, stages, clearLayers: eClear);
+                export = MapExporter2D.Export(ctx);
+            }
+            finally
+            {
+                if (worldShapeMask.IsCreated) worldShapeMask.Dispose();
+            }
 
             // ---- Resolve tile table: Procedural > TilesetConfig ----
             TilemapLayerEntry[] activeTable;
@@ -1744,6 +1794,74 @@ namespace Islands.PCG.Adapters.Tilemap
             return count;
         }
 
+        // =====================================================================
+        // W.c — world→local shape input (F2c producer)
+        // =====================================================================
+
+        /// <summary>
+        /// Runs a headless world-scale base-terrain pass from worldPreset (only
+        /// Stage_BaseTerrain2D — no later stage mutates the Land layer), samples the
+        /// 3×3 land/water neighborhood of (worldTileX, worldTileY), and builds the
+        /// local-resolution silhouette (Phase_W_Design §9: bilinear + threshold).
+        /// Tile coords are deterministically clamped to the world domain.
+        /// The out mask is owned by the caller and MUST be disposed after the run.
+        /// </summary>
+        private MapShapeInput BuildWorldShapeInput(int localRes, out MaskGrid2D mask)
+        {
+            mask = default;
+
+            if (worldPreset == null)
+            {
+                Debug.LogWarning(
+                    "[PCGMapTilemapVisualization] Use World Shape Input is ON but no World " +
+                    "Preset is assigned. Falling back to the default F2b silhouette.", this);
+                return MapShapeInput.None;
+            }
+
+            uint wSeed = worldPreset.seed < 1u ? 1u : worldPreset.seed;
+            int wRes = Mathf.Max(4, worldPreset.resolution);
+            var wDomain = new GridDomain2D(wRes, wRes);
+            var wInputs = new MapInputs(wSeed, wDomain, worldPreset.ToTunables());
+
+            int tx = Mathf.Clamp(worldTileX, 0, wRes - 1);
+            int ty = Mathf.Clamp(worldTileY, 0, wRes - 1);
+
+            var wCtx = new MapContext2D(wDomain, Allocator.Persistent);
+            try
+            {
+                wCtx.BeginRun(in wInputs, clearLayers: true);
+                governedBaseStage.Execute(ref wCtx, in wInputs);
+
+                ref MaskGrid2D worldLand = ref wCtx.GetLayer(MapLayerId.Land);
+                mask = ShapeMaskBuilder2D.BuildFromWorldTile(
+                    in worldLand, tx, ty,
+                    new GridDomain2D(localRes, localRes),
+                    shapeThreshold01, Allocator.Persistent);
+
+                if (logShapeMaskInfo)
+                {
+                    var s = new float[9];
+                    ShapeMaskBuilder2D.SampleNeighborhood3x3(in worldLand, tx, ty, s);
+                    int landCells = 0;
+                    for (int yy = 0; yy < localRes; yy++)
+                        for (int xx = 0; xx < localRes; xx++)
+                            if (mask.GetUnchecked(xx, yy)) landCells++;
+                    Debug.Log(
+                        $"[W.c shape] worldSeed={wSeed} worldRes={wRes} tile=({tx},{ty}) " +
+                        $"threshold={shapeThreshold01:F2} " +
+                        $"n3x3=[{s[0]:F0}{s[1]:F0}{s[2]:F0}/{s[3]:F0}{s[4]:F0}{s[5]:F0}/{s[6]:F0}{s[7]:F0}{s[8]:F0}] " +
+                        $"maskLand={landCells}/{localRes * localRes} " +
+                        $"maskHash=0x{mask.SnapshotHash64(includeDimensions: true):X16}", this);
+                }
+
+                return new MapShapeInput(mask);
+            }
+            finally
+            {
+                wCtx.Dispose();
+            }
+        }
+
         private void EnsureContextAllocated(int res)
         {
             if (ctx != null && ctxResolution == res) return;
@@ -1763,6 +1881,7 @@ namespace Islands.PCG.Adapters.Tilemap
             biomeStage = new Stage_Biome2D();
             regionsStage = new Stage_Regions2D();
             hydrologyStage = new Stage_Hydrology2D();
+            governedBaseStage = new Stage_BaseTerrain2D();
             stagesF2 = new IMapStage2D[] { baseStage };
             stagesF3 = new IMapStage2D[] { baseStage, hillsStage };
             stagesF4 = new IMapStage2D[] { baseStage, hillsStage, shoreStage };
@@ -1863,6 +1982,12 @@ namespace Islands.PCG.Adapters.Tilemap
             lastHillsNoiseAsset = preset != null ? preset.hillsNoiseAsset : hillsNoiseAsset;
             lastHillsNoise = ResolveHillsNoise();
             lastHeightQuantSteps = preset != null ? preset.heightQuantSteps : heightQuantSteps;
+            // W.c: world shape input
+            lastUseWorldShapeInput = useWorldShapeInput;
+            lastWorldPreset = worldPreset;
+            lastWorldTileX = worldTileX;
+            lastWorldTileY = worldTileY;
+            lastShapeThreshold01 = shapeThreshold01;
             lastFlipY = flipY;
             lastClearBeforeRun = preset != null ? preset.clearBeforeRun : clearBeforeRun;
             lastUseProceduralTiles = useProceduralTiles;
@@ -1949,6 +2074,12 @@ namespace Islands.PCG.Adapters.Tilemap
                 || (preset != null ? preset.hillsNoiseAsset : hillsNoiseAsset) != lastHillsNoiseAsset
                 || !ResolveHillsNoise().Equals(lastHillsNoise)
                 || (preset != null ? preset.heightQuantSteps : heightQuantSteps) != lastHeightQuantSteps
+                // W.c: world shape input
+                || useWorldShapeInput != lastUseWorldShapeInput
+                || worldPreset != lastWorldPreset
+                || worldTileX != lastWorldTileX
+                || worldTileY != lastWorldTileY
+                || !Mathf.Approximately(shapeThreshold01, lastShapeThreshold01)
                 || flipY != lastFlipY
                 || (preset != null ? preset.clearBeforeRun : clearBeforeRun) != lastClearBeforeRun
                 || useProceduralTiles != lastUseProceduralTiles
