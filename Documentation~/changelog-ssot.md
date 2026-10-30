@@ -9,6 +9,94 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## Noise range — `PerlinOnSimplex` gradient (A) + fBm amplitude sum (D)
+Date: 2026-10-30/31. Branch `noise-range-fix`.
+
+**Cause.** Two independent defects in the noise runtime, partly cancelling each other.
+(A) `Perlin`'s 2D/3D gradient constants (`2/0.53528`, `1/0.56290`) were derived for the
+square/cubic lattice; on `Simplex2D` the peak is **0.437** (exact worst case) instead of 1.
+`TerrainNoiseType.Perlin` — the default for terrain, warp and hills — is `Simplex2D<Perlin>`.
+(D) `Noise.GetFractalNoise` added `amplitude` to `amplitudeSum` *after* decaying it, so it
+divided by `p + p² + …` instead of `1 + p + …`: every fBm came out ×`1/persistence` (×2 at
+the default 0.5) and `persistence = 0` produced NaN. Debt first recorded by W-aux.e.
+Net effect on the default terrain field before the fix: `[0.20, 0.80]` (×0.437 × 2); the
+`Simplex` terrain type was pushed to ±1.7 and `saturate` clipped 6.5 % of cells.
+
+**Change.**
+- `Noise.PerlinOnSimplex` (new `IGradient`, `Noise.Gradient.cs`): Perlin gradients with
+  exact simplex-lattice constants — 2D `27(3−√3)/4` (peak on an edge midpoint, two corners
+  at |d|² = 1/6, raw peak `2(3+√3)/81`), 3D `3072/625`, 1D `32/27`. Derived by adversarial
+  worst-case search over the kernel as written in `Noise.Simplex.cs`; the same search returns
+  1.0000 for the `Simplex` gradient, which validates it. `Perlin` itself is unchanged
+  (correct on the square lattice, measured ±0.97).
+- `MapNoiseBridge2D`: `TerrainNoiseType.Perlin` and `FillSimplexPerlin01` now use
+  `Simplex2D<PerlinOnSimplex>`.
+- `Noise.GetFractalNoise` (standard fBm): amplitude summed before decay. The ridged path was
+  already correct.
+
+**Measured** (`NoiseRangeMeasurementTests`, 480 000 samples; matches the JS port):
+
+| | before | after |
+|---|---|---|
+| `Simplex2D<Perlin>` / `<PerlinOnSimplex>` peak | 0.428 | **0.981** |
+| fBm 4 oct, as computed vs true sum | ×2.00 | **equal** |
+| bridge `DefaultTerrain`, [0,1] | 0.20–0.80, SD 0.103 | 0.16–0.84, SD 0.117 |
+| bridge `DefaultWarp` / `DefaultHills` SD | 0.175 / 0.124 | 0.200 / 0.142 |
+| bridge terrain as `Simplex`, clipped cells | 6.5 % | **0** |
+
+For `Perlin` the fix is an exact scaling: `n − 0.5` grows by ×1.1453 everywhere (same hashes,
+same octaves), so only cells close to a threshold flip. Accepted as is (Claudio,
+2026-10-31): no amplitude or `waterThreshold01` compensation; the mean stays at 0.50.
+
+**Goldens.** 31 failing tests, all golden-constant comparisons, re-anchored in 5 rounds
+(no value mapped to two different results). 28 distinct values:
+
+| Old | New | Constants |
+|---|---|---|
+| `0x3324CA0629C037B7` | `0x523A9248A1D7B89B` | PipelineF2.ExpectedLandHash64, StageBaseTerrain2D.ExpectedLandHash64 |
+| `0x0BB222C9B6B41947` | `0x2301C0B852F1394B` | PipelineF2.ExpectedDeepWaterHash64, StageBaseTerrain2D.ExpectedDeepWaterHash64 |
+| `0x17D1FE919DCC3C33` | `0x11E9570C8520F0DB` | PipelineF3.ExpectedLandEdgeHash64, StageHills2D.ExpectedLandEdgeHash64 |
+| `0x228E6C047D7792EF` | `0xD2ECCC8514180CAB` | PipelineF3.ExpectedLandInteriorHash64, StageHills2D.ExpectedLandInteriorHash64 |
+| `0x532B332F40A43C82` | `0xD2332B641B094A45` | PipelineF3.ExpectedHillsL1Hash64, StageHills2D.ExpectedHillsL1Hash64 |
+| `0xB05ADEBE66AE4D5C` | `0x4767CE09E8D5C696` | PipelineF3.ExpectedHillsL2Hash64, StageHills2D.ExpectedHillsL2Hash64 |
+| `0x914AF43589BA6C13` | `0x62B84EA07DCF2C83` | PipelineF4.ExpectedShallowWaterHash64, StageShore2D.ExpectedShallowWaterHash64 |
+| `0x627DF2C3B1C5EF77` | `0xFD86263C17C09D04` | PipelineF5.ExpectedVegetationHash |
+| `0x72217820D251DCCB` | `0x1305E21B9F415A58` | PipelineF6.ExpectedWalkableHash |
+| `0xA54060EDAB8B497C` | `0xE100A0864EA7EBB6` | PipelineF6.ExpectedStairsHash |
+| `0xE8AD63D8271FD20B` | `0x0DB540CA02959A5B` | PipelineG.ExpectedLandCoreHash |
+| `0x7D0040328856B553` | `0x022EBDD6245E964D` | PipelineG.ExpectedCoastDistHash |
+| `0xFF413C94785FCEAC` | `0x5DB83FBC0903D7C2` | PipelineLM.GoldenFlowAccumLM, PipelineL.GoldenFlowAccumL, StageHydrology2D.GoldenFlowAccumulation |
+| `0xA14DDE84505F6876` | `0x371B1294422BD348` | PipelineLM.GoldenRiversLM, PipelineL.GoldenRiversL, StageHydrology2D.GoldenRivers |
+| `0x4A046696491A7B1C` | `0xA9E5C5885F03444D` | PipelineLM.GoldenMoistureLM |
+| `0xBFB50453C73FF496` | `0x2B6B7B2A3EE5555F` | PipelineLM.GoldenTemperatureLM |
+| `0x4651014815F02263` | `0xD6B5018CE2689233` | PipelineLM.GoldenBiomeLM |
+| `0x4AC0E124479485A9` | `0xE57FEEA825543D31` | PipelineM2.ExpectedTemperatureHash, PipelineM2b.ExpectedTemperatureHash, PipelineM.ExpectedTemperatureHash |
+| `0x4B4106BD43EAA656` | `0xC17E03B3662E6A23` | PipelineM2.ExpectedMoistureHash, PipelineM2b.ExpectedMoistureHash, PipelineM.ExpectedMoistureHash |
+| `0xA7E6C1ECCB9C9AB3` | `0x0E3C97BFD1CD56B3` | PipelineM2.ExpectedBiomeHash, PipelineM2b.ExpectedBiomeHash, PipelineM.ExpectedBiomeHash |
+| `0x7B6642295E08D0CD` | `0x81EEB18C2CE07285` | PipelineM2b.ExpectedBiomeRegionIdHash |
+| `0x2BD9F557217BC216` | `0x12A28B5B6DDE082F` | StageBiome2D.ExpectedTemperatureHash |
+| `0xAB0779B315B726BF` | `0x04B6D2AD77B0339F` | StageBiome2D.ExpectedMoistureHash |
+| `0x25FC55783B618FF3` | `0xEFF6683D26A08833` | StageBiome2D.ExpectedBiomeHash |
+| `0x6BD1E35739724D50` | `0xACB999EE79614172` | StageTraversal2D.ExpectedWalkableHash64 |
+| `0x23E0586B1660525E` | `0xE85EAEDB20B8FB7C` | StageTraversal2D.ExpectedStairsHash64 |
+| `0x4C07AE61280A4079` | `0x9B94BFFC5B653AAA` | StageVegetation2D.ExpectedVegetationHash64_Legacy |
+| `0x0583D24540DC8A86` | `0x5E499F4C955A9BD4` | StageVegetation2D.ExpectedVegetationHash64_M2a |
+
+**Unchanged, as controls:** F2c shape-input Land/DeepWater (binary mask: Land equals the
+mask for any noise), NoShape (cut at 0.5, which a pure scaling of `n − 0.5` cannot move),
+Rectangle Land/DeepWater (noise-sensitive — a probe with amplitude 0 changes the hash — but
+no 64×64 coast cell sits within the ×1.145 shift), Lakes, `MaskFloodFillOps2D`, all dungeon
+goldens. Full EditMode suite 415/415 green.
+
+**Side effects outside the governed pipeline.** D also halves every standard fBm drawn
+through `Noise.Job` (noise and surface samples): amplitude now matches the settings. Ridged
+mode with the `Perlin` terrain type changes character more than the rest, because
+`offset − |n|` now spans the full range. No goldens cover either.
+
+**Open risk, recorded.** Per-run statistics (W-aux.g area fractions for hills) are not
+tile-local: neighbouring W.c tiles resolve different cuts. Not caused by this batch;
+relevant to W2 edge constraints.
+
 ## W-aux.h — Hydrology instrumentation (probe + diagnostic rule R7)
 Date: 2026-08-20
 

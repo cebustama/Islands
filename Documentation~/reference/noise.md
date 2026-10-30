@@ -70,6 +70,26 @@ This means the code is real and important, but the documentary role remains deli
 ### Sampling
 `Noise.GetFractalNoise<N>(...)` is the key generic entry point for fractal sampling over an `INoise` implementation.
 
+Standard fBm is normalized by the true amplitude sum `1 + p + p² + …`, so its output keeps
+the range of the underlying noise (fixed 2026-10-30; before, the result was ×`1/persistence`).
+
+### Output ranges (measured 2026-10-30, `NoiseRangeMeasurementTests`)
+Single 2D octave, raw `GetNoise4`:
+
+| Noise | Peak | p1–p99 |
+|---|---|---|
+| `Lattice2D<Value>` | ±1.00 | ±0.90 |
+| `Lattice2D<Perlin>` (square) | ±0.97 | ±0.72 |
+| `Simplex2D<Perlin>` | ±0.43 | ±0.32 |
+| `Simplex2D<PerlinOnSimplex>` | ±0.98 (exact peak 1) | ±0.74 |
+| `Simplex2D<Simplex>` | ±1.00 | ±0.87 |
+| `Voronoi2D<Worley, F1>` | 0.00–0.96 | 0.04–0.70 |
+
+Gradient constants are lattice-specific. `Perlin`'s are derived for the square/cubic
+lattice; on the simplex lattice use `PerlinOnSimplex` (exact constants: 2D `27(3−√3)/4`,
+3D `3072/625`, 1D `32/27`). The map pipeline's `TerrainNoiseType.Perlin` uses
+`Simplex2D<PerlinOnSimplex>`. Derivation: `changelog-ssot.md`, entry "Noise range".
+
 ### Job path
 `Noise.Job<N>` provides the main scheduled sampling path using:
 - `NativeArray<float3x4>` inputs

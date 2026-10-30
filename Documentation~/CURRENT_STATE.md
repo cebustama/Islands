@@ -1,8 +1,9 @@
 # Current State
 
-Status date: 2026-08-20 (Phase W in progress — W.a, W-aux.a, W-aux.b, W-aux.c, W-aux.d closed;
+Status date: 2026-10-31 (Phase W in progress — W.a, W-aux.a, W-aux.b, W-aux.c, W-aux.d closed;
 W-aux.e audit closed with no code change; W-aux.f, W-aux.g, W.b and W-aux.h closed;
-authoring track X1.a closed)
+W.c implemented and committed, governed docs pending; noise range fix A+D on branch
+`noise-range-fix`; authoring track X1.a closed)
 
 ## What is active now
 - The Islands documentation migration was handled as Tier L and is now materially closed for the reviewed snapshot corpus.
@@ -24,6 +25,23 @@ authoring track X1.a closed)
 - Shader assets and HLSL helpers are active support artifacts, but not a promoted subsystem SSoT.
 
 ## What current package development just resolved
+- **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
+  branch `noise-range-fix`, pending visual smoke test.**
+  The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s
+  constants belong to the square lattice; `GetFractalNoise` doubled every fBm (amplitude
+  summed after decay). Fix: new `Noise.PerlinOnSimplex` gradient with exact simplex
+  constants, used by `MapNoiseBridge2D` for `TerrainNoiseType.Perlin`; fBm divides by
+  `1 + p + …`. Measured with `NoiseRangeMeasurementTests`: peak 0.43 → 0.98; default terrain
+  field 0.20–0.80 → 0.16–0.84 (SD +14 %); `Simplex` terrain no longer clips (6.5 % → 0).
+  Contrast increase accepted, no recalibration: `waterThreshold01` keeps 0.42553192 / 0.412119.
+  28 golden values re-anchored (table in `changelog-ssot.md`); full EditMode suite 415/415.
+  Tests now run from Claude Code (`.claude/CLAUDE.md`).
+
+- **W.c — World→local shape mask. Implemented 2026-10-30, docs pending.**
+  `ShapeMaskBuilder2D` + 6 tests + `PCGMapTilemapVisualization` F2c wiring behind
+  `useWorldShapeInput` (off = bit-identical). Committed `d39dea0`; suite green. Its
+  CURRENT_STATE / changelog / Phase W design update is a separate pending item.
+
 - **W-aux.g — Hills window recalibration. RESOLVED 2026-08-20.**
   `HillsL2` now lands on its declared target consistently across seeds. The mechanism changed:
   `hillsL1` / `hillsL2` are **area fractions of `Land`** resolved per run by an order statistic
