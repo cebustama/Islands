@@ -25,8 +25,10 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // 3) Copy/paste those hashes here to lock behavior.
         //
         // We use includeDimensions:true (MaskGrid2D.SnapshotHash64 default).
-        private const ulong ExpectedLandHash64 = 0x3324CA0629C037B7UL;
-        private const ulong ExpectedDeepWaterHash64 = 0x0BB222C9B6B41947UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x3324CA0629C037B7UL
+        private const ulong ExpectedLandHash64 = 0x523A9248A1D7B89BUL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x0BB222C9B6B41947UL
+        private const ulong ExpectedDeepWaterHash64 = 0x2301C0B852F1394BUL;
 
         [Test]
         public void Stage_BaseTerrain2D_IsDeterministic()

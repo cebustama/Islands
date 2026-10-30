@@ -23,9 +23,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 42u;
 
         // Set to values reported on first run.
-        private const ulong ExpectedTemperatureHash = 0x4AC0E124479485A9;
-        private const ulong ExpectedMoistureHash = 0x4B4106BD43EAA656UL;
-        private const ulong ExpectedBiomeHash = 0xA7E6C1ECCB9C9AB3UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x4AC0E124479485A9UL
+        private const ulong ExpectedTemperatureHash = 0xE57FEEA825543D31;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x4B4106BD43EAA656UL
+        private const ulong ExpectedMoistureHash = 0xC17E03B3662E6A23UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xA7E6C1ECCB9C9AB3UL
+        private const ulong ExpectedBiomeHash = 0x0E3C97BFD1CD56B3UL;
 
         [Test]
         public void Pipeline_M_GoldenHash_IsLocked()

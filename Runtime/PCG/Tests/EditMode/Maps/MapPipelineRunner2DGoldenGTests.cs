@@ -16,8 +16,10 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 42u;
 
         // Set to values reported on first run.
-        private const ulong ExpectedLandCoreHash = 0xE8AD63D8271FD20BUL;
-        private const ulong ExpectedCoastDistHash = 0x7D0040328856B553UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xE8AD63D8271FD20BUL
+        private const ulong ExpectedLandCoreHash = 0x0DB540CA02959A5BUL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x7D0040328856B553UL
+        private const ulong ExpectedCoastDistHash = 0x022EBDD6245E964DUL;
 
         [Test]
         public void Pipeline_G_GoldenHash_IsLocked()

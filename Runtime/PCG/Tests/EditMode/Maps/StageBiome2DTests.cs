@@ -29,9 +29,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 12345u;
 
         // Golden hashes — zero until first successful run captures values.
-        private const ulong ExpectedTemperatureHash = 0x2BD9F557217BC216UL;
-        private const ulong ExpectedMoistureHash = 0xAB0779B315B726BFUL;
-        private const ulong ExpectedBiomeHash = 0x25FC55783B618FF3UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x2BD9F557217BC216UL
+        private const ulong ExpectedTemperatureHash = 0x12A28B5B6DDE082FUL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xAB0779B315B726BFUL
+        private const ulong ExpectedMoistureHash = 0x04B6D2AD77B0339FUL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x25FC55783B618FF3UL
+        private const ulong ExpectedBiomeHash = 0xEFF6683D26A08833UL;
 
         // =================================================================
         // M-1: Determinism

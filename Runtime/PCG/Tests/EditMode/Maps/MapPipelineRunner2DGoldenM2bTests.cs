@@ -30,13 +30,17 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // ── Capture instructions ─────────────────────────────────────────────
         // Run with 0UL. The test fails and prints the real hash in the message.
         // Paste that value here, then re-run to lock.
-        private const ulong ExpectedBiomeRegionIdHash = 0x7B6642295E08D0CDUL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x7B6642295E08D0CDUL
+        private const ulong ExpectedBiomeRegionIdHash = 0x81EEB18C2CE07285UL;
 
         // ── M2a hashes reproduced here for the no-invalidate cross-check ─────
         // These must match MapPipelineRunner2DGoldenM2Tests constants exactly.
-        private const ulong ExpectedTemperatureHash = 0x4AC0E124479485A9UL;
-        private const ulong ExpectedMoistureHash = 0x4B4106BD43EAA656UL;
-        private const ulong ExpectedBiomeHash = 0xA7E6C1ECCB9C9AB3UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x4AC0E124479485A9UL
+        private const ulong ExpectedTemperatureHash = 0xE57FEEA825543D31UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x4B4106BD43EAA656UL
+        private const ulong ExpectedMoistureHash = 0xC17E03B3662E6A23UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xA7E6C1ECCB9C9AB3UL
+        private const ulong ExpectedBiomeHash = 0x0E3C97BFD1CD56B3UL;
 
         // =====================================================================
         // Test 1 — BiomeRegionId golden

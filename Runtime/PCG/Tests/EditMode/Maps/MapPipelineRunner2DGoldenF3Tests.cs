@@ -15,14 +15,18 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // N5.e: zeroed for re-lock. Effective hillsThresholdL2 changed from 0.80 to
         // ~0.8005 due to remap float precision. HillsL1/L2 hashes differ; LandEdge/
         // LandInterior are structurally unaffected but re-locked together.
-        private const ulong ExpectedLandEdgeHash64 = 0x17D1FE919DCC3C33UL;
-        private const ulong ExpectedLandInteriorHash64 = 0x228E6C047D7792EFUL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x17D1FE919DCC3C33UL
+        private const ulong ExpectedLandEdgeHash64 = 0x11E9570C8520F0DBUL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x228E6C047D7792EFUL
+        private const ulong ExpectedLandInteriorHash64 = 0xD2ECCC8514180CABUL;
         // W-aux.f re-lock: height ceiling de-saturation + waterThreshold recalibration.
         // LandEdge / LandInterior verified UNCHANGED — Land topology survived the fix.
-        // F3b′ re-anchor: HillsL1 0xCB0433856C6A4A3B -> 0x532B332F40A43C82.
-        //                 HillsL2 0xA6E4DF1C6BE62012 -> 0xB05ADEBE66AE4D5C.
-        private const ulong ExpectedHillsL1Hash64 = 0x532B332F40A43C82UL;
-        private const ulong ExpectedHillsL2Hash64 = 0xB05ADEBE66AE4D5CUL;
+        // F3b′ re-anchor: HillsL1 0xCB0433856C6A4A3B -> 0xD2332B641B094A45.
+        //                 HillsL2 0xA6E4DF1C6BE62012 -> 0x4767CE09E8D5C696.
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x532B332F40A43C82UL
+        private const ulong ExpectedHillsL1Hash64 = 0xD2332B641B094A45UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xB05ADEBE66AE4D5CUL
+        private const ulong ExpectedHillsL2Hash64 = 0x4767CE09E8D5C696UL;
 
         [Test]
         public void MapPipelineRunner2D_GoldenHash_F3Pipeline_IsLocked()

@@ -36,12 +36,17 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 12345u;
 
         // ── Phase L+M new goldens (F0→G→L→M) ─────────────────────────────────
-        private const ulong GoldenFlowAccumLM = 0xFF413C94785FCEACUL; // unchanged from L-only golden
-        private const ulong GoldenRiversLM = 0xA14DDE84505F6876UL; // unchanged from L-only golden
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xFF413C94785FCEACUL
+        private const ulong GoldenFlowAccumLM = 0x5DB83FBC0903D7C2UL; // unchanged from L-only golden
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xA14DDE84505F6876UL
+        private const ulong GoldenRiversLM = 0x371B1294422BD348UL; // unchanged from L-only golden
         private const ulong GoldenLakesLM = 0UL; // unchanged from L-only golden
-        private const ulong GoldenMoistureLM = 0x4A046696491A7B1CUL; // DIFFERENT from M-only — river enrichment active
-        private const ulong GoldenTemperatureLM = 0xBFB50453C73FF496UL; // unchanged from M-only — temperature unaffected by L
-        private const ulong GoldenBiomeLM = 0x4651014815F02263UL; // MAY DIFFER from M-only — biome follows moisture
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x4A046696491A7B1CUL
+        private const ulong GoldenMoistureLM = 0xA9E5C5885F03444DUL; // DIFFERENT from M-only — river enrichment active
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xBFB50453C73FF496UL
+        private const ulong GoldenTemperatureLM = 0x2B6B7B2A3EE5555FUL; // unchanged from M-only — temperature unaffected by L
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x4651014815F02263UL
+        private const ulong GoldenBiomeLM = 0xD6B5018CE2689233UL; // MAY DIFFER from M-only — biome follows moisture
 
         // =====================================================================
         // Full pipeline F0→G→L→M

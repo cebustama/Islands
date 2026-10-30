@@ -18,8 +18,9 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // Legacy (Phase M absent) golden — preserved as fallback path verification.
         // Set to value reported on first run.
         // W-aux.f re-lock.
-        // F3b′ re-anchor: 0x6CDCB0E869BB070F -> 0x4C07AE61280A4079.
-        private const ulong ExpectedVegetationHash64_Legacy = 0x4C07AE61280A4079UL;
+        // F3b′ re-anchor: 0x6CDCB0E869BB070F -> 0x9B94BFFC5B653AAA.
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x4C07AE61280A4079UL
+        private const ulong ExpectedVegetationHash64_Legacy = 0x9B94BFFC5B653AAAUL;
 
         // M2.a biome-aware golden — re-anchored for the quantile-mapping revision
         // (global quantile cut over the eligible population replaces the absolute
@@ -29,8 +30,9 @@ namespace Islands.PCG.Tests.EditMode.Maps
         //             -> re-anchor pending.
         // 0 = sentinel: the golden test reports the value to lock in on first run.
         // W-aux.f re-lock.
-        // F3b′ re-anchor: 0x6D433B1023A09BB6 -> 0x0583D24540DC8A86.
-        private const ulong ExpectedVegetationHash64_M2a = 0x0583D24540DC8A86UL;
+        // F3b′ re-anchor: 0x6D433B1023A09BB6 -> 0x5E499F4C955A9BD4.
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x0583D24540DC8A86UL
+        private const ulong ExpectedVegetationHash64_M2a = 0x5E499F4C955A9BD4UL;
 
         // -----------------------------------------------------------------------
         // Determinism

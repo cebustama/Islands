@@ -30,8 +30,10 @@ namespace Islands.PCG.Tests.EditMode.Maps
         // ---------------------------------------------------------------------
         // These should match the stage-level goldens (F2.1). If you intentionally
         // change the stage behavior, update both places together.
-        private const ulong ExpectedLandHash64 = 0x3324CA0629C037B7UL;
-        private const ulong ExpectedDeepWaterHash64 = 0x0BB222C9B6B41947UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x3324CA0629C037B7UL
+        private const ulong ExpectedLandHash64 = 0x523A9248A1D7B89BUL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x0BB222C9B6B41947UL
+        private const ulong ExpectedDeepWaterHash64 = 0x2301C0B852F1394BUL;
 
         [Test]
         public void MapPipelineRunner2D_GoldenHash_F2Pipeline_IsLocked()

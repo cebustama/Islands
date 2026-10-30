@@ -15,10 +15,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
 
         // F3b′ re-anchor (area-quantile hill thresholds). Stairs ⊆ HillsL1, so it
         // moves with the hills masks; Walkable excludes HillsL2 for the same reason.
-        //   Walkable 0x3C9A669DF4449546 -> 0x6BD1E35739724D50
-        //   Stairs   0xED7D577500BFB901 -> 0x23E0586B1660525E
-        private const ulong ExpectedWalkableHash64 = 0x6BD1E35739724D50UL;
-        private const ulong ExpectedStairsHash64 = 0x23E0586B1660525EUL;
+        //   Walkable 0x3C9A669DF4449546 -> 0xACB999EE79614172
+        //   Stairs   0xED7D577500BFB901 -> 0xE85EAEDB20B8FB7C
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x6BD1E35739724D50UL
+        private const ulong ExpectedWalkableHash64 = 0xACB999EE79614172UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x23E0586B1660525EUL
+        private const ulong ExpectedStairsHash64 = 0xE85EAEDB20B8FB7CUL;
 
         // -----------------------------------------------------------------------
         // Determinism

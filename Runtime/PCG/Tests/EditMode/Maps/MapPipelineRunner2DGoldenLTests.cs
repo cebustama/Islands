@@ -46,8 +46,10 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const ulong GoldenCoastDist = 0UL;
 
         // ── Phase L new outputs ───────────────────────────────────────────────
-        private const ulong GoldenFlowAccumL = 0xFF413C94785FCEACUL;
-        private const ulong GoldenRiversL = 0xA14DDE84505F6876UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xFF413C94785FCEACUL
+        private const ulong GoldenFlowAccumL = 0x5DB83FBC0903D7C2UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xA14DDE84505F6876UL
+        private const ulong GoldenRiversL = 0x371B1294422BD348UL;
         private const ulong GoldenLakesL = 0x31F98F699FC42573UL;
 
         // =====================================================================

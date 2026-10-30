@@ -14,8 +14,9 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const uint Seed = 42u;
 
         // Set to values reported on first run.
-        // F3b′ re-anchor: 0x7466D4574597051C -> 0x627DF2C3B1C5EF77.
-        private const ulong ExpectedVegetationHash = 0x627DF2C3B1C5EF77UL;
+        // F3b′ re-anchor: 0x7466D4574597051C -> 0xFD86263C17C09D04.
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x627DF2C3B1C5EF77UL
+        private const ulong ExpectedVegetationHash = 0xFD86263C17C09D04UL;
 
         [Test]
         public void Pipeline_F5_GoldenHash_IsLocked()

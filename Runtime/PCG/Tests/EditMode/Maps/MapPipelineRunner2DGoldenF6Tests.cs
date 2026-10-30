@@ -15,10 +15,12 @@ namespace Islands.PCG.Tests.EditMode.Maps
 
         // F3b′ re-anchor (area-quantile hill thresholds). Walkable and Stairs both
         // derive from the hills masks, so both move with them.
-        //   Walkable 0x1B6B5A207F0961FA -> 0x72217820D251DCCB
-        //   Stairs   0x169920A412C17B67 -> 0xA54060EDAB8B497C
-        private const ulong ExpectedWalkableHash = 0x72217820D251DCCBUL;
-        private const ulong ExpectedStairsHash = 0xA54060EDAB8B497CUL;
+        //   Walkable 0x1B6B5A207F0961FA -> 0x1305E21B9F415A58
+        //   Stairs   0x169920A412C17B67 -> 0xE100A0864EA7EBB6
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x72217820D251DCCBUL
+        private const ulong ExpectedWalkableHash = 0x1305E21B9F415A58UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0xA54060EDAB8B497CUL
+        private const ulong ExpectedStairsHash = 0xE100A0864EA7EBB6UL;
 
         [Test]
         public void Pipeline_F6_GoldenHash_IsLocked()

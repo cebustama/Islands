@@ -19,7 +19,8 @@ namespace Islands.PCG.Tests.EditMode.Maps
         private const int H = 64;
         private const uint Seed = 12345u;
 
-        private const ulong ExpectedShallowWaterHash64 = 0x914AF43589BA6C13UL;
+        // Re-anchored 2026-10-31, noise range A+D (PerlinOnSimplex + fBm sum); was 0x914AF43589BA6C13UL
+        private const ulong ExpectedShallowWaterHash64 = 0x62B84EA07DCF2C83UL;
 
         // -----------------------------------------------------------------------
         // Determinism
