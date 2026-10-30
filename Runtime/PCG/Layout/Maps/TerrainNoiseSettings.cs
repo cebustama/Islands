@@ -12,7 +12,7 @@ namespace Islands.PCG.Layout.Maps
     /// </summary>
     public enum TerrainNoiseType : byte
     {
-        /// <summary>Simplex2D with Perlin gradients. Smooth, low artifact. Default.</summary>
+        /// <summary>Simplex2D with Perlin gradients rescaled for the simplex lattice (<see cref="Noise.PerlinOnSimplex"/>, peak ±1). Smooth, low artifact. Default.</summary>
         Perlin = 0,
         /// <summary>Simplex2D with Simplex gradients. Slightly different character.</summary>
         Simplex = 1,

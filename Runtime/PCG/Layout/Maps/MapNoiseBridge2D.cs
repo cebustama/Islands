@@ -90,7 +90,7 @@ namespace Islands.PCG.Layout.Maps
                     break;
                 case TerrainNoiseType.Perlin:
                 default:
-                    FillNoise01Core<Noise.Simplex2D<Noise.Perlin>>(domain, dst, settings, remapBipolar: true);
+                    FillNoise01Core<Noise.Simplex2D<Noise.PerlinOnSimplex>>(domain, dst, settings, remapBipolar: true);
                     break;
             }
         }
@@ -276,7 +276,7 @@ namespace Islands.PCG.Layout.Maps
                     float4 pz = new float4(py);
                     float4x3 positions = new float4x3(px, 0f, pz);
 
-                    float4 n = Noise.GetFractalNoise<Noise.Simplex2D<Noise.Perlin>>(positions, settings).v;
+                    float4 n = Noise.GetFractalNoise<Noise.Simplex2D<Noise.PerlinOnSimplex>>(positions, settings).v;
                     float4 v = math.saturate(n * 0.5f + 0.5f);
 
                     if (quantSteps > 1)

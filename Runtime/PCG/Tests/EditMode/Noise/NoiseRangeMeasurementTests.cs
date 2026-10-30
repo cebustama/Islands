@@ -45,6 +45,7 @@ namespace Islands.PCG.Tests.EditMode.NoiseRange
             Report(sb, "Lattice2D<Value>", Single<Islands.Noise.Lattice2D<Islands.Noise.LatticeNormal, Islands.Noise.Value>>(), "");
             Report(sb, "Lattice2D<Perlin> (square)", Single<Islands.Noise.Lattice2D<Islands.Noise.LatticeNormal, Islands.Noise.Perlin>>(), "[±0.96, p1–p99 ±0.72]");
             Report(sb, "Simplex2D<Perlin>", Single<Islands.Noise.Simplex2D<Islands.Noise.Perlin>>(), "[±0.43, p1–p99 ±0.32]");
+            Report(sb, "Simplex2D<PerlinOnSimplex>", Single<Islands.Noise.Simplex2D<Islands.Noise.PerlinOnSimplex>>(), "[expected peak ±1]");
             Report(sb, "Simplex2D<Simplex>", Single<Islands.Noise.Simplex2D<Islands.Noise.Simplex>>(), "[±1.00, p1–p99 ±0.86]");
             Report(sb, "Voronoi2D<Worley,F1>", Single<Islands.Noise.Voronoi2D<Islands.Noise.LatticeNormal, Islands.Noise.Worley, Islands.Noise.F1>>(), "");
             TestContext.WriteLine(sb.ToString());
@@ -57,6 +58,7 @@ namespace Islands.PCG.Tests.EditMode.NoiseRange
             sb.AppendLine("== fBm 4 octaves, lacunarity 2, persistence 0.5 ==");
             Report(sb, "Simplex2D<Perlin>  GetFractalNoise", Fractal<Islands.Noise.Simplex2D<Islands.Noise.Perlin>>(), "");
             Report(sb, "Simplex2D<Perlin>  true sum", TrueFbm<Islands.Noise.Simplex2D<Islands.Noise.Perlin>>(), "[±0.32, p1–p99 ±0.22]");
+            Report(sb, "Simplex2D<PerlinOnSimplex> GetFractalNoise", Fractal<Islands.Noise.Simplex2D<Islands.Noise.PerlinOnSimplex>>(), "");
             Report(sb, "Simplex2D<Simplex> GetFractalNoise", Fractal<Islands.Noise.Simplex2D<Islands.Noise.Simplex>>(), "");
             Report(sb, "Simplex2D<Simplex> true sum", TrueFbm<Islands.Noise.Simplex2D<Islands.Noise.Simplex>>(), "[±0.86, p1–p99 ±0.59]");
             TestContext.WriteLine(sb.ToString());

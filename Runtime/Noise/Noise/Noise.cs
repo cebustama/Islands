@@ -100,9 +100,12 @@ namespace Islands
             for (int o = 0; o < settings.octaves; o++)
             {
                 sum += amplitude * default(N).GetNoise4(position, hash + o, frequency);
+                // Add this octave's amplitude before decaying it. Adding it after divided by
+                // p + p^2 + ... instead of 1 + p + ..., scaling the result by 1/persistence
+                // (x2 at 0.5; NaN at 0). Fixed in the noise range batch, 2026-10-30.
+                amplitudeSum += amplitude;
                 frequency *= settings.lacunarity;
                 amplitude *= settings.persistence;
-                amplitudeSum += amplitude;
             }
 
             return sum / amplitudeSum;

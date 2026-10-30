@@ -50,6 +50,32 @@ namespace Islands
             public Sample4 EvaluateCombined(Sample4 value) => value;
         }
 
+        /// <summary>
+        /// Perlin gradients rescaled for the simplex lattice (<see cref="Simplex1D{G}"/>,
+        /// <see cref="Simplex2D{G}"/>, <see cref="Simplex3D{G}"/>), so the peak is ±1.
+        ///
+        /// <see cref="Perlin"/>'s constants (2/0.53528, 1/0.56290) were derived for the square
+        /// and cubic lattice. On the simplex lattice they leave the peak at 0.437 (2D) and
+        /// 0.361 (3D). The constants below are the exact worst case: every corner gradient
+        /// chosen to point at the sample. 2D peak sits on an edge midpoint: two corners at
+        /// |d|² = 1/6, raw peak 2(3+√3)/81, hence the scale 27(3−√3)/4. 3D raw peak is
+        /// 625/3072. 1D shares <see cref="Simplex"/>'s 32/27 (same line gradient, peak at
+        /// x = 0.5). Derivation and check: CURRENT_STATE.md, noise range batch (2026-10-30).
+        /// </summary>
+        public struct PerlinOnSimplex : IGradient
+        {
+            public Sample4 Evaluate(SmallXXHash4 hash, float4 x) =>
+                BaseGradients.Line(hash, x) * (32f / 27f);
+
+            public Sample4 Evaluate(SmallXXHash4 hash, float4 x, float4 y) =>
+                BaseGradients.Square(hash, x, y) * (27f * (3f - sqrt(3f)) / 4f);
+
+            public Sample4 Evaluate(SmallXXHash4 hash, float4 x, float4 y, float4 z) =>
+                BaseGradients.Octahedron(hash, x, y, z) * (3072f / 625f);
+
+            public Sample4 EvaluateCombined(Sample4 value) => value;
+        }
+
         public struct Turbulence<G> : IGradient where G : struct, IGradient
         {
             public Sample4 Evaluate(SmallXXHash4 hash, float4 x) =>
