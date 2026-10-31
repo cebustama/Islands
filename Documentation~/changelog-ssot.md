@@ -10,7 +10,7 @@
 > it was not in scope for the documentation-application session.
 
 ## Noise range — `PerlinOnSimplex` gradient (A) + fBm amplitude sum (D)
-Date: 2026-10-30/31. Branch `noise-range-fix`.
+Date: 2026-10-30/31. Branch `noise-range-fix`, fast-forwarded into `main` 2026-10-31.
 
 **Cause.** Two independent defects in the noise runtime, partly cancelling each other.
 (A) `Perlin`'s 2D/3D gradient constants (`2/0.53528`, `1/0.56290`) were derived for the
@@ -96,6 +96,11 @@ mode with the `Perlin` terrain type changes character more than the rest, becaus
 **Open risk, recorded.** Per-run statistics (W-aux.g area fractions for hills) are not
 tile-local: neighbouring W.c tiles resolve different cuts. Not caused by this batch;
 relevant to W2 edge constraints.
+
+**Visual smoke test.** `Default_MapPreset`, res 256, seeds 8, 243 and 110591, all stages on:
+coherent islands, shore and shallow bands intact, hills and vegetation inside land, rivers
+present. No red flags (split islands, flat plateaus, displaced coasts). User-confirmed
+2026-10-31.
 
 ## W-aux.h — Hydrology instrumentation (probe + diagnostic rule R7)
 Date: 2026-08-20

@@ -46,8 +46,9 @@ Live doc-update queues (unapplied governed content):
   `planning/active/`.
 
 Session startup prompts:
-- `planning/active/Noise_Range_Next_Startup.md` (2026-10-31; smoke test, merge of
-  `noise-range-fix`, didactic noise scene)
+- `planning/active/Noise_Didactic_Scene_Startup.md` (2026-10-31; didactic noise scene,
+  class mode)
+- Archived: `planning/archive/Noise_Range_Next_Startup.md` (smoke test and merge done)
 
 Exploration, not planning authority:
 - `planning/exploration/Shape_Composition_Future_Exploration.md`
