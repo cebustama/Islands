@@ -427,13 +427,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7f37a14d6b6e7834da23557733962437, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Islands.Samples::NoiseLab
-  type: 2
+  type: 4
   seed: 0
   frequency: 8
   octaves: 1
   lacunarity: 2
   gain: 0.5
   resolution: 256
+  waterMode: 0
+  rawThreshold: 0
+  waterPercent: 40
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

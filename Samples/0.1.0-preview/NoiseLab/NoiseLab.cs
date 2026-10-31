@@ -187,15 +187,95 @@ public class NoiseLab : MonoBehaviour
         texture.Apply();
     }
 
+    // Step 4: on-screen controls. Everything is laid out in a virtual screen 800 units
+    // tall and scaled to the real one, so text and sliders stay finger-sized on a phone.
+    const float VirtualHeight = 800f;
+
+    static readonly string[] TypeLabels =
+        { "Value", "Perlin square", "Simplex old", "Simplex Perlin", "Simplex", "Voronoi F1" };
+    static readonly string[] WaterLabels = { "Raw threshold", "% water" };
+
     void OnGUI()
     {
         if (texture == null) return;
-        float side = Mathf.Min(Screen.width, Screen.height * 0.6f);
-        float left = (Screen.width - side) * 0.5f;
-        GUI.DrawTexture(new Rect(left, 0f, side, side), texture);
+
+        float scale = Screen.height / VirtualHeight;
+        GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
+        float width = Screen.width / scale, height = VirtualHeight;
+        const float margin = 16f;
+
+        Rect controls;
+        if (width < height * 0.9f)
+        {
+            // Portrait: view on top, controls underneath. The controls get their height
+            // first; the image takes what is left after histogram (70) and numbers (60).
+            const float controlsHeight = 330f, viewExtras = 8f + 70f + 4f + 60f + 8f;
+            float side = Mathf.Min(width - 2f * margin,
+                                   height - 2f * margin - viewExtras - controlsHeight);
+            float bottom = DrawView((width - side) * 0.5f, margin, side);
+            controls = new Rect(margin, bottom + 8f, width - 2f * margin, height - bottom - 8f - margin);
+        }
+        else
+        {
+            // Landscape: view on the left, controls in a column on the right.
+            float side = Mathf.Min(height * 0.6f, width * 0.5f);
+            DrawView(margin, margin, side);
+            float x = 2f * margin + side;
+            controls = new Rect(x, margin, Mathf.Min(420f, width - x - margin), height - 2f * margin);
+        }
+
+        DrawControls(controls);
+    }
+
+    void DrawControls(Rect area)
+    {
+        GUILayout.BeginArea(area);
+        GUI.changed = false;
+
+        type = (NoiseType)GUILayout.SelectionGrid((int)type, TypeLabels, 3, GUILayout.Height(60f));
+
+        GUILayout.BeginHorizontal();
+        GUILayout.Label($"Seed {seed}", GUILayout.Width(110f));
+        if (GUILayout.Button("−", GUILayout.Height(30f))) seed--;
+        if (GUILayout.Button("+", GUILayout.Height(30f))) seed++;
+        if (GUILayout.Button("Random", GUILayout.Height(30f))) seed = UnityEngine.Random.Range(0, 100000); // UI only; the noise itself stays seeded
+        GUILayout.EndHorizontal();
+
+        frequency = IntSlider("Frequency", frequency, 1, 32);
+        octaves = IntSlider("Octaves", octaves, 1, 6);
+        lacunarity = IntSlider("Lacunarity", lacunarity, 2, 4);
+        gain = Slider("Gain", gain, 0f, 1f, "0.00");
+
+        waterMode = (WaterMode)GUILayout.Toolbar((int)waterMode, WaterLabels, GUILayout.Height(30f));
+        if (waterMode == WaterMode.RawThreshold)
+            rawThreshold = Slider("Threshold", rawThreshold, -1f, 1f, "+0.00;-0.00");
+        else
+            waterPercent = Slider("Water %", waterPercent, 0f, 100f, "0");
+
+        if (GUI.changed) dirty = true;
+        GUILayout.EndArea();
+    }
+
+    static int IntSlider(string label, int value, int min, int max) =>
+        Mathf.RoundToInt(Slider(label, value, min, max, "0"));
+
+    static float Slider(string label, float value, float min, float max, string format)
+    {
+        GUILayout.BeginHorizontal(GUILayout.Height(30f));
+        GUILayout.Label(label, GUILayout.Width(110f));
+        value = GUILayout.HorizontalSlider(value, min, max, GUILayout.ExpandWidth(true));
+        GUILayout.Label(value.ToString(format), GUILayout.Width(50f));
+        GUILayout.EndHorizontal();
+        return value;
+    }
+
+    // Image, histogram and numbers. Returns the y where they end.
+    float DrawView(float left, float top, float side)
+    {
+        GUI.DrawTexture(new Rect(left, top, side, side), texture);
 
         // Histogram strip under the image. x axis: raw value from -1 (left) to +1 (right).
-        var plot = new Rect(left, side + 8f, side, Screen.height * 0.15f);
+        var plot = new Rect(left, top + side + 8f, side, 70f);
         DrawRect(plot, new Color(0f, 0f, 0f, 0.6f));
         float barWidth = plot.width / Bins;
         for (int b = 0; b < Bins; b++)
@@ -210,13 +290,15 @@ public class NoiseLab : MonoBehaviour
         DrawMarker(plot, max, new Color(1f, 0.2f, 0.2f));
         DrawMarker(plot, threshold, new Color(0.3f, 0.7f, 1f));    // water line in blue
 
+        var numbers = new Rect(plot.x, plot.yMax + 4f, plot.width, 60f);
         GUI.Label(
-            new Rect(plot.x, plot.yMax + 4f, plot.width, 80f),
+            numbers,
             $"min {min:+0.00;-0.00}   max {max:+0.00;-0.00}   " +
             $"p1 {p1:+0.00;-0.00}   p99 {p99:+0.00;-0.00}\n" +
             $"mean {mean:+0.000;-0.000}   sd {sd:0.000}   ({values.Length} samples)\n" +
             $"water {waterFraction * 100f:0.0}%   threshold {threshold:+0.000;-0.000}   " +
             (waterMode == WaterMode.Percentage ? "(from %)" : "(raw)"));
+        return numbers.yMax;
     }
 
     void DrawMarker(Rect plot, float value, Color color) =>
