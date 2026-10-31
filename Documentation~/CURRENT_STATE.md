@@ -30,8 +30,10 @@ W.c implemented and committed, governed docs pending; noise range fix A+D merged
   the CPU, exact histogram (min/max/p1/p99/mean/SD), water by raw threshold or by
   percentage (quantile), IMGUI controls for portrait and landscape. No runtime code, no
   tests, no goldens; suite 415/415. Tried in the editor by the user (both layouts).
-  Detail in `changelog-ssot.md`. Next on this track: a mobile build
-  (`planning/active/NoiseLab_Mobile_Build_Startup.md`).
+  Detail in `changelog-ssot.md`. **Android build verified 2026-11-01** on the user's
+  S22 Ultra (touch, both orientations, histogram as in the editor; package scene builds
+  from `Packages/` without copying). Next on this track: NoiseLab v2
+  (`planning/active/NoiseLab_v2_Startup.md`).
 - **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
   merged into `main` after a user-confirmed visual smoke test.**
   The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s
@@ -561,6 +563,10 @@ each names where it would have to be checked.
   twice, in two assemblies. NoiseLab relies on the folder being compiled in place.
   Renaming to `Samples~` would hide it from the host. Not scheduled; decide before
   publishing the package.
+- **Host: Active Input Handling = Both (recorded 2026-11-01).** Unity warns it is
+  unsupported on Android. Harmless for NoiseLab (IMGUI only); decide before an Android build
+  that uses the Input System (SnakeCave, the portfolio app). Host also holds a stale
+  `Assets/NoiseLab.unity` copy outside the build list.
 - ~~**`Stage_Vegetation2D.moistureModulation` may be unreachable.**~~ **RESOLVED at W.b
   (2026-08-20).** Confirmed unreachable — zero assignments anywhere in the corpus outside
   its own declaration, so with the `> 0f` guard the branch had been inert since it was

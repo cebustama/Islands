@@ -9,6 +9,35 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## NoiseLab — Android build on the user's phone
+Date: 2026-11-01 (session started 2026-10-31). No package code changed.
+
+**What.** Development build (IL2CPP, ARM64, min API 25) of NoiseLab installed by USB with
+Build And Run on the user's Samsung S22 Ultra (Android 15, One UI 7.0). User-confirmed: it
+opens, IMGUI responds to touch in portrait and landscape, and the histogram and readouts
+behave as in the editor (screenshots of Simplex, Voronoi F1, Value and Perlin square at
+seed 84253, frequency 3, 6 octaves, lacunarity 2, gain 0.53, 92 % water). No performance
+problem reported; the default resolution was not lowered.
+
+**Resolved unknowns** (were "unverified" in the startup prompt): a scene inside the package
+(`Packages/io.github.cebustama.islands/Samples/0.1.0-preview/NoiseLab/NoiseLab.unity`,
+`file:` reference) can be added to the build list and builds without copying it to
+`Assets/`; IMGUI works with touch on a real device.
+
+**Host changes (host has no Git; recorded by hand).** Active platform switched to Android
+by the user. Build list: SnakeCave unchecked, NoiseLab (package path) added and checked,
+Development Build on. As of the session end these were visible in Build Profiles but not
+yet saved to `ProjectSettings/EditorBuildSettings.asset` (on disk it still lists only
+SnakeCave). `productName` is still `SnakeCave`, so the app installs under that name.
+
+**Recorded, not fixed.** Player Settings → Active Input Handling is `Both`; Unity warns it is
+unsupported on Android. Ignored for this build (NoiseLab reads no input API, only IMGUI).
+Decide before any Android build that uses the Input System. A stale copy
+`Assets/NoiseLab.unity` (21:26, differs from the package scene) sits in the host, outside
+the build list; not touched.
+
+Suite 415/415 at session start (bridge `ClaudeTests/`).
+
 ## NoiseLab — didactic noise scene (sample only)
 Date: 2026-10-31. Commits `9afd4a1`, `1cafc65` on `main` (local).
 
