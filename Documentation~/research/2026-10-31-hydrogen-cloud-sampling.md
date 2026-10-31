@@ -83,3 +83,14 @@ The physics is not the point. Three mechanisms are:
 - Luc Devroye, *Non-Uniform Random Variate Generation* (Springer, 1986), ch. 2 (inversion). Free on the author's site.
 - Michael Vose, «A linear algorithm for generating random numbers with a given distribution», *IEEE Trans. Software Eng.* (1991) (alias method).
 - Bridson, Hourihan & Nordenstam, «Curl-Noise for Procedural Fluid Flow», SIGGRAPH 2007.
+
+## Continuing from Islands (2026-10-31)
+
+Two possible threads; Claudio chooses at the start of the session.
+
+1. **Inside the current focus (recommended):** the didactic noise scene (`planning/active/Noise_Didactic_Scene_Startup.md`), adding idea A (water by percentage via the height-map quantile) next to the histogram. This does not open a new front.
+2. **A hydrogen cloud prototype** (new front, sample only, not runtime): stateless vertex shader as in Q&A 1. Open decisions: where it lives (sample in the package vs. host `Assets`), URP unlit HLSL vs. Shader Graph, point budget to measure on Claudio's phone. Before code: confirm it does not displace the didactic scene.
+
+Startup prompt (paste in a session opened in `D:\Projects\Islands`):
+
+> Lee `Documentation~/research/2026-10-31-hydrogen-cloud-sampling.md` y `Documentation~/planning/active/Noise_Didactic_Scene_Startup.md`. Quiero seguir con [1: la escena didáctica, con la idea A del agua por porcentaje | 2: un prototipo de la nube de hidrógeno en GPU]. Empieza por las decisiones abiertas; no escribas código hasta que las cierre.
