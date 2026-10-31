@@ -25,6 +25,13 @@ W.c implemented and committed, governed docs pending; noise range fix A+D merged
 - Shader assets and HLSL helpers are active support artifacts, but not a promoted subsystem SSoT.
 
 ## What current package development just resolved
+- **NoiseLab — didactic noise scene (sample only). DONE 2026-10-31, local commits
+  `9afd4a1`, `1cafc65`.** `Samples/0.1.0-preview/NoiseLab/`: six noise types sampled raw on
+  the CPU, exact histogram (min/max/p1/p99/mean/SD), water by raw threshold or by
+  percentage (quantile), IMGUI controls for portrait and landscape. No runtime code, no
+  tests, no goldens; suite 415/415. Tried in the editor by the user (both layouts).
+  Detail in `changelog-ssot.md`. Next on this track: a mobile build
+  (`planning/active/NoiseLab_Mobile_Build_Startup.md`).
 - **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
   merged into `main` after a user-confirmed visual smoke test.**
   The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s
@@ -545,6 +552,15 @@ Findings that surfaced during the W-aux.c…W-aux.f run with no owning batch, re
 they survive their originating sessions. **All are UNVERIFIED as stated** and none is fixed;
 each names where it would have to be checked.
 
+- **Package samples folder vs. `package.json` (recorded 2026-10-31).** `package.json`
+  declares the sample at `Samples~/0.1.0-preview`, but the folder on disk is
+  `Samples/0.1.0-preview` (no `~`). Effects: the Package Manager "Import" button finds
+  nothing, and Unity compiles the folder as part of the package (asmdef `Islands.Samples`).
+  The host also holds an older imported copy under `Assets/Samples/Islands/0.1.0-preview/
+  Getting Started/` (asmdef `Islands.SamplesExt`), so e.g. `NoiseVisualization` compiles
+  twice, in two assemblies. NoiseLab relies on the folder being compiled in place.
+  Renaming to `Samples~` would hide it from the host. Not scheduled; decide before
+  publishing the package.
 - ~~**`Stage_Vegetation2D.moistureModulation` may be unreachable.**~~ **RESOLVED at W.b
   (2026-08-20).** Confirmed unreachable — zero assignments anywhere in the corpus outside
   its own declaration, so with the `> 0f` guard the branch had been inert since it was

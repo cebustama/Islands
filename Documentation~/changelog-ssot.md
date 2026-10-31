@@ -9,6 +9,26 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## NoiseLab — didactic noise scene (sample only)
+Date: 2026-10-31. Commits `9afd4a1`, `1cafc65` on `main` (local).
+
+**What.** New sample `Samples/0.1.0-preview/NoiseLab/` (`NoiseLab.cs`, `NoiseLab.unity`):
+six noise types (`Lattice2D` value and Perlin, `Simplex2D` with `Perlin` / `PerlinOnSimplex`
+/ `Simplex`, `Voronoi2D` Worley F1) sampled **raw** on the CPU, like `MapNoiseBridge2D`
+but without remap or clamp. Exact histogram (sorted copy: min, max, p1, p99, mean, SD).
+Water by raw threshold, or by percentage via the quantile of the sorted values (idea A of
+`research/2026-10-31-hydrogen-cloud-sampling.md`). IMGUI controls on a virtual 800-unit
+screen, portrait and landscape.
+
+**Not changed.** No runtime code, no tests, no goldens. Suite 415/415 after the change.
+The old `Samples/0.1.0-preview/Noise/NoiseVisualization.cs` (GPU) is untouched.
+
+**Observed in the scene** (seed 0, frequency 8, 1 octave, res 256; user-confirmed):
+`Simplex2D<Perlin>` ±0.39, SD 0.172; `<PerlinOnSimplex>` −0.90/+0.86, SD 0.394; `<Simplex>`
+±0.98, SD 0.463; four octaves narrow the histogram (Simplex SD 0.290). With water at 40 %
+the threshold follows the field (Simplex −0.207 at 1 octave, −0.124 at 4); a raw threshold
+of −0.30 gives 3.5 % / 33.8 % water on the old gradient vs. Simplex.
+
 ## Noise range — `PerlinOnSimplex` gradient (A) + fBm amplitude sum (D)
 Date: 2026-10-30/31. Branch `noise-range-fix`, fast-forwarded into `main` 2026-10-31.
 
