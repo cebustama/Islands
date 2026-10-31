@@ -1,0 +1,1027 @@
+<title>Nube de Hidrógeno</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una historia vertical de pantallas (wrapped); cada pantalla = texto + demo viva en canvas. Un solo mundo oscuro a propósito: la nube brilla sobre tinta. */
+:root {
+  --ink: #0e0a18;
+  --panel: #171127;
+  --line: #2e2645;
+  --fg: #f1ebf8;
+  --muted: #a99ec0;
+  --fire: #ff9a3c;
+  --rose: #ff4f8b;
+  --cyan: #6fd6ff;
+  --land: #8fbf6a;
+  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-snap-type: y proximity; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  background: var(--ink); color: var(--fg);
+  font: 400 16px/1.6 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+.slide {
+  min-height: 100svh; scroll-snap-align: start;
+  display: grid; align-items: center;
+  padding-block: 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.wrap { width: 100%; max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 48px; align-items: center; }
+.wrap.solo { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 28px; } .slide { padding-block: 56px; } }
+.text { min-width: 0; display: grid; gap: 16px; max-width: 62ch; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--fire); display: flex; gap: 12px; flex-wrap: wrap; }
+.eyebrow span { color: var(--muted); }
+h1, h2 { font-family: var(--display); font-weight: 800; line-height: 1.02; letter-spacing: -.02em; margin: 0; text-wrap: balance; }
+h1 { font-size: clamp(40px, 8vw, 92px); }
+h2 { font-size: clamp(30px, 5vw, 58px); }
+h3 { font: 700 18px/1.25 var(--display); margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+p { margin: 0; }
+.lead { font-size: clamp(17px, 2vw, 20px); color: var(--fg); }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+.fire { background: linear-gradient(90deg, var(--fire), var(--rose)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.stat { font: 800 clamp(30px, 4.6vw, 52px)/1 var(--display); letter-spacing: -.02em; }
+.stat small { display: block; font: 500 13px/1.4 var(--mono); letter-spacing: .04em; color: var(--muted); margin-top: 8px; }
+.formula { font: 500 clamp(15px, 1.8vw, 19px)/1.5 var(--mono); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; overflow-x: auto; white-space: nowrap; }
+.min { font: 400 12px/1 var(--mono); color: var(--muted); letter-spacing: .06em; }
+code { font-family: var(--mono); font-size: .92em; color: var(--cyan); }
+pre.code { margin: 0; font: 400 13px/1.55 var(--mono); background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; color: var(--fg); }
+pre.code .c { color: var(--muted); }
+pre.code .k { color: var(--fire); }
+.stage { min-width: 0; display: grid; gap: 12px; }
+.canvas-box { position: relative; width: 100%; max-width: 100%; aspect-ratio: 1 / 1; background: radial-gradient(circle at 50% 50%, #1c1430 0%, var(--ink) 70%); border-radius: 18px; border: 1px solid var(--line); overflow: hidden; }
+.canvas-box.wide { aspect-ratio: 4 / 3; }
+.canvas-box.flat { aspect-ratio: 16 / 9; }
+.canvas-box canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.tag { position: absolute; left: 12px; top: 12px; font: 500 12px/1.3 var(--mono); color: var(--muted); background: color-mix(in srgb, var(--ink) 75%, transparent); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
+.tag.r { left: auto; right: 12px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip { font: 500 13px/1 var(--mono); color: var(--fg); background: var(--panel); border: 1px solid var(--line); padding: 9px 12px; border-radius: 999px; cursor: pointer; }
+.chip:hover { border-color: var(--muted); }
+.chip[aria-pressed="true"] { background: var(--fg); color: var(--ink); border-color: var(--fg); }
+.chip:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--fire); outline-offset: 2px; }
+input[type="range"] { width: 100%; accent-color: var(--fire); }
+label.range { display: grid; gap: 6px; font: 500 13px/1.3 var(--mono); color: var(--muted); width: 100%; }
+a { color: var(--cyan); text-underline-offset: 3px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font: 400 13px/1.4 var(--mono); color: var(--muted); }
+.note { border-left: 2px solid var(--rose); padding-left: 14px; font-size: 14px; color: var(--muted); }
+/* Rail */
+.rail { position: fixed; right: max(10px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); display: grid; gap: 9px; z-index: 5; }
+.rail a { width: 8px; height: 8px; border-radius: 50%; background: var(--line); display: block; }
+.rail a.on { background: var(--fire); box-shadow: 0 0 0 3px color-mix(in srgb, var(--fire) 25%, transparent); }
+@media (max-width: 600px) { .rail { display: none; } }
+/* Three dice */
+.dice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 640px) { .dice { grid-template-columns: minmax(0, 1fr); } }
+.die { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.die b { font: 800 34px/1 var(--display); color: var(--fire); }
+.die .formula { font-size: 14px; padding: 8px 10px; background: var(--ink); }
+.arrow-row { text-align: center; font: 500 14px/1.5 var(--mono); color: var(--muted); }
+/* Orbital grid */
+.ogrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 520px) { .ogrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ogrid figure { margin: 0; display: grid; gap: 6px; }
+.ogrid canvas { width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; border: 1px solid var(--line); background: #000; display: block; }
+.ogrid figcaption { font: 500 12px/1.3 var(--mono); color: var(--muted); }
+.ogrid figcaption b { color: var(--fg); font-weight: 500; }
+/* Islands ideas */
+.ideas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 860px) { .ideas { grid-template-columns: minmax(0, 1fr); } }
+.idea { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.idea .head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.idea .letter { font: 800 14px/1 var(--display); color: var(--ink); background: var(--fire); border-radius: 6px; padding: 5px 8px; }
+.pill { font: 500 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 5px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.ok { color: var(--land); border-color: color-mix(in srgb, var(--land) 50%, transparent); }
+.pill.spec { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 45%, transparent); }
+.idea dl { margin: 0; display: grid; gap: 8px; font-size: 14.5px; }
+.idea dt { font: 500 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.idea dd { margin: 0; }
+.idea .src { font: 400 12px/1.45 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.thumbs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.thumbs figure { margin: 0; display: grid; gap: 4px; }
+.thumbs canvas { width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; display: block; background: #0b2033; }
+.thumbs figcaption { font: 400 10.5px/1.25 var(--mono); color: var(--muted); }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.two figure { margin: 0; display: grid; gap: 4px; }
+.two canvas { width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; display: block; background: #0b2033; }
+.two figcaption { font: 400 11px/1.3 var(--mono); color: var(--muted); }
+.hist-row { display: flex; justify-content: space-between; gap: 12px; font: 500 13px/1.3 var(--mono); color: var(--muted); flex-wrap: wrap; }
+.hist-row b { color: var(--fg); font-weight: 500; }
+/* Lists */
+ul.clean { margin: 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+ul.clean li { padding-left: 18px; position: relative; }
+ul.clean li::before { content: ""; position: absolute; left: 0; top: .62em; width: 7px; height: 7px; border-radius: 50%; background: var(--rose); }
+ul.src li::before { background: var(--cyan); }
+.scroll-hint { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); font: 500 12px/1 var(--mono); color: var(--muted); letter-spacing: .12em; text-transform: uppercase; }
+</style>
+
+<nav class="rail" id="rail" aria-label="Pantallas"></nav>
+
+<!-- 0 · Portada -->
+<section class="slide" id="inicio" data-title="Inicio">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">Wrapped · captura del 31 oct 2026</div>
+      <h1>Un átomo que se <span class="fire">sortea</span></h1>
+      <p class="lead">kavan simula el hidrógeno en C++ con OpenGL. No dibuja órbitas: sortea miles de veces dónde podría aparecer el electrón y hace girar cada punto con la fase de la onda.</p>
+      <p class="muted">Lo que ves al lado es eso mismo, rehecho en el navegador con las mismas fórmulas de su código: 16 000 sorteos por orbital.</p>
+      <div class="meta">
+        <span>kavan · «Simulating Atoms in C++»</span>
+        <span>YouTube · 14 feb 2026 · 13:52</span>
+        <span><a href="https://youtu.be/OSAOh4L41Wg" target="_blank" rel="noopener">video</a> · <a href="https://github.com/kavan010/Atoms" target="_blank" rel="noopener">repo</a> · <a href="https://www.kavang.com/atom" target="_blank" rel="noopener">versión web</a></span>
+      </div>
+    </div>
+    <div class="stage">
+      <div class="canvas-box"><canvas id="hero"></canvas><div class="tag" id="heroTag">3d · n=3 l=2 m=1</div></div>
+      <div class="controls" id="heroChips" role="group" aria-label="Orbital"></div>
+    </div>
+  </div>
+  <div class="scroll-hint">desliza ↓</div>
+</section>
+
+<!-- 1 · Bohr -->
+<section class="slide" id="bohr" data-title="Bohr">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">01 / 09 <span>el modelo del colegio · min 1:00–3:30</span></div>
+      <h2>La órbita no se sostiene</h2>
+      <p class="lead">Primero lo que todos aprendimos: un protón en el centro y un electrón dando vueltas como un planeta.</p>
+      <p>Falla por algo sencillo. Una carga que gira está acelerando, y una carga que acelera emite luz. Al emitir pierde energía y cae en espiral hacia el núcleo. kavan empieza por aquí a propósito: construye el modelo equivocado y lo va corrigiendo.</p>
+      <div class="stat">≈ 1,6 × 10⁻¹¹ s<small>lo que duraría el átomo según la física clásica: unos 16 picosegundos</small></div>
+    </div>
+    <div class="stage">
+      <div class="canvas-box"><canvas id="bohrC"></canvas><div class="tag" id="bohrTag">órbita clásica</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 2 · Escalones -->
+<section class="slide" id="escalones" data-title="Escalones">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">02 / 09 <span>fotones · min 3:30–5:30</span></div>
+      <h2>La energía va por escalones</h2>
+      <div class="formula">Eₙ = −13,6 eV / n²</div>
+      <p>El electrón solo puede estar en ciertos niveles, como en una escalera: no hay sitio entre peldaños. Un fotón se absorbe solo si trae justo la diferencia. De n = 1 a n = 2 son 10,2 eV (121,6 nm, ultravioleta).</p>
+      <p>El electrón excitado no se queda arriba: al poco rato baja y suelta un fotón igual. En el código es un <code>excitedTimer</code> dentro del <code>struct</code> de la partícula.</p>
+    </div>
+    <div class="stage">
+      <div class="canvas-box wide"><canvas id="levels"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 · Onda que cierra -->
+<section class="slide" id="onda" data-title="Onda">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">03 / 09 <span>de broglie · min 5:30–7:30</span></div>
+      <h2>Solo valen las ondas que cierran</h2>
+      <p class="lead">El electrón también se comporta como una onda. Alrededor del protón, esa onda tiene que volver a encontrarse consigo misma.</p>
+      <p>Si al dar la vuelta no coincide, se anula. Solo cierra con un número entero de oscilaciones, y esos enteros son los niveles de Bohr. Los escalones dejan de ser una regla impuesta: salen de la forma de la onda.</p>
+      <p class="muted small">Mueve el control. Cuando el número de oscilaciones no es entero, el hueco rosa marca dónde la onda no empalma.</p>
+    </div>
+    <div class="stage">
+      <div class="canvas-box"><canvas id="wave"></canvas><div class="tag" id="waveTag"></div></div>
+      <label class="range" for="kRange">oscilaciones por vuelta<input id="kRange" type="range" min="1" max="5" step="0.01" value="2.62"></label>
+      <div class="controls" id="kChips" role="group" aria-label="Valores enteros"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 · Nube -->
+<section class="slide" id="nube" data-title="Nube">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">04 / 09 <span>superposición · min 7:30–9:00</span></div>
+      <h2>No es una órbita, es una nube</h2>
+      <p class="lead">En mecánica cuántica el electrón no tiene trayectoria. La función de onda ψ dice, para cada punto del espacio, qué tan probable es encontrarlo si lo mides: |ψ|².</p>
+      <p>Cada punto que aparece es una medición posible. Con pocos no se ve nada; con miles aparece la forma del orbital. kavan pasa a 3D (cámara orbital como la de Blender) y deja de dibujar la onda como una línea.</p>
+      <p class="note">El video dice que el electrón «existe en todas las posiciones a la vez». Es la forma popular de decirlo; lo que se dibuja, con precisión, es la densidad de probabilidad.</p>
+    </div>
+    <div class="stage">
+      <div class="canvas-box"><canvas id="cloud"></canvas><div class="tag" id="cloudTag">mediciones: 0</div><div class="tag r">2p · m = 0</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 · Radial -->
+<section class="slide" id="radial" data-title="Radio">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">05 / 09 <span>schrödinger · min 9:00–10:40</span></div>
+      <h2>ψ se parte en tres piezas</h2>
+      <div class="formula">ψ(r, θ, φ) = R<sub>nl</sub>(r) · Y<sub>lm</sub>(θ, φ)</div>
+      <p>La distancia al núcleo sale de los polinomios de Laguerre; el ángulo θ, de los de Legendre; y φ, para la densidad, es uniforme.</p>
+      <p>Multiplicar R² por r² da la probabilidad de estar a cada distancia. Donde la curva toca cero hay un <b>nodo</b>: una cáscara donde el electrón nunca aparece. Subir n añade capas, «como una cebolla».</p>
+    </div>
+    <div class="stage">
+      <div class="canvas-box wide"><canvas id="rplot"></canvas><div class="tag r" id="rTag"></div></div>
+      <div class="controls" id="rChips" role="group" aria-label="Orbital radial"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 · CDF -->
+<section class="slide" id="cdf" data-title="CDF">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">06 / 09 <span>el truco · min 10:40–11:45</span></div>
+      <h2>Muestreo por <span class="fire">CDF</span></h2>
+      <p class="lead">Para convertir una curva de probabilidad en puntos: acumúlala, tira un número al azar entre 0 y 1 en el eje vertical y mira dónde corta.</p>
+      <p>Donde la curva acumulada sube rápido caen muchos dardos; donde es plana, ninguno. No se desperdicia ningún sorteo. Es el corazón del programa: una tabla de 4096 valores y una búsqueda binaria.</p>
+      <pre class="code"><span class="c">// atom_realtime.cpp, sampleR (resumido)</span>
+<span class="k">for</span> (i = 0; i &lt; 4096; ++i) {
+  r = i * dr;
+  sum += r*r * R(n,l,r)*R(n,l,r);  <span class="c">// pdf</span>
+  cdf[i] = sum;
+}
+<span class="k">for</span> (v : cdf) v /= sum;           <span class="c">// 0 → 1</span>
+u   = uniforme(0, 1);
+idx = lower_bound(cdf, u);       <span class="c">// búsqueda binaria</span>
+<span class="k">return</span> idx * dr;</pre>
+    </div>
+    <div class="stage">
+      <div class="canvas-box wide"><canvas id="cdfC"></canvas><div class="tag r" id="cdfTag">sorteos: 0</div></div>
+      <div class="controls">
+        <button class="chip" id="cdfMany" type="button">+500 sorteos</button>
+        <button class="chip" id="cdfReset" type="button">Reiniciar</button>
+        <span class="min">ejemplo: radio del orbital 2s</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7 · Tres dados -->
+<section class="slide" id="dados" data-title="Dados">
+  <div class="wrap solo">
+    <div class="text" style="max-width: 70ch">
+      <div class="eyebrow">07 / 09 <span>juntarlo todo</span></div>
+      <h2>Tres sorteos, un punto</h2>
+      <p class="lead">Como |ψ|² es un producto de una parte que depende de r y otra que depende de θ, cada coordenada se sortea por separado, con su propia tabla.</p>
+    </div>
+    <div class="dice">
+      <div class="die"><b>r</b><div class="formula">r² · R<sub>nl</sub>(r)²</div><p class="small muted">Distancia. El r² está porque una cáscara lejana tiene más volumen que una cercana.</p></div>
+      <div class="die"><b>θ</b><div class="formula">sin θ · P<sub>l</sub><sup>m</sup>(cos θ)²</div><p class="small muted">Inclinación. El sin θ está porque cerca de los polos hay poco espacio.</p></div>
+      <div class="die"><b>φ</b><div class="formula">uniforme en [0, 2π)</div><p class="small muted">Giro alrededor del eje. Para la densidad da igual; ahí vive la fase.</p></div>
+    </div>
+    <p class="arrow-row">↓<br>x = r sin θ cos φ · y = r cos θ · z = r sin θ sin φ<br>color = brillo según R² · P² (escala de fuego)</p>
+    <p class="note" style="max-width: 70ch">Esos dos factores, r² y sin θ, son los que se olvidan con facilidad. El propio repo lo muestra: el script de Python (<code>schrodinger.py</code>) usa otro método y no los pone. Lo cuento en «Te cuestiono».</p>
+  </div>
+</section>
+
+<!-- 8 · Fase -->
+<section class="slide" id="fase" data-title="Fase">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">08 / 09 <span>corriente de probabilidad · min 11:45–12:45</span></div>
+      <h2>La fase hace girar la nube</h2>
+      <div class="formula">v = ħ·m / (mₑ · r · sin θ)</div>
+      <p>φ salía uniforme porque guarda la fase de la onda. Mucha gente la pinta con color; kavan la convierte en movimiento: cada punto gira alrededor del eje con la corriente de probabilidad.</p>
+      <p>Con m = 0 no se mueve nada. Cerca del eje se gira más rápido. Y la densidad no cambia: el remolino mueve los puntos sin amontonarlos.</p>
+      <p class="muted small">Vista desde arriba, mirando por el eje. Las estelas muestran el giro.</p>
+    </div>
+    <div class="stage">
+      <div class="canvas-box"><canvas id="flow"></canvas><div class="tag" id="flowTag"></div></div>
+      <div class="controls" id="flowChips" role="group" aria-label="Valor de m"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 9 · Galería -->
+<section class="slide" id="galeria" data-title="n l m">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">09 / 09 <span>min 12:45–13:15</span></div>
+      <h2>Tres números, todas las formas</h2>
+      <ul class="clean">
+        <li><b>n</b>: el tamaño y las capas. Cada n más es otra capa de cebolla.</li>
+        <li><b>l</b>: la forma. 0 es una esfera (s), 1 dos lóbulos (p), 2 un trébol (d), 3 algo más raro (f).</li>
+        <li><b>m</b>: la orientación respecto al eje, y cuánto gira la fase.</li>
+      </ul>
+      <p class="muted small">Cortes por el plano que contiene el eje (vertical), con |ψ|² en escala de fuego. Calculados aquí mismo con las fórmulas del repo.</p>
+    </div>
+    <div class="stage"><div class="ogrid" id="ogrid"></div></div>
+  </div>
+</section>
+
+<!-- 10 · Islands -->
+<section class="slide" id="islands" data-title="Islands">
+  <div class="wrap solo">
+    <div class="text" style="max-width: 72ch">
+      <div class="eyebrow">Para tus proyectos <span>Islands PCG · Islands.Noise · Islands Lab</span></div>
+      <h2>Seis ideas para Islands</h2>
+      <p class="lead">Lo que se lleva no es la física: son tres mecanismos. Sortear según una densidad, componer formas como perfil radial por armónico angular, y moverse sin cambiar la densidad.</p>
+      <p class="muted small">Cada tarjeta dice si comprobé la conexión en tus archivos o si es una propuesta. Los mapas de prueba usan ruido de valor con semilla fija; no es el ruido de Islands.</p>
+    </div>
+    <div class="ideas">
+
+      <article class="idea">
+        <div class="head"><h3><span class="letter">A</span> Nivel del mar por porcentaje</h3><span class="pill ok">conexión comprobada</span></div>
+        <div class="canvas-box flat" style="aspect-ratio: 2 / 1"><canvas id="seaC"></canvas></div>
+        <label class="range" for="seaRange">agua: <span id="seaPct">40 %</span><input id="seaRange" type="range" min="10" max="90" step="1" value="40"></label>
+        <div class="hist-row"><span>umbral calculado <b id="seaThr">–</b></span><span>umbral crudo de siempre <b>0,50</b> → <b id="seaRaw">–</b> de agua</span></div>
+        <dl>
+          <dt>Mecanismo</dt><dd>La CDF al revés: el cuantil. Pides «40 % de agua» y la tabla acumulada del mapa de alturas te da el umbral exacto.</dd>
+          <dt>Por qué te sirve</dt><dd>El umbral deja de depender del rango del ruido. Con el arreglo del rango del 31 de octubre (terreno de 0,20–0,80 a 0,16–0,84) las costas se movieron con el mismo umbral; con un porcentaje, no.</dd>
+        </dl>
+        <p class="src">Decisión 2 de Islands/Documentation~/planning/active/Noise_Didactic_Scene_Startup.md: «umbral de agua crudo frente a % de área». Encaja en la escena didáctica, junto al histograma.</p>
+      </article>
+
+      <article class="idea">
+        <div class="head"><h3><span class="letter">B</span> Colocar según una densidad</h3><span class="pill ok">conexión comprobada</span></div>
+        <div class="canvas-box flat" style="aspect-ratio: 2 / 1"><canvas id="treeC"></canvas></div>
+        <div class="controls" id="treeChips" role="group" aria-label="Modo de colocación"></div>
+        <dl>
+          <dt>Mecanismo</dt><dd>La CDF en 2D: una tabla para elegir fila (marginal) y otra por fila para elegir columna (condicional). Cada árbol cuesta dos búsquedas binarias.</dd>
+          <dt>Uso</dt><dd>Árboles, aldeas o recursos donde la humedad, la altura o el bioma lo pidan. La CDF decide <i>dónde</i>; Bridson o la prioridad con hash de tu parte 6 deciden <i>a qué distancia</i>.</dd>
+        </dl>
+        <p class="src">web/claudiobustamante-site/Documentation~/research/points-2d-results.md deja abierto «variable r (density maps by biome)». Ojo: semilla y hash, no random_device como kavan.</p>
+      </article>
+
+      <article class="idea">
+        <div class="head"><h3><span class="letter">C</span> Islas con forma de orbital</h3><span class="pill spec">propuesta</span></div>
+        <div class="thumbs" id="shapeThumbs"></div>
+        <dl>
+          <dt>Mecanismo</dt><dd>Forma = perfil radial × armónico angular, como R(r)·Y(θ,φ). El número m da lóbulos: penínsulas y bahías. Un nodo radial, como el del 2s, da un anillo: un atolón con su laguna.</dd>
+          <dt>En Islands hoy</dt><dd><code>IslandShapeMode.Ellipse</code> es caída radial con smoothstep más domain warp. Un modo «Armónico» serían dos parámetros más: m y amplitud.</dd>
+        </dl>
+        <p class="src">Islands/Runtime/PCG/Layout/Maps/IslandShapeMode.cs</p>
+      </article>
+
+      <article class="idea">
+        <div class="head"><h3><span class="letter">D</span> Bucles que cierran</h3><span class="pill spec">propuesta</span></div>
+        <div class="two" id="ringTwo"></div>
+        <dl>
+          <dt>Mecanismo</dt><dd>El de la onda de Bohr: lo que da la vuelta tiene que empalmar. Recorrer el ángulo con ruido 1D deja una costura; muestrear ruido 2D sobre un círculo cierra siempre.</dd>
+          <dt>Uso</dt><dd>Costas de islas redondas, animaciones en bucle para el visualizador de ruido, tiles periódicos (frecuencia entera por periodo).</dd>
+        </dl>
+      </article>
+
+      <article class="idea">
+        <div class="head"><h3><span class="letter">E</span> Mover sin amontonar</h3><span class="pill ok">conexión comprobada</span></div>
+        <dl>
+          <dt>Mecanismo</dt><dd>La corriente de probabilidad es un flujo sin divergencia: mueve los puntos y la densidad no cambia. El ruido curl hace lo mismo con cualquier campo.</dd>
+          <dt>En Islands hoy</dt><dd>Islands.Noise ya tiene flujo curl (<code>isCurl</code> en <code>FlowJob.cs</code>). Falta usarlo para mover cosas en el mapa.</dd>
+          <dt>Uso</dt><dd>Niebla, corrientes del mar, hojas, cardúmenes o nubes que se mueven sin juntarse en un punto ni dejar huecos.</dd>
+        </dl>
+        <p class="src">Islands/Runtime/Surfaces/FlowJob.cs · Bridson, Hourihan y Nordenstam, «Curl-Noise for Procedural Fluid Flow», SIGGRAPH 2007</p>
+      </article>
+
+      <article class="idea">
+        <div class="head"><h3><span class="letter">F</span> Una página de Islands Lab</h3><span class="pill spec">propuesta</span></div>
+        <dl>
+          <dt>Qué</dt><dd>«Muestrear una densidad»: rechazo, CDF inversa y método alias, comparados como hiciste con los puntos en 1D y 2D. El fallo del script de Python sirve de ejemplo de qué pasa si olvidas el r².</dd>
+          <dt>Y el método del video</dt><dd>Su estructura (construir el modelo equivocado y corregirlo paso a paso) es la de tu escena didáctica en modo clase: un paso cada vez, con su explicación y su pregunta.</dd>
+        </dl>
+        <p class="src">Serie en web/claudiobustamante-site/src/data/islands-techniques.js; siguiente parte prevista: Voronoi.</p>
+      </article>
+
+    </div>
+  </div>
+</section>
+
+<!-- 11 · Te cuestiono -->
+<section class="slide" id="cuestiono" data-title="Te cuestiono">
+  <div class="wrap">
+    <div class="text">
+      <div class="eyebrow">Te cuestiono</div>
+      <h2>Lo que el video no dice</h2>
+      <ul class="clean">
+        <li><b>El script de Python del repo está sesgado.</b> <code>schrodinger.py</code> propone r con una exponencial y θ uniforme, y acepta con |ψ|²/máximo. No divide por la propuesta ni pone r² sin θ, y el máximo crece mientras muestrea, así que los primeros puntos salen de más. El C++, en cambio, lo hace bien.</li>
+        <li><b>Es solo hidrógeno.</b> Un electrón tiene solución exacta; con dos o más ya no, y hay que aproximar (Hartree-Fock, DFT).</li>
+        <li><b>El color es estética.</b> El brillo se escala a ojo (<code>intensity * 1.5 * pow(5, n)</code>).</li>
+        <li><b>No es determinista.</b> Usa <code>random_device</code>: cada ejecución da otra nube. Para Islands, semilla y hash siempre.</li>
+      </ul>
+    </div>
+    <div class="text">
+      <div class="eyebrow">Foco</div>
+      <p>Tu frente ahora es Islands.Noise, con la escena didáctica del ruido como siguiente paso. La idea <b>A</b> cabe dentro de esa escena; las demás, a tangentes. ALWTTT sigue en pausa y se retoma con S1.</p>
+      <div class="eyebrow" style="margin-top: 12px">Para profundizar</div>
+      <ul class="clean src">
+        <li>Griffiths y Schroeter, <i>Introduction to Quantum Mechanics</i>, 3.ª ed. (2018), cap. 4: el átomo de hidrógeno.</li>
+        <li>Luc Devroye, <i>Non-Uniform Random Variate Generation</i> (Springer, 1986), cap. 2: el método de inversión. Libre en la web del autor.</li>
+        <li>Michael Vose, «A linear algorithm for generating random numbers with a given distribution», <i>IEEE Trans. Software Eng.</i> (1991): el método alias.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<script>
+(() => {
+'use strict';
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const C = { fire: css('--fire'), rose: css('--rose'), cyan: css('--cyan'), fg: css('--fg'), muted: css('--muted'), line: css('--line'), ink: css('--ink'), panel: css('--panel'), land: css('--land') };
+const fmt = (x, d = 2) => x.toFixed(d).replace('.', ',');
+
+// ---------- RNG determinista ----------
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// ---------- Física del hidrógeno (mismas fórmulas que atom_realtime.cpp, unidades de a0) ----------
+const fact = n => { let f = 1; for (let i = 2; i <= n; i++) f *= i; return f; };
+function laguerre(k, a, x) {
+  if (k === 0) return 1;
+  let Lm2 = 1, Lm1 = 1 + a - x; if (k === 1) return Lm1;
+  let L = Lm1;
+  for (let j = 2; j <= k; j++) { L = ((2 * j - 1 + a - x) * Lm1 - (j - 1 + a) * Lm2) / j; Lm2 = Lm1; Lm1 = L; }
+  return L;
+}
+function Rnl(n, l, r) {
+  const rho = 2 * r / n;
+  const norm = Math.sqrt(Math.pow(2 / n, 3) * fact(n - l - 1) / (2 * n * fact(n + l)));
+  return norm * Math.exp(-rho / 2) * Math.pow(rho, l) * laguerre(n - l - 1, 2 * l + 1, rho);
+}
+function Plm(l, m, x) {
+  m = Math.abs(m);
+  let pmm = 1;
+  if (m > 0) { const s = Math.sqrt((1 - x) * (1 + x)); let f = 1; for (let j = 1; j <= m; j++) { pmm *= -f * s; f += 2; } }
+  if (l === m) return pmm;
+  let pm1 = x * (2 * m + 1) * pmm;
+  if (l === m + 1) return pm1;
+  for (let ll = m + 2; ll <= l; ll++) { const p = ((2 * ll - 1) * x * pm1 - (ll + m - 1) * pmm) / (ll - m); pmm = pm1; pm1 = p; }
+  return pm1;
+}
+function buildCDF(pdf, N, max) {
+  const c = new Float64Array(N); let s = 0;
+  for (let i = 0; i < N; i++) { s += Math.max(0, pdf(i * max / (N - 1))); c[i] = s; }
+  for (let i = 0; i < N; i++) c[i] /= s;
+  return c;
+}
+function lowerBound(c, u) { let lo = 0, hi = c.length - 1; while (lo < hi) { const mid = (lo + hi) >> 1; if (c[mid] < u) lo = mid + 1; else hi = mid; } return lo; }
+function quantile(c, max, q) { return lowerBound(c, q) * max / (c.length - 1); }
+
+const orbCache = new Map();
+function orbital(n, l, m, N, seed = 7) {
+  const key = [n, l, m, N, seed].join(',');
+  if (orbCache.has(key)) return orbCache.get(key);
+  const rng = mulberry32(seed + n * 131 + l * 17 + m);
+  const rMax = 10 * n * n, NR = 4096, NT = 2048;
+  const cr = buildCDF(r => r * r * Rnl(n, l, r) ** 2, NR, rMax);
+  const ct = buildCDF(t => Math.sin(t) * Plm(l, m, Math.cos(t)) ** 2, NT, Math.PI);
+  const r = new Float32Array(N), th = new Float32Array(N), ph = new Float32Array(N), d = new Float32Array(N);
+  let dmax = 0;
+  for (let i = 0; i < N; i++) {
+    r[i] = (lowerBound(cr, rng()) + rng() - 0.5) * rMax / (NR - 1);
+    th[i] = Math.min(Math.PI, Math.max(0, (lowerBound(ct, rng()) + rng() - 0.5) * Math.PI / (NT - 1)));
+    ph[i] = 2 * Math.PI * rng();
+    d[i] = Rnl(n, l, r[i]) ** 2 * Plm(l, m, Math.cos(th[i])) ** 2;
+    if (d[i] > dmax) dmax = d[i];
+  }
+  const bins = 10, bin = new Uint8Array(N);
+  for (let i = 0; i < N; i++) bin[i] = Math.min(bins - 1, Math.floor(Math.pow(d[i] / dmax, 0.33) * bins));
+  const order = Array.from({ length: N }, (_, i) => i).sort((a, b) => bin[a] - bin[b]);
+  const o = { n, l, m, N, r, th, ph, bin, order, view: quantile(cr, rMax, 0.985) };
+  orbCache.set(key, o);
+  return o;
+}
+
+// Paleta de fuego
+const stops = [[0, [40, 10, 70]], [.3, [110, 28, 110]], [.55, [205, 50, 92]], [.75, [245, 110, 45]], [.9, [255, 196, 80]], [1, [255, 244, 214]]];
+function fire(t) {
+  t = Math.max(0, Math.min(1, t));
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [a, ca] = stops[i], [b, cb] = stops[i + 1];
+    if (t <= b) { const k = (t - a) / (b - a); return ca.map((v, j) => Math.round(v + k * (cb[j] - v))); }
+  }
+  return stops[stops.length - 1][1];
+}
+const firePal = Array.from({ length: 10 }, (_, i) => { const [r, g, b] = fire((i + .5) / 10); return `rgb(${r},${g},${b})`; });
+
+// ---------- Infraestructura de canvas ----------
+function setup(canvas) {
+  const ctx = canvas.getContext('2d');
+  const s = { canvas, ctx, w: 0, h: 0, dpr: 1 };
+  s.resize = () => {
+    const rect = canvas.getBoundingClientRect();
+    s.dpr = Math.min(2, window.devicePixelRatio || 1);
+    s.w = Math.max(1, rect.width); s.h = Math.max(1, rect.height);
+    canvas.width = Math.round(s.w * s.dpr); canvas.height = Math.round(s.h * s.dpr);
+    ctx.setTransform(s.dpr, 0, 0, s.dpr, 0, 0);
+  };
+  s.resize();
+  return s;
+}
+const demos = [];
+function demo(el, frame, opts = {}) {
+  const s = setup(el);
+  const d = { s, frame, visible: false, t0: performance.now(), anim: opts.anim !== false };
+  demos.push(d);
+  new IntersectionObserver(es => es.forEach(e => d.visible = e.isIntersecting), { threshold: 0.05 }).observe(el);
+  frame(s, reduce ? 3 : 0, 0.016, true);
+  return d;
+}
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!reduce) for (const d of demos) if (d.visible && d.anim) d.frame(d.s, (now - d.t0) / 1000, dt, false);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+let rz;
+addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => demos.forEach(d => { d.s.resize(); d.frame(d.s, reduce ? 3 : (performance.now() - d.t0) / 1000, 0.016, true); }), 120); });
+
+function chips(container, items, initial, onPick) {
+  const btns = items.map((it, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = it.label;
+    b.setAttribute('aria-pressed', i === initial ? 'true' : 'false');
+    b.addEventListener('click', () => { btns.forEach(x => x.setAttribute('aria-pressed', 'false')); b.setAttribute('aria-pressed', 'true'); onPick(it, i); });
+    container.appendChild(b); return b;
+  });
+  return btns;
+}
+
+// ---------- Nube 3D (portada) ----------
+function drawCloud3D(s, o, yaw, pitch, phase, flowK) {
+  const { ctx, w, h } = s;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = C.ink; ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'lighter';
+  const sc = Math.min(w, h) * 0.47 / o.view, cx = w / 2, cy = h / 2;
+  const cyw = Math.cos(yaw), syw = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const size = Math.max(1.1, Math.min(w, h) / 380);
+  ctx.globalAlpha = 0.6;
+  let cur = -1;
+  for (let k = 0; k < o.N; k++) {
+    const i = o.order[k];
+    if (o.bin[i] !== cur) { cur = o.bin[i]; ctx.fillStyle = firePal[cur]; }
+    const st = Math.sin(o.th[i]), r = o.r[i];
+    const phi = o.ph[i] + phase[i];
+    const x = r * st * Math.cos(phi), y = r * Math.cos(o.th[i]), z = r * st * Math.sin(phi);
+    const x1 = x * cyw + z * syw, z1 = -x * syw + z * cyw;
+    const y2 = y * cp - z1 * sp;
+    ctx.fillRect(cx + x1 * sc, cy - y2 * sc, size, size);
+  }
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
+{
+  const small = innerWidth < 640;
+  const N = small ? 9000 : 16000;
+  const list = [
+    { label: '1s', n: 1, l: 0, m: 0 }, { label: '2p m=1', n: 2, l: 1, m: 1 }, { label: '3d m=0', n: 3, l: 2, m: 0 },
+    { label: '3d m=1', n: 3, l: 2, m: 1 }, { label: '4d m=2', n: 4, l: 2, m: 2 }, { label: '4f m=1', n: 4, l: 3, m: 1 }
+  ];
+  let cur = list[3], o = orbital(cur.n, cur.l, cur.m, N), phase = new Float32Array(N);
+  const tag = document.getElementById('heroTag');
+  const setTag = () => tag.textContent = `${cur.label.split(' ')[0]} · n=${cur.n} l=${cur.l} m=${cur.m}${cur.m ? ' · gira' : ' · quieto'}`;
+  setTag();
+  // ω = m / ρ² en unidades atómicas; escalado para que a ρ ≈ n² gire ~0,6 rad/s
+  const step = (dt) => {
+    if (o.m === 0) return;
+    const n2 = o.n * o.n, eps = 0.12 * n2;
+    for (let i = 0; i < o.N; i++) {
+      const rho = Math.max(eps, o.r[i] * Math.sin(o.th[i]));
+      phase[i] += Math.min(0.2, 0.6 * o.m * (n2 * n2) / (rho * rho) * dt);
+    }
+  };
+  const d = demo(document.getElementById('hero'), (s, t, dt) => {
+    step(dt);
+    drawCloud3D(s, o, t * 0.18 + 0.6, 0.38, phase);
+  });
+  chips(document.getElementById('heroChips'), list, 3, it => {
+    cur = it; o = orbital(it.n, it.l, it.m, N); phase = new Float32Array(N); setTag();
+    if (reduce) d.frame(d.s, 3, 0, true);
+  });
+}
+
+// ---------- Bohr ----------
+{
+  const tag = document.getElementById('bohrTag');
+  demo(document.getElementById('bohrC'), (s, t) => {
+    const { ctx, w, h } = s, cx = w / 2, cy = h / 2, R0 = Math.min(w, h) * 0.36;
+    ctx.fillStyle = C.ink; ctx.fillRect(0, 0, w, h);
+    const cyc = 7, u = (t % cyc);
+    const falling = u > 4.2;
+    const k = falling ? Math.min(1, (u - 4.2) / 2.2) : 0;
+    const R = R0 * (1 - k * 0.94);
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(cx, cy, R0, 0, Math.PI * 2); ctx.stroke();
+    // espiral recorrida
+    if (falling) {
+      ctx.strokeStyle = C.rose; ctx.globalAlpha = 0.6; ctx.beginPath();
+      for (let q = 0; q <= k; q += 0.004) { const a = (4.2 + q * 2.2) * 2.4 * (1 + q * 4); const rr = R0 * (1 - q * 0.94); const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr; q === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+      ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    const ang = falling ? (u) * 2.4 * (1 + k * 4) : u * 2.4;
+    const ex = cx + Math.cos(ang) * R, ey = cy + Math.sin(ang) * R;
+    // radiación
+    if (falling) {
+      for (let j = 0; j < 3; j++) {
+        const rr = ((t * 60 + j * 22) % 66);
+        ctx.strokeStyle = C.cyan; ctx.globalAlpha = Math.max(0, 1 - rr / 66) * 0.7; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(ex, ey, rr, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R0 * 0.16);
+    g.addColorStop(0, '#ffb07a'); g.addColorStop(1, C.rose);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, Math.max(10, R0 * 0.13), 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = C.cyan; ctx.beginPath(); ctx.arc(ex, ey, Math.max(4, R0 * 0.035), 0, Math.PI * 2); ctx.fill();
+    tag.textContent = falling ? 'física clásica: radia y cae' : 'órbita clásica';
+  });
+}
+
+// ---------- Niveles ----------
+{
+  demo(document.getElementById('levels'), (s, t) => {
+    const { ctx, w, h } = s;
+    ctx.fillStyle = C.ink; ctx.fillRect(0, 0, w, h);
+    const top = h * 0.1, bot = h * 0.88, left = w * 0.14, right = w * 0.62;
+    const yE = E => top + (bot - top) * (E / -13.6);
+    ctx.font = `500 ${Math.max(11, w / 46)}px "IBM Plex Mono", monospace`;
+    for (let n = 1; n <= 5; n++) {
+      const E = -13.6 / (n * n), y = yE(E) * 1;
+      ctx.strokeStyle = n <= 2 ? C.fg : C.line; ctx.lineWidth = n <= 2 ? 2 : 1.2;
+      ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+      ctx.fillStyle = C.muted; ctx.textAlign = 'right'; ctx.fillText(`n=${n}`, left - 10, y + 4);
+      if (n <= 3) { ctx.textAlign = 'left'; ctx.fillText(`${fmt(E, 2)} eV`, right + 10, y + 4); }
+    }
+    ctx.fillStyle = C.muted; ctx.textAlign = 'left'; ctx.fillText('0 eV (libre)', right + 10, top - 6 + 4);
+    const cyc = 6, u = t % cyc;
+    const y1 = yE(-13.6), y2 = yE(-3.4);
+    const ex = left + (right - left) * 0.45;
+    let ey = y1, label = 'n = 1 · en reposo';
+    // fotón entrante
+    const wig = (x0, x1, y, k, col) => {
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+      for (let x = x0; x <= x1; x += 2) { const yy = y + Math.sin((x - x0) / 7 + k) * 7; x === x0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy); }
+      ctx.stroke();
+    };
+    if (u < 1.6) {
+      const x = w + 10 - (w + 10 - ex) * (u / 1.6);
+      wig(x, Math.min(w, x + 70), y1, t * 12, '#b48cff');
+      label = 'llega un fotón de 10,2 eV';
+    } else if (u < 3.6) {
+      const k = Math.min(1, (u - 1.6) / 0.25); ey = y1 + (y2 - y1) * k; label = 'absorbido: sube a n = 2';
+    } else if (u < 5.6) {
+      const k = Math.min(1, (u - 3.6) / 0.25); ey = y2 + (y1 - y2) * k;
+      const x = ex - (ex + 80) * Math.max(0, (u - 3.7) / 1.9);
+      if (u > 3.7) wig(Math.max(0, x - 70), x, (y1 + y2) / 2, t * 12, '#b48cff');
+      label = 'baja y suelta el fotón';
+    }
+    ctx.fillStyle = C.cyan; ctx.beginPath(); ctx.arc(ex, ey, Math.max(5, w / 90), 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = C.fg; ctx.textAlign = 'left'; ctx.fillText(label, left, h - 12);
+  });
+}
+
+// ---------- Onda que cierra ----------
+{
+  const range = document.getElementById('kRange'), tag = document.getElementById('waveTag');
+  const d = demo(document.getElementById('wave'), (s, t) => {
+    const { ctx, w, h } = s, cx = w / 2, cy = h / 2, R0 = Math.min(w, h) * 0.32, A = R0 * 0.18;
+    const k = parseFloat(range.value);
+    ctx.fillStyle = C.ink; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.setLineDash([3, 5]); ctx.beginPath(); ctx.arc(cx, cy, R0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    const near = Math.abs(k - Math.round(k)) < 0.03;
+    const kk = near ? Math.round(k) : k;
+    const ph = reduce ? 0 : t * 1.6;
+    const pt = a => { const r = R0 + A * Math.sin(kk * a) * Math.cos(ph); return [cx + Math.cos(a - Math.PI / 2) * r, cy + Math.sin(a - Math.PI / 2) * r]; };
+    ctx.strokeStyle = near ? C.fire : C.fg; ctx.lineWidth = 2.4; ctx.beginPath();
+    for (let i = 0; i <= 720; i++) { const [x, y] = pt(i / 720 * Math.PI * 2); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke();
+    if (!near) {
+      const [x0, y0] = pt(0), [x1, y1] = pt(Math.PI * 2);
+      ctx.strokeStyle = C.rose; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.lineCap = 'butt';
+      ctx.fillStyle = C.rose; ctx.beginPath(); ctx.arc(x1, y1, 4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = '#ffb07a'; ctx.beginPath(); ctx.arc(cx, cy, Math.max(7, R0 * 0.08), 0, Math.PI * 2); ctx.fill();
+    tag.textContent = near ? `n = ${Math.round(k)} · cierra · E = ${fmt(-13.6 / (kk * kk), 2)} eV` : `${fmt(k, 2)} oscilaciones · no cierra`;
+  });
+  range.addEventListener('input', () => d.frame(d.s, (performance.now() - d.t0) / 1000, 0, true));
+  chips(document.getElementById('kChips'), [1, 2, 3, 4].map(n => ({ label: `n = ${n}`, n })), -1, it => { range.value = it.n; d.frame(d.s, (performance.now() - d.t0) / 1000, 0, true); });
+}
+
+// ---------- Nube que se acumula ----------
+{
+  const o = orbital(2, 1, 0, 6000, 3), tag = document.getElementById('cloudTag');
+  let shown = 0, lastT = 0;
+  const draw = (s, upto, clear) => {
+    const { ctx, w, h } = s, sc = Math.min(w, h) * 0.47 / o.view, cx = w / 2, cy = h / 2;
+    if (clear) { ctx.fillStyle = C.ink; ctx.fillRect(0, 0, w, h); }
+    const from = clear ? 0 : shown;
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.75;
+    const sz = Math.max(1.3, Math.min(w, h) / 320);
+    for (let i = from; i < upto; i++) {
+      const st = Math.sin(o.th[i]), x = o.r[i] * st * Math.cos(o.ph[i]), y = o.r[i] * Math.cos(o.th[i]);
+      ctx.fillStyle = firePal[o.bin[i]];
+      const big = upto < 40 ? 3 : 1;
+      ctx.fillRect(cx + x * sc, cy - y * sc, sz * big, sz * big);
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  };
+  demo(document.getElementById('cloud'), (s, t, dt, full) => {
+    if (reduce) { draw(s, o.N, true); tag.textContent = `mediciones: ${o.N.toLocaleString('es')}`; return; }
+    const cyc = 11, u = t % cyc;
+    const target = u > 9 ? o.N : Math.min(o.N, Math.floor(Math.pow(u / 9, 2.6) * o.N));
+    if (full || u < lastT) { shown = 0; draw(s, target, true); }
+    else if (target > shown) draw(s, target, false);
+    shown = target; lastT = u;
+    tag.textContent = `mediciones: ${shown.toLocaleString('es')}`;
+  });
+}
+
+// ---------- Perfil radial ----------
+{
+  const tag = document.getElementById('rTag');
+  const list = [[1, 0, '1s'], [2, 0, '2s'], [2, 1, '2p'], [3, 0, '3s'], [3, 1, '3p'], [3, 2, '3d'], [4, 0, '4s']].map(([n, l, label]) => ({ n, l, label }));
+  let cur = list[3];
+  const d = demo(document.getElementById('rplot'), (s) => {
+    const { ctx, w, h } = s, { n, l } = cur;
+    ctx.fillStyle = C.ink; ctx.fillRect(0, 0, w, h);
+    const rMax = Math.max(6, Math.ceil(n * n * 2.6 / 5) * 5);
+    const padL = 18, padR = 18, padT = 46, padB = 38, W = w - padL - padR, H = h - padT - padB;
+    const N = 600, ys = [];
+    let ymax = 0, rPeak = 0;
+    for (let i = 0; i <= N; i++) { const r = i / N * rMax, y = r * r * Rnl(n, l, r) ** 2; ys.push(y); if (y > ymax) { ymax = y; rPeak = r; } }
+    // ejes
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(padL, padT + H); ctx.lineTo(padL + W, padT + H); ctx.stroke();
+    ctx.font = `500 ${Math.max(10.5, w / 52)}px "IBM Plex Mono", monospace`; ctx.fillStyle = C.muted; ctx.textAlign = 'center';
+    const stepT = rMax <= 10 ? 2 : rMax <= 25 ? 5 : 10;
+    for (let r = 0; r <= rMax + 1e-6; r += stepT) { const x = padL + r / rMax * W; ctx.fillRect(x, padT + H, 1, 5); ctx.fillText(String(r), x, padT + H + 18); }
+    ctx.textAlign = 'right'; ctx.fillText('r (radios de Bohr, a₀)', padL + W, padT + H + 34 > h - 4 ? h - 4 : padT + H + 34);
+    // relleno
+    const grad = ctx.createLinearGradient(0, padT, 0, padT + H); grad.addColorStop(0, C.fire); grad.addColorStop(1, 'rgba(255,79,139,0.15)');
+    ctx.beginPath(); ctx.moveTo(padL, padT + H);
+    ys.forEach((y, i) => ctx.lineTo(padL + i / N * W, padT + H - y / ymax * H));
+    ctx.lineTo(padL + W, padT + H); ctx.closePath(); ctx.fillStyle = grad; ctx.globalAlpha = 0.55; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ys.forEach((y, i) => { const x = padL + i / N * W, yy = padT + H - y / ymax * H; i ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy); });
+    ctx.strokeStyle = C.fire; ctx.lineWidth = 2; ctx.stroke();
+    // nodos
+    const nodes = [];
+    for (let i = 2; i < N; i++) { const a = Rnl(n, l, (i - 1) / N * rMax), b = Rnl(n, l, i / N * rMax); if (a * b < 0) nodes.push((i - 0.5) / N * rMax); }
+    ctx.textAlign = 'center';
+    nodes.forEach(r => { const x = padL + r / rMax * W; ctx.strokeStyle = C.cyan; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + H); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = C.cyan; ctx.fillText('nodo', x, padT - 8); });
+    // pico
+    const xp = padL + rPeak / rMax * W; ctx.fillStyle = C.fg; ctx.beginPath(); ctx.arc(xp, padT, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.textAlign = xp > w * 0.7 ? 'right' : 'left'; ctx.fillText(`máximo en ${fmt(rPeak, 1)} a₀`, xp + (xp > w * 0.7 ? -8 : 8), padT - 8 + (nodes.length ? 18 : 0));
+    tag.textContent = `${cur.label} · r²R² · ${nodes.length} ${nodes.length === 1 ? 'nodo' : 'nodos'}`;
+  }, { anim: false });
+  chips(document.getElementById('rChips'), list, 3, it => { cur = it; d.frame(d.s, 0, 0, true); });
+}
+
+// ---------- Muestreo por CDF ----------
+{
+  const n = 2, l = 0, rMax = 16, N = 400;
+  const pdf = new Float64Array(N + 1); let pmax = 0;
+  for (let i = 0; i <= N; i++) { const r = i / N * rMax; pdf[i] = r * r * Rnl(n, l, r) ** 2; pmax = Math.max(pmax, pdf[i]); }
+  const cdf = buildCDF(r => r * r * Rnl(n, l, r) ** 2, N + 1, rMax);
+  const BINS = 48, hist = new Uint32Array(BINS); let total = 0;
+  const rng = mulberry32(42);
+  let lastU = null, lastR = null, lastThrow = 0;
+  const tag = document.getElementById('cdfTag');
+  const throwOne = () => { const u = rng(); const r = lowerBound(cdf, u) / N * rMax; hist[Math.min(BINS - 1, Math.floor(r / rMax * BINS))]++; total++; lastU = u; lastR = r; };
+  const d = demo(document.getElementById('cdfC'), (s, t, dt, full) => {
+    if (!full && !reduce && t - lastThrow > 0.14) { throwOne(); lastThrow = t; if (total > 3000) { hist.fill(0); total = 0; } }
+    const { ctx, w, h } = s;
+    ctx.fillStyle = C.ink; ctx.fillRect(0, 0, w, h);
+    const padL = 34, padR = 14, W = w - padL - padR;
+    const aT = 34, aH = h * 0.36, bT = aT + aH + 34, bH = h - bT - 26;
+    ctx.font = `500 ${Math.max(10.5, w / 54)}px "IBM Plex Mono", monospace`;
+    // panel A: pdf + histograma
+    ctx.fillStyle = C.muted; ctx.textAlign = 'left'; ctx.fillText('probabilidad (pdf) y puntos sorteados', padL, aT - 12);
+    const binW = rMax / BINS;
+    const hScale = total ? (1 / (total * binW)) : 0; // densidad empírica
+    const pdfNorm = (() => { let s2 = 0; for (let i = 0; i <= N; i++) s2 += pdf[i]; return s2 * (rMax / N); })();
+    const ytop = pmax / pdfNorm * 1.15;
+    for (let b = 0; b < BINS; b++) {
+      const dens = hist[b] * hScale; const x = padL + b / BINS * W, bw = W / BINS - 1;
+      const hh = Math.min(aH, dens / ytop * aH);
+      ctx.fillStyle = 'rgba(111,214,255,0.55)'; ctx.fillRect(x, aT + aH - hh, bw, hh);
+    }
+    ctx.beginPath(); for (let i = 0; i <= N; i++) { const x = padL + i / N * W, y = aT + aH - (pdf[i] / pdfNorm) / ytop * aH; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.strokeStyle = C.fire; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(padL, aT + aH); ctx.lineTo(padL + W, aT + aH); ctx.stroke();
+    // panel B: CDF
+    ctx.fillStyle = C.muted; ctx.fillText('acumulada (CDF)', padL, bT - 12);
+    ctx.strokeStyle = C.line; ctx.beginPath(); ctx.moveTo(padL, bT); ctx.lineTo(padL, bT + bH); ctx.lineTo(padL + W, bT + bH); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.fillText('1', padL - 8, bT + 4); ctx.fillText('0', padL - 8, bT + bH + 4);
+    ctx.beginPath(); for (let i = 0; i <= N; i++) { const x = padL + i / N * W, y = bT + bH - cdf[i] * bH; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.strokeStyle = C.fg; ctx.lineWidth = 2; ctx.stroke();
+    ctx.textAlign = 'center'; ctx.fillStyle = C.muted;
+    for (let r = 0; r <= rMax; r += 4) { const x = padL + r / rMax * W; ctx.fillText(String(r), x, bT + bH + 18); }
+    if (lastU !== null) {
+      const yU = bT + bH - lastU * bH, xR = padL + lastR / rMax * W;
+      ctx.strokeStyle = C.rose; ctx.lineWidth = 1.6; ctx.setLineDash([5, 4]);
+      ctx.beginPath(); ctx.moveTo(padL, yU); ctx.lineTo(xR, yU); ctx.lineTo(xR, aT + aH); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = C.rose; ctx.beginPath(); ctx.arc(padL, yU, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(xR, aT + aH, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.textAlign = 'left'; ctx.fillText(`u = ${fmt(lastU, 2)}`, padL + 6, yU - 6);
+    }
+    tag.textContent = `sorteos: ${total.toLocaleString('es')}`;
+  });
+  if (reduce) { for (let i = 0; i < 1500; i++) throwOne(); d.frame(d.s, 0, 0, true); }
+  document.getElementById('cdfMany').addEventListener('click', () => { for (let i = 0; i < 500; i++) throwOne(); d.frame(d.s, 0, 0, true); });
+  document.getElementById('cdfReset').addEventListener('click', () => { hist.fill(0); total = 0; lastU = null; d.frame(d.s, 0, 0, true); });
+}
+
+// ---------- Corriente de probabilidad (vista cenital) ----------
+{
+  const small = innerWidth < 640, N = small ? 4000 : 7000;
+  const list = [{ label: 'm = 0', m: 0 }, { label: 'm = 1', m: 1 }, { label: 'm = 2', m: 2 }];
+  let cur = list[2], o = orbital(3, 2, cur.m, N, 11), phase = new Float32Array(N);
+  const tag = document.getElementById('flowTag');
+  const setTag = () => tag.textContent = `3d · m = ${cur.m}${cur.m ? ' · gira' : ' · quieto'}`;
+  setTag();
+  const d = demo(document.getElementById('flow'), (s, t, dt, full) => {
+    const { ctx, w, h } = s;
+    if (o.m) {
+      const n2 = 9, eps = 0.12 * n2;
+      for (let i = 0; i < N; i++) { const rho = Math.max(eps, o.r[i] * Math.sin(o.th[i])); phase[i] += Math.min(0.2, 0.6 * o.m * 81 / (rho * rho) * dt); }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = full ? C.ink : 'rgba(14,10,24,0.22)'; ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.6;
+    const sc = Math.min(w, h) * 0.47 / o.view, cx = w / 2, cy = h / 2, sz = Math.max(1.2, Math.min(w, h) / 360);
+    let curB = -1;
+    for (let k = 0; k < N; k++) {
+      const i = o.order[k];
+      if (o.bin[i] !== curB) { curB = o.bin[i]; ctx.fillStyle = firePal[curB]; }
+      const rho = o.r[i] * Math.sin(o.th[i]), ph = o.ph[i] + phase[i];
+      ctx.fillRect(cx + rho * Math.cos(ph) * sc, cy + rho * Math.sin(ph) * sc, sz, sz);
+    }
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  });
+  chips(document.getElementById('flowChips'), list, 2, it => { cur = it; o = orbital(3, 2, it.m, N, 11); phase = new Float32Array(N); setTag(); d.frame(d.s, 0, 0, true); });
+}
+
+// ---------- Galería de cortes ----------
+{
+  const grid = document.getElementById('ogrid');
+  const list = [[1, 0, 0, '1s'], [2, 0, 0, '2s'], [2, 1, 0, '2p'], [2, 1, 1, '2p'], [3, 0, 0, '3s'], [3, 2, 0, '3d'], [3, 2, 1, '3d'], [3, 2, 2, '3d'], [4, 3, 1, '4f']];
+  const S = 150;
+  list.forEach(([n, l, m, name]) => {
+    const fig = document.createElement('figure');
+    const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+    const cap = document.createElement('figcaption'); cap.innerHTML = `<b>${name}</b> · n=${n} l=${l} m=${m === 0 ? 0 : '±' + m}`;
+    fig.append(cv, cap); grid.appendChild(fig);
+    const rMax = 10 * n * n;
+    const cr = buildCDF(r => r * r * Rnl(n, l, r) ** 2, 2048, rMax);
+    const ext = quantile(cr, rMax, 0.97);
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(S, S);
+    const vals = new Float32Array(S * S); let vmax = 0;
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const x = (i + 0.5) / S * 2 - 1, y = 1 - (j + 0.5) / S * 2;
+      const X = x * ext, Y = y * ext, r = Math.hypot(X, Y) + 1e-9;
+      const v = Rnl(n, l, r) ** 2 * Plm(l, m, Y / r) ** 2;
+      vals[j * S + i] = v; if (v > vmax) vmax = v;
+    }
+    for (let p = 0; p < S * S; p++) { const [r, g, b] = fire(Math.pow(vals[p] / vmax, 0.42)); const q = Math.pow(vals[p] / vmax, 0.42); img.data[p * 4] = r * Math.min(1, q * 3); img.data[p * 4 + 1] = g * Math.min(1, q * 3); img.data[p * 4 + 2] = b * Math.min(1, q * 3); img.data[p * 4 + 3] = 255; }
+    ctx.putImageData(img, 0, 0);
+  });
+}
+
+// ---------- Ruido de valor con semilla (para los mapas de prueba) ----------
+function hash2(x, y, s) { let h = Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+const fade = t => t * t * (3 - 2 * t);
+function vnoise(x, y, s) { const xi = Math.floor(x), yi = Math.floor(y), fx = fade(x - xi), fy = fade(y - yi); const a = hash2(xi, yi, s), b = hash2(xi + 1, yi, s), c = hash2(xi, yi + 1, s), d = hash2(xi + 1, yi + 1, s); return (a + (b - a) * fx) + ((c + (d - c) * fx) - (a + (b - a) * fx)) * fy; }
+function fbm(x, y, s, oct = 5) { let v = 0, amp = 1, f = 1, norm = 0; for (let o = 0; o < oct; o++) { v += amp * vnoise(x * f, y * f, s + o * 101); norm += amp; amp *= 0.5; f *= 2; } return v / norm; }
+
+// Mapa compartido para A y B
+const MAPW = 200, MAPH = 100;
+const height = new Float32Array(MAPW * MAPH);
+for (let j = 0; j < MAPH; j++) for (let i = 0; i < MAPW; i++) {
+  const u = i / MAPW, v = j / MAPH;
+  const dx = (u - 0.5) * 2, dy = (v - 0.5) * 2 * (MAPH / MAPW) * 2;
+  const fall = Math.max(0, 1 - Math.hypot(dx * 0.85, dy * 0.85));
+  height[j * MAPW + i] = fbm(u * 6, v * 3, 5) * 0.62 + fall * 0.42 - 0.04;
+}
+const sortedH = Float32Array.from(height).sort();
+let seaThr = 0.5;
+function paintMap(ctx, thr) {
+  const img = ctx.createImageData(MAPW, MAPH);
+  for (let p = 0; p < MAPW * MAPH; p++) {
+    const hgt = height[p]; let r, g, b;
+    if (hgt < thr) { const k = Math.max(0, Math.min(1, (thr - hgt) / 0.25)); r = 20 - 10 * k; g = 70 - 40 * k; b = 110 - 40 * k; if (thr - hgt < 0.015) { r = 60; g = 130; b = 160; } }
+    else { const k = Math.max(0, Math.min(1, (hgt - thr) / 0.35)); r = 130 + 60 * k; g = 170 - 30 * k; b = 90 + 40 * k; if (k > 0.75) { r = 205; g = 200; b = 190; } if (hgt - thr < 0.012) { r = 214; g = 196; b = 140; } }
+    img.data[p * 4] = r; img.data[p * 4 + 1] = g; img.data[p * 4 + 2] = b; img.data[p * 4 + 3] = 255;
+  }
+  return img;
+}
+const off = document.createElement('canvas'); off.width = MAPW; off.height = MAPH; const offCtx = off.getContext('2d');
+function blitMap(s, thr) { offCtx.putImageData(paintMap(offCtx, thr), 0, 0); s.ctx.imageSmoothingEnabled = false; s.ctx.drawImage(off, 0, 0, s.w, s.h); }
+
+let treeDemo = null;
+// A · nivel del mar
+{
+  const range = document.getElementById('seaRange');
+  const pctEl = document.getElementById('seaPct'), thrEl = document.getElementById('seaThr'), rawEl = document.getElementById('seaRaw');
+  let rawPct = 0; for (let k = 0; k < sortedH.length; k++) if (sortedH[k] < 0.5) rawPct++; rawPct = rawPct / sortedH.length * 100;
+  rawEl.textContent = `${Math.round(rawPct)} %`;
+  const d = demo(document.getElementById('seaC'), (s) => {
+    const p = parseInt(range.value, 10) / 100;
+    seaThr = sortedH[Math.min(sortedH.length - 1, Math.floor(p * sortedH.length))];
+    blitMap(s, seaThr);
+    // histograma superpuesto
+    const { ctx, w, h } = s, B = 40, hs = new Uint32Array(B); let lo = sortedH[0], hi = sortedH[sortedH.length - 1];
+    for (const v of sortedH) hs[Math.min(B - 1, Math.floor((v - lo) / (hi - lo) * B))]++;
+    const mx = Math.max(...hs), bx = w * 0.62, bw = w * 0.34, by = h * 0.08, bh = h * 0.3;
+    ctx.fillStyle = 'rgba(14,10,24,0.72)'; ctx.fillRect(bx - 8, by - 6, bw + 16, bh + 22);
+    for (let b = 0; b < B; b++) { const v = lo + (b + 0.5) / B * (hi - lo); ctx.fillStyle = v < seaThr ? '#3d8fb5' : '#9cc47a'; const hh = hs[b] / mx * bh; ctx.fillRect(bx + b / B * bw, by + bh - hh, bw / B - 0.5, hh); }
+    const xt = bx + (seaThr - lo) / (hi - lo) * bw; ctx.fillStyle = C.rose; ctx.fillRect(xt - 1, by - 2, 2, bh + 4);
+    ctx.font = '500 10.5px "IBM Plex Mono", monospace'; ctx.fillStyle = C.fg; ctx.textAlign = 'left'; ctx.fillText('alturas', bx, by + bh + 13);
+    pctEl.textContent = `${Math.round(p * 100)} %`; thrEl.textContent = fmt(seaThr, 3);
+  }, { anim: false });
+  range.addEventListener('input', () => { d.frame(d.s, 0, 0, true); if (treeDemo) treeDemo.frame(treeDemo.s, 0, 0, true); });
+}
+// B · colocar por densidad
+{
+  const list = [{ label: 'Uniforme en tierra', mode: 'u' }, { label: 'CDF 2D por densidad', mode: 'c' }];
+  let mode = 'c';
+  const COUNT = 520;
+  treeDemo = demo(document.getElementById('treeC'), (s) => {
+    blitMap(s, seaThr);
+    const rng = mulberry32(2026);
+    // densidad: tierra, con pico a media altura (bosque en laderas, ni costa ni cumbres)
+    const dens = new Float64Array(MAPW * MAPH);
+    for (let p = 0; p < dens.length; p++) { const e = (height[p] - seaThr) / 0.35; dens[p] = e <= 0 ? 0 : (mode === 'u' ? 1 : Math.exp(-((e - 0.35) ** 2) / 0.012)); }
+    const rowSum = new Float64Array(MAPH), rowC = [];
+    for (let j = 0; j < MAPH; j++) { const c = new Float64Array(MAPW); let sum = 0; for (let i = 0; i < MAPW; i++) { sum += dens[j * MAPW + i]; c[i] = sum; } if (sum > 0) for (let i = 0; i < MAPW; i++) c[i] /= sum; rowC.push(c); rowSum[j] = sum; }
+    const marg = new Float64Array(MAPH); let tot = 0; for (let j = 0; j < MAPH; j++) { tot += rowSum[j]; marg[j] = tot; } for (let j = 0; j < MAPH; j++) marg[j] /= tot;
+    const { ctx, w, h } = s, sx = w / MAPW, sy = h / MAPH;
+    ctx.fillStyle = '#1f3d1c';
+    for (let k = 0; k < COUNT; k++) {
+      const j = lowerBound(marg, rng()), i = lowerBound(rowC[j], rng());
+      const x = (i + rng()) * sx, y = (j + rng()) * sy;
+      ctx.beginPath(); ctx.arc(x, y, Math.max(1.6, w / 260), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.font = '500 11px "IBM Plex Mono", monospace'; ctx.fillStyle = 'rgba(14,10,24,0.72)'; ctx.fillRect(8, 8, 190, 22); ctx.fillStyle = C.fg; ctx.textAlign = 'left';
+    ctx.fillText(mode === 'u' ? `${COUNT} árboles, sin preferencia` : `${COUNT} árboles en laderas medias`, 14, 23);
+  }, { anim: false });
+  chips(document.getElementById('treeChips'), list, 1, it => { mode = it.mode; treeDemo.frame(treeDemo.s, 0, 0, true); });
+}
+// C · islas armónicas
+{
+  const wrap = document.getElementById('shapeThumbs');
+  const shapes = [
+    { cap: 'm = 0 · como Ellipse', f: (r, a) => 1 - r / 0.72 },
+    { cap: 'm = 2', f: (r, a) => 1 - r / (0.66 * (1 + 0.32 * Math.cos(2 * a))) },
+    { cap: 'm = 3', f: (r, a) => 1 - r / (0.62 * (1 + 0.34 * Math.cos(3 * a + 0.4))) },
+    { cap: 'm = 5', f: (r, a) => 1 - r / (0.62 * (1 + 0.26 * Math.cos(5 * a))) },
+    { cap: 'nodo radial · atolón', f: (r, a) => Math.exp(-((r - 0.55) ** 2) / 0.012) * 1.6 - 0.6 }
+  ];
+  const S = 110;
+  shapes.forEach((sh, idx) => {
+    const fig = document.createElement('figure'), cv = document.createElement('canvas'), cap = document.createElement('figcaption');
+    cv.width = S; cv.height = S; cap.textContent = sh.cap; fig.append(cv, cap); wrap.appendChild(fig);
+    const ctx = cv.getContext('2d'), img = ctx.createImageData(S, S);
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const x = (i + .5) / S * 2 - 1, y = (j + .5) / S * 2 - 1;
+      const wx = x + (fbm(x * 2 + 7, y * 2, 77 + idx) - 0.5) * 0.28, wy = y + (fbm(x * 2, y * 2 + 3, 91 + idx) - 0.5) * 0.28;
+      const r = Math.hypot(wx, wy), a = Math.atan2(wy, wx);
+      const v = sh.f(r, a) * 0.8 + (fbm(x * 4, y * 4, 13 + idx) - 0.5) * 0.35;
+      const p = (j * S + i) * 4; let c;
+      if (v < 0) c = v > -0.06 ? [52, 120, 150] : [12, 38, 66]; else if (v < 0.05) c = [214, 196, 140]; else c = v > 0.5 ? [190, 190, 170] : [128, 168, 96];
+      img.data[p] = c[0]; img.data[p + 1] = c[1]; img.data[p + 2] = c[2]; img.data[p + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  });
+}
+// D · bucles que cierran
+{
+  const wrap = document.getElementById('ringTwo');
+  const S = 220;
+  const vn1 = (x, s) => { const xi = Math.floor(x), f = fade(x - xi), a = hash2(xi, 0, s), b = hash2(xi + 1, 0, s); return a + (b - a) * f; };
+  const fbm1 = (x, s) => { let v = 0, amp = 1, f = 1, nrm = 0; for (let o = 0; o < 4; o++) { v += amp * vn1(x * f, s + o * 31); nrm += amp; amp *= .5; f *= 2; } return v / nrm; };
+  [{ cap: 'ruido 1D sobre el ángulo · costura', mode: 0 }, { cap: 'ruido 2D sobre un círculo · cierra', mode: 1 }].forEach(({ cap, mode }) => {
+    const fig = document.createElement('figure'), cv = document.createElement('canvas'), fc = document.createElement('figcaption');
+    cv.width = S * 2; cv.height = S * 2; fc.textContent = cap; fig.append(cv, fc); wrap.appendChild(fig);
+    const ctx = cv.getContext('2d'); ctx.scale(2, 2);
+    ctx.fillStyle = '#0c2236'; ctx.fillRect(0, 0, S, S);
+    const cx = S / 2, cy = S / 2, R0 = S * 0.3, A = S * 0.22;
+    const rad = a => {
+      const n = mode === 0 ? fbm1(a / (Math.PI * 2) * 6.3, 5) : fbm(cx / S * 3 + Math.cos(a) * 1.0, cy / S * 3 + Math.sin(a) * 1.0, 5, 4);
+      return R0 + (n - 0.5) * 2 * A;
+    };
+    ctx.beginPath();
+    for (let i = 0; i <= 720; i++) { const a = i / 720 * Math.PI * 2 - 1e-6 * (i === 720 ? 1 : 0); const r = rad(a); const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.fillStyle = '#80a860'; ctx.fill(); ctx.strokeStyle = '#d6c48c'; ctx.lineWidth = 2; ctx.stroke();
+    if (mode === 0) {
+      const r0 = rad(0), r1 = rad(Math.PI * 2 - 1e-6);
+      ctx.strokeStyle = C.rose; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(cx + r0, cy); ctx.lineTo(cx + r1, cy); ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx + (r0 + r1) / 2, cy, 12, 0, Math.PI * 2); ctx.lineWidth = 1.5; ctx.stroke();
+    }
+  });
+}
+
+// ---------- Rail ----------
+{
+  const rail = document.getElementById('rail');
+  const slides = [...document.querySelectorAll('.slide')];
+  const dots = slides.map(sl => { const a = document.createElement('a'); a.href = '#' + sl.id; a.title = sl.dataset.title; a.setAttribute('aria-label', sl.dataset.title); rail.appendChild(a); return a; });
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { const i = slides.indexOf(e.target); dots.forEach((d, k) => d.classList.toggle('on', k === i)); } }), { threshold: 0.5 });
+  slides.forEach(s => io.observe(s));
+  dots[0].classList.add('on');
+}
+})();
+</script>

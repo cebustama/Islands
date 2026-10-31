@@ -29,6 +29,8 @@ Fecha: 2026-10-31. Rama: `main` (el arreglo del rango del ruido ya está fusiona
    simplex con `Perlin`, con `PerlinOnSimplex` y con `Simplex`, Voronoi), octavas, frecuencia,
    lacunaridad y ganancia; histograma en vivo (mín., máx., p1, p99); umbral de agua crudo
    frente a % de área. Pensada para pantalla vertical táctil, sin construir la app.
+   Idea relacionada (2026-10-31, investigación, no autoridad): fijar el agua por porcentaje con el cuantil
+   del mapa de alturas; ver `../../research/2026-10-31-hydrogen-cloud-sampling.md` (idea A).
 3. **Tests:** la escena es de sample y no lleva goldens; si se añade código de runtime para
    el histograma, decidir si lleva test.
 
