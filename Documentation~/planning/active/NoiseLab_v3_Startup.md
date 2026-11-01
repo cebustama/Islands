@@ -64,6 +64,29 @@ Fecha: 2026-11-01. Rama: `main`. Sigue a `planning/archive/NoiseLab_v2_Startup.m
 Orden de las capas según Inputs: núcleo 1 + 4 + 3; siguiente capa, splines (n.º 2) y nivel
 del mar con lagos y salares desde la profundidad del relleno (n.º 6); v4 o web, el resto.
 
+## Avance (2026-11-01, misma sesión)
+- **Decisiones de Claudio:** 1A (biomas + splines encadenados; el viento si alcanza), 2 sí, 3 sí,
+  4 sí, 5 no.
+- **Hecho y en commit:** campos 1–5 con seed `seed + k·7919` y caché por campo; pestaña Shape
+  (One noise / Splines, `altura = C(c) + E(e)·PV(pv)`, editor de curvas con histograma, Shade);
+  pestaña Climate (Bands / Biomes, fórmulas de `Stage_Biome2D` con rango en tierra y latitud por
+  la `y` del mundo, `BiomeTable.Lookup`, leyenda de Whittaker); Map → Show (mapa, altura,
+  temperatura, humedad, ruidos en crudo); claves `h`, `n1…n5`, `c`, `k`, `cl`, `sh`;
+  `targetFrameRate = 60`; referencia a `Islands.PCG.Runtime` en el asmdef. Suite 415/415.
+- **Probado por Claudio en el editor:** splines y biomas funcionan («me gusta mucho el resultado»).
+  Se vieron bordes de bioma rectos y diagonales: venían de la distancia chamfer (octógonos).
+  **Arreglado** con la distancia euclídea exacta (Felzenszwalb y Huttenlocher, 2012; comprobada
+  contra fuerza bruta, error 0). **Falta que Claudio lo vea.**
+- **Observación para `CURRENT_STATE` al cerrar:** `CoastDist` del pipeline es BFS de 4 vecinos
+  (contornos en rombo); con un decaimiento lento de la humedad, los biomas pueden seguir esos rombos.
+  Cambiarlo es un cambio gobernado (goldens).
+- **Medido de pasada:** 1.628 ms al soltar el arrastre con 5 campos a 256² en el editor (Mono).
+  El móvil, sin medir.
+- **Pendiente:** ver el arreglo; viento (una dirección, flecha en el mapa; la rejilla de flechas
+  solo si hay franjas de latitud); medir en el S22 con Perf; cierre (changelog, `CURRENT_STATE`).
+- **Explainers para la web:** prompt en
+  `web/claudiobustamante-site/Documentation~/planning/active/Splines_Biomes_Explainers_Startup.md`.
+
 ## Tarea
 La decide Claudio con la decisión 1. Reglas que siguen valiendo: CPU, determinista, misma
 seed ⇒ misma imagen, sin `UnityEngine.Random` en el ruido, y todos los cambios en el sample salvo

@@ -2,6 +2,7 @@
   "name": "Islands.Samples",
   "references": [
     "Islands.Runtime",
+    "Islands.PCG.Runtime",
     "Unity.TextMeshPro",
     "Unity.Mathematics",
     "Unity.Collections",
