@@ -1,0 +1,233 @@
+{
+  "about": "Palette library: colours collected from landscapes, artworks and the taste board. Only colours and their source, never the image. Add with tools/palettes/from-image.mjs or from <palette-select> (Copy JSON). Guide: Documentation~/reference/palette-library.md.",
+  "palettes": [
+    {
+      "id": "tablero-c",
+      "name": "Tablero (C)",
+      "kind": "taste",
+      "place": "",
+      "region": "",
+      "country": "",
+      "source": {
+        "by": "Claudio, tablero de gusto",
+        "url": "",
+        "date": "2026-10-27"
+      },
+      "tags": [
+        "apagado",
+        "tierra",
+        "araucaria"
+      ],
+      "note": "Bases de la paleta C de la araucaria, sacadas de las 37 imágenes elegidas.",
+      "colors": [
+        "#1b1a2e",
+        "#776959",
+        "#a38557",
+        "#709e68",
+        "#ccb277"
+      ]
+    },
+    {
+      "id": "moebius-agente",
+      "name": "Moebius (a la manera de)",
+      "kind": "artwork",
+      "place": "",
+      "region": "",
+      "country": "",
+      "source": {
+        "by": "El agente, a partir de la obra de Moebius",
+        "url": "",
+        "date": "2026-10-27"
+      },
+      "tags": [
+        "pastel",
+        "claro"
+      ],
+      "note": "Inventada a partir de su obra, no medida.",
+      "colors": [
+        "#2a2340",
+        "#c98a6b",
+        "#7fb5a3",
+        "#d9a65c",
+        "#f2d9a0"
+      ]
+    },
+    {
+      "id": "ghibli-agente",
+      "name": "Ghibli (a la manera de)",
+      "kind": "artwork",
+      "place": "",
+      "region": "",
+      "country": "",
+      "source": {
+        "by": "El agente, a partir de los fondos de Ghibli",
+        "url": "",
+        "date": "2026-10-27"
+      },
+      "tags": [
+        "verde",
+        "cálido"
+      ],
+      "note": "Inventada a partir de los fondos, no medida.",
+      "colors": [
+        "#1f2a24",
+        "#6e5240",
+        "#4f8f3a",
+        "#b0763a",
+        "#e8d27a"
+      ]
+    },
+    {
+      "id": "sur-colun",
+      "name": "Sur",
+      "kind": "landscape",
+      "place": "Sur de Chile",
+      "region": "",
+      "country": "CL",
+      "source": {
+        "by": "Colun (Instagram)",
+        "url": "",
+        "date": "2024-05-27"
+      },
+      "tags": [
+        "bosque",
+        "pradera",
+        "niebla",
+        "sur"
+      ],
+      "colors": [
+        "#001206",
+        "#00252b",
+        "#16321b",
+        "#558da6",
+        "#679801",
+        "#909447",
+        "#abcade",
+        "#e2dedf"
+      ]
+    },
+    {
+      "id": "torres-del-paine",
+      "name": "Torres del Paine",
+      "kind": "landscape",
+      "place": "Torres del Paine",
+      "region": "Magallanes",
+      "country": "CL",
+      "source": {
+        "by": "Arauco, Vesto (Instagram)",
+        "url": "",
+        "date": ""
+      },
+      "tags": [
+        "patagonia",
+        "lago",
+        "montaña"
+      ],
+      "colors": [
+        "#424b2c",
+        "#6a4f48",
+        "#287e8d",
+        "#d0bcb5"
+      ]
+    },
+    {
+      "id": "valle-de-la-luna",
+      "name": "Valle de la Luna",
+      "kind": "landscape",
+      "place": "Valle de la Luna, San Pedro de Atacama",
+      "region": "Antofagasta",
+      "country": "CL",
+      "source": {
+        "by": "Arauco, Vesto (Instagram)",
+        "url": "",
+        "date": ""
+      },
+      "aiImage": true,
+      "tags": [
+        "desierto",
+        "atacama"
+      ],
+      "colors": [
+        "#833f2a",
+        "#7e7472",
+        "#b96d53",
+        "#cdbdad"
+      ]
+    },
+    {
+      "id": "capillas-de-marmol",
+      "name": "Capillas de Mármol",
+      "kind": "landscape",
+      "place": "Capillas de Mármol, lago General Carrera",
+      "region": "Aysén",
+      "country": "CL",
+      "source": {
+        "by": "Arauco, Vesto (Instagram)",
+        "url": "",
+        "date": ""
+      },
+      "aiImage": true,
+      "tags": [
+        "patagonia",
+        "lago",
+        "roca"
+      ],
+      "colors": [
+        "#043543",
+        "#a0a7b1",
+        "#b3a99f",
+        "#aad6f3"
+      ]
+    },
+    {
+      "id": "altiplano",
+      "name": "Altiplano",
+      "kind": "landscape",
+      "place": "Altiplano",
+      "region": "",
+      "country": "CL",
+      "source": {
+        "by": "Captura sin fuente",
+        "url": "",
+        "date": ""
+      },
+      "tags": [
+        "altiplano",
+        "desierto",
+        "pajonal"
+      ],
+      "colors": [
+        "#564423",
+        "#762f17",
+        "#c78757",
+        "#b2937f",
+        "#cab05b",
+        "#d2c3a8"
+      ]
+    },
+    {
+      "id": "bryce-canyon",
+      "name": "Bryce Canyon",
+      "kind": "landscape",
+      "place": "Bryce Canyon, Utah",
+      "region": "",
+      "country": "US",
+      "source": {
+        "by": "Captura sin fuente",
+        "url": "",
+        "date": ""
+      },
+      "tags": [
+        "cañón",
+        "desierto"
+      ],
+      "colors": [
+        "#8f4135",
+        "#bf6449",
+        "#8eacc6",
+        "#db9f87",
+        "#f3f4f6"
+      ]
+    }
+  ]
+}
