@@ -31,13 +31,13 @@ Proposal from the orchestrating agent, 2026-11-01. **Nothing here is roadmapped*
 
 Tier 2 adds no phase-sized candidates. Changes to the table above:
 
-- **n.º 3 (CA operator) gains weight:** four independent sources now (Hofmann's tutorial is the clearest walkthrough). Seeded, double-buffered, fixed step count, largest-region keep via the existing flood fill. Do not copy the tutorial's unseeded `Random`.
+- **n.º 3 (CA operator) gains weight:** four independent sources now (Hofmann's tutorial is the clearest walkthrough). Seeded, double-buffered, fixed step count; needs a new Moore (8-neighbour) count (`MaskNeighborOps2D` is 4-only) and keep-largest via `MaskTopologyOps2D.LabelConnectedComponents4`. Expose the rule (birth/survive sets), since Hofmann's growth rule and Lague's smoothing rule give different caves. Do not copy the tutorial's unseeded `Random`.
 - **n.º 1 (validators):** consume `Walkable` from `Stage_Traversal2D`, which already exists.
-- **New, S:** **coast roughness metric** by box-counting, in `Inspection/`. Turns the exploratory «fractal coastline / fjord refinement» item in `CURRENT_STATE.md` into a measurable target (golden-testable number per seed). Rank it right after n.º 3.
+- **New, S:** **coast roughness metric** by box-counting, in `Inspection/`. Turns the exploratory «fractal coastline / fjord refinement» item in `CURRENT_STATE.md` into a measurable target (golden-testable number per seed). Rank it right after n.º 3. Full re-read: report the slope only over the scale range where it is stable; on 256² maps that is roughly 2–32 cells, so measure on a larger render or several map sizes.
 - **New, S–M:** **corner-based (dual-grid) tile selection** in the tilemap adapter, alongside the existing RuleTile slot. Adapter-side, golden-neutral for the core.
 - **New, S:** regional hilliness by multiplying two noises, as a `Stage_Hills2D` tunable (check first whether a mask noise already does this).
-- **n.º 8 (settlement) gains design rules:** Pixel Architect's urbanism rules (shops face streets, plazas enclosed by buildings, no blank façades, no tall objects hiding the player). Opinion, not a tested algorithm.
-- **Housekeeping, not code:** credit Sunny Valley Studio in the four dungeon layout files (relevant to the open-source tangent in `_comun/foco.md`, which already lists CatLikeCoding credits).
+- **n.º 8 (settlement) gains design rules:** Pixel Architect's 14 urbanism rules (full re-read, 1:50–3:05 and later): widest main route through the square linking activity nodes and map exits; no dead ends except at a point of interest; shops along streets; no blank façades or oversized plazas; tall objects must not hide the player (raise the ground, lower objects in between, set buildings into the slope); 2–3 storeys; organic edges. Opinion, not a tested algorithm, but usable as scoring terms.
+- **Housekeeping, not code:** credit Sunny Valley Studio in the four dungeon layout files (lineage confirmed via the archive snapshot of the legacy project) (relevant to the open-source tangent in `_comun/foco.md`, which already lists CatLikeCoding credits).
 
 Route elsewhere:
 - **Web (Labs):** logistic-map bifurcation page linked to the Mandelbrot scene (best fit for the emergence scene); CA playground with a rule slider (Rule 30/110 → Life); Euler vs RK4 light bending (kavan). Collatz coral for Flora Lab: low-medium.
@@ -63,3 +63,7 @@ Group C adds the first **climate and hydrology realism** candidates. Ranked addi
 Suggested order now: moistureModulation → validators (n.º 1) → CA (n.º 3) → FillDepth → wind/orographic → chained splines (n.º 2). Nothing here is roadmapped; Claudio decides.
 
 Route elsewhere: web Labs (snowflake / Nakaya explainer; Turing patterns with the fire-and-firefighters framing; strata time slider); videojuego-colonizacion (drained marsh rivers, forest that makes its own rain, windward/leeward peoples, atoll for the sea people, Dejima as a trade enclave); cuadernos (Wampís Nation, Runit Dome, Atacama as the Chilean desert parallel).
+
+## Tier 2 re-read (2026-11-01)
+
+Tier 2 was re-read with full transcripts (26 of 33 usable). No value changed and no candidate moved. The corrections above (CA needs a Moore count and a configurable rule; coast roughness over a limited scale range; 14 Pixel Architect rules; Sunny Valley lineage via the legacy project) are folded into the bullets. New small notes: picoCAD's dithered shading toward darker palette shades and Grant Abbitt's third tree method (rings of linked branches, the araucaria's structure) for the web Flora Lab and sprite tools.
