@@ -42,3 +42,20 @@ Cross-reference of [`cards.md`](cards.md). Status re-checked by the orchestratin
 - Infinite WFC (marian42): the result depends on where the player walked — **order-dependent**, so it clashes with "same inputs + seed ⇒ same output". Only usable for finite, whole-from-seed content.
 - UnitOfTime compaction: always-valid layout (undo invalid moves), deterministic given the seed and iteration order.
 - Qud: rebuilds a zone from save + seed for debugging, a pattern Islands already follows with goldens.
+
+---
+
+## Tier 2 additions (2026-11-01, from [`cards-tier2.md`](cards-tier2.md))
+
+| Technique | Library ID | Videos | Islands status (checked) |
+| --- | --- | --- | --- |
+| Moore birth/survive CA mask operator | D.12 | Hofmann (Tilemap CA tutorial), Waite (Life), Wolverson, Galak-Z | missing — now four sources; only `MaskMorphologyOps2D` / `Stage_Morphology2D` exist |
+| Box-counting fractal dimension of the coast mask | NEW (metric) | 3Blue1Brown, «Los fractales no suelen ser autosemejantes» | missing; natural home `Runtime/PCG/Inspection/` (`MapStatsExporter2D`). Reference values quoted in the video: Britain ≈ 1.21, Norway ≈ 1.52 |
+| Corner-based (dual-grid) tile selection from a (W+1)×(H+1) sample | D.18 variant | CodingQuest | **partial, corrected:** the agent called it a gap, but `TilesetConfig.cs` has a Phase H6 `ruleTile` slot (Unity RuleTile neighbour matching). Corner/dual-grid selection itself is missing; see also `../2026-10-27-referencias-desde-marcadores.md` (dual grid) |
+| Multiply two noises to vary hilliness by region | D.7 variant | Sam Hogan (Minecraft in 24 h) | not checked in detail; candidate tunable in `Stage_Hills2D` |
+| Elementary CA (Rule 30, Rule 110) | NEW | Waite | missing; teaching only (NoiseLab «CA lab», web emergence scene) |
+| Stochastic Allen-Cahn lattice (domain formation under noise) | NEW | Berglund | missing; exploratory |
+| Escape-time iteration (Mandelbrot/Julia) | NEW | Numberphile, 3Blue1Brown | missing in Islands; already published on the web (`labs/scenes/mandelbrot`, Julia). Geologically artificial for terrain, as `CURRENT_STATE.md` already notes |
+| Random-walk / corridor-first / room-first BSP dungeons | D.13, D.14 | Sunny Valley P2–P4 | **exists** (`Layout/SimpleRandomWalk2D.cs`, `IteratedRandomWalk2D.cs`, `CorridorFirstDungeon2D.cs`, `RoomFirstBspDungeon2D.cs`), very likely ported from this series and extended (seeded, `MaskGrid2D`, brush, skew). **The sources do not credit Sunny Valley Studio** |
+
+Other findings: `Stage_Traversal2D` already writes a `Walkable` mask (Land or ShallowWater, minus HillsL2) — the natural input for the Tier 1 distance-map validators (backlog n.º 1). Logistic map and Rule 30 as random sources: not recommended (SmallXXHash is better and avoids float differences across platforms).

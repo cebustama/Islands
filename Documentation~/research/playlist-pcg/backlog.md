@@ -24,3 +24,22 @@ Proposal from the orchestrating agent, 2026-11-01. **Nothing here is roadmapped*
 
 - mundo-islas: RimWorld (elastic failure, storyteller), Tarn Adams (villain chains, information gating), Nystrom (type objects, energy turns), Nature of Order.
 - videojuego-colonizacion: Kate Edwards' checklist; Qud's history → culture → architecture chain.
+
+---
+
+## Tier 2 update (2026-11-01)
+
+Tier 2 adds no phase-sized candidates. Changes to the table above:
+
+- **n.º 3 (CA operator) gains weight:** four independent sources now (Hofmann's tutorial is the clearest walkthrough). Seeded, double-buffered, fixed step count, largest-region keep via the existing flood fill. Do not copy the tutorial's unseeded `Random`.
+- **n.º 1 (validators):** consume `Walkable` from `Stage_Traversal2D`, which already exists.
+- **New, S:** **coast roughness metric** by box-counting, in `Inspection/`. Turns the exploratory «fractal coastline / fjord refinement» item in `CURRENT_STATE.md` into a measurable target (golden-testable number per seed). Rank it right after n.º 3.
+- **New, S–M:** **corner-based (dual-grid) tile selection** in the tilemap adapter, alongside the existing RuleTile slot. Adapter-side, golden-neutral for the core.
+- **New, S:** regional hilliness by multiplying two noises, as a `Stage_Hills2D` tunable (check first whether a mask noise already does this).
+- **n.º 8 (settlement) gains design rules:** Pixel Architect's urbanism rules (shops face streets, plazas enclosed by buildings, no blank façades, no tall objects hiding the player). Opinion, not a tested algorithm.
+- **Housekeeping, not code:** credit Sunny Valley Studio in the four dungeon layout files (relevant to the open-source tangent in `_comun/foco.md`, which already lists CatLikeCoding credits).
+
+Route elsewhere:
+- **Web (Labs):** logistic-map bifurcation page linked to the Mandelbrot scene (best fit for the emergence scene); CA playground with a rule slider (Rule 30/110 → Life); Euler vs RK4 light bending (kavan). Collatz coral for Flora Lab: low-medium.
+- **Web Fauna Lab:** Blackthornprod's follow-the-leader chain (SmoothDamp per segment + sine wiggle) for tails and tentacles — complements `web/.../research/2026-10-31-animacion-procedural-explainer.md`.
+- **NoiseLab (v3 candidates):** «CA lab» mode on the flooded mask; coast roughness number shown live.
