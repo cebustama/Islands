@@ -8,4 +8,4 @@ Ideas, links and videos delivered with `/capturar` that belong to Islands. Most 
 - **What it is:** about half PCG (GDC and Roguelike Celebration talks, dungeon breakdowns, Unity tutorials, WFC, erosion), half world (evolution, speculative biology, geography, ancient cities). Titles and channels only so far.
 - 💡 **Possible use here:** inventory grouped by theme, with what is already in research and what is new (Galak-Z, Plot and Parcel, Tom Betts, Nature of Order, Isaac, Nuclear Throne, UnitOfTime, Gun Game…), plus the proposed analysis (cards per video mapped to the technique library, cross-reference against code, ranked backlog) in [`2026-11-01-playlist-pcg.md`](2026-11-01-playlist-pcg.md).
 - **Connects with:** web (emergence scene, Islands Lab), mundo-islas (RimWorld, Dwarf Fortress, narrative), videojuego-colonizacion (Kate Edwards, speculative biology).
-- **Status:** seed; analysis pending Claudio's go.
+- **Status:** Tier 1 analysed (2026-11-01) in [`playlist-pcg/`](playlist-pcg/backlog.md); tiers 2–3 pending.
