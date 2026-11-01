@@ -53,6 +53,16 @@ Fecha: 2026-11-01. Rama: `main`. Sigue a `planning/archive/NoiseLab_v2_Startup.m
    `c=` con `/`, para que siga siendo una sola clave.
 4. **60 fps en el móvil.** Recomendación: `Application.targetFrameRate = 60` en NoiseLab y medirlo
    con el export.
+5. **¿Algo de la playlist pasa al roadmap?** `PCG_Roadmap.md` no cambió. El backlog
+   (`research/playlist-pcg/backlog.md`) propone, en orden, siete puntos para el pipeline:
+   `moistureModulation` encendido en un preset (XS), validadores con mapas de distancia,
+   operador de autómata celular con 8 vecinos, guardar la profundidad del relleno (lagos,
+   salares), viento y sombra de lluvia en `Stage_Biome2D`, rugosidad de costa en `Inspection/`
+   y splines encadenados. Claudio decide; no editar el roadmap sin su OK. Lo que se pruebe en
+   NoiseLab es un prototipo: pasarlo a `Stage_Biome2D` es un cambio gobernado (se mueven goldens).
+
+Orden de las capas según Inputs: núcleo 1 + 4 + 3; siguiente capa, splines (n.º 2) y nivel
+del mar con lagos y salares desde la profundidad del relleno (n.º 6); v4 o web, el resto.
 
 ## Tarea
 La decide Claudio con la decisión 1. Reglas que siguen valiendo: CPU, determinista, misma
@@ -71,7 +81,7 @@ Active Input Handling = Both (deudas en `CURRENT_STATE.md`, «Open observations�
 1. `git log --oneline -5` y `git status` en `D:\Projects\Islands`.
 2. Con Unity abierto y fuera de Play, `ClaudeTests/run.trigger` vacío en el anfitrión: 415/415.
 3. Leer `NoiseLab.cs` (estructura arriba) y `NoiseLab_v3_Inputs.md`.
-4. Presentar a Claudio las decisiones 1–4 con su recomendación. No escribir código antes de
+4. Presentar a Claudio las decisiones 1–5 con su recomendación. No escribir código antes de
    su respuesta.
 
 ## Archivos
