@@ -59,3 +59,28 @@ Cross-reference of [`cards.md`](cards.md). Status re-checked by the orchestratin
 | Random-walk / corridor-first / room-first BSP dungeons | D.13, D.14 | Sunny Valley P2–P4 | **exists** (`Layout/SimpleRandomWalk2D.cs`, `IteratedRandomWalk2D.cs`, `CorridorFirstDungeon2D.cs`, `RoomFirstBspDungeon2D.cs`), very likely ported from this series and extended (seeded, `MaskGrid2D`, brush, skew). **The sources do not credit Sunny Valley Studio** |
 
 Other findings: `Stage_Traversal2D` already writes a `Walkable` mask (Land or ShallowWater, minus HillsL2) — the natural input for the Tier 1 distance-map validators (backlog n.º 1). Logistic map and Rule 30 as random sources: not recommended (SmallXXHash is better and avoids float differences across platforms).
+
+---
+
+## Tier 3 additions (2026-11-01, from [`cards-tier3.md`](cards-tier3.md))
+
+Context checked: rivers are Priority-Flood+ε → D8 → accumulation threshold, 1 cell wide, not post-processed (contract L-9); every depression is filled, so hydrology makes no natural lakes. Moisture = coastal decay + noise + river bonus; temperature = base − lapse·height − latitude + coast moderation + noise. Full pipeline order (`PCGMapVisualization`, stagesLM2b): BaseTerrain → Hills → Shore → Traversal → Morphology → Hydrology → Biome → Vegetation → Regions.
+
+| Technique / rule | Library ID | Videos | Islands status (checked) |
+| --- | --- | --- | --- |
+| Prevailing wind by latitude band + orographic gain + rain shadow | NEW | Atlas Pro, TED-Ed (flying rivers), BE AMAZED (cap cloud) | **missing** — no wind term in `Stage_Biome2D`; moisture is radially symmetric around the coast. `latitudeEffect` exists (default 0) |
+| Wind-advected moisture with forest recycling | NEW | TED-Ed | missing |
+| Export Priority-Flood fill depth (`FillDepth`) → natural lakes, salt pans, oases | NEW | Budget Museum (Sahara), Algol (Messinian basin) | **partial** — `FillDepressions` in `Operators/HeightFieldHydrologyOps2D.cs` computes it and throws it away |
+| River width by flow, sinuosity metric, meander displacement | NEW | Capture VR | missing (rivers 1 cell) |
+| Floodplain mask (distance to river × low slope) + Wetland biome | NEW | It's Complicated | missing; `BiomeType` (12 types) has no wetland |
+| Desert surface sub-types (erg, hamada, reg, wadi, oasis, salt pan, fog desert) | NEW | Budget Museum | missing; terrace quantisation exists but is not climate-driven |
+| Plates from Voronoi: convergent uplift, divergent rifts, rifted-fragment islands | NEW | Algol, Fantasy Forge | missing; Voronoi F1/F2/`CellAsIslands` and `Ridged` noise exist (`Runtime/Noise`) |
+| Fjord operator (cold + steep + coast) | NEW | Fantasy Forge, Atlas Pro | missing (also the exploratory item in `CURRENT_STATE.md`) |
+| Reaction-diffusion (Gray-Scott / Gierer-Meinhardt) field, run per region | NEW | Be Smart | missing; candidate for `Runtime/Noise` and dryland vegetation |
+| Moisture-driven vegetation | — | Fantasy Forge | **exists, inert**: `moistureModulation = 0.0f` (`Stage_Vegetation2D.cs:105`) |
+| Continentality metric (interior dryness per landmass), shelf band, global ΔT | NEW | El Robot de Platón | missing; home `MapStatsExporter2D` / `MapTunables2D` |
+| Island archetypes (atoll ring + lagoon, sea stack, sand crescent, nested caldera) | NEW | BE AMAZED | missing; `IslandShapeMode` has Ellipse/Rectangle/NoShape/Custom |
+| Tilted strata / unconformity as a cliff material layer | NEW | Tom Scott | missing; visual only |
+| Natural political borders (rivers and ridges as walls) | NEW | Fantasy Forge | missing; `Stage_Regions2D` partitions by biome only |
+
+Routed elsewhere: Nakaya snowflake diagram and Turing patterns (web Labs explainers, emergence); Dejima, Wampís Nation, Runit Dome, Victorian drainage, cleared land around towns (videojuego-colonizacion, cuadernos).

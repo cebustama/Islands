@@ -43,3 +43,23 @@ Route elsewhere:
 - **Web (Labs):** logistic-map bifurcation page linked to the Mandelbrot scene (best fit for the emergence scene); CA playground with a rule slider (Rule 30/110 → Life); Euler vs RK4 light bending (kavan). Collatz coral for Flora Lab: low-medium.
 - **Web Fauna Lab:** Blackthornprod's follow-the-leader chain (SmoothDamp per segment + sine wiggle) for tails and tentacles — complements `web/.../research/2026-10-31-animacion-procedural-explainer.md`.
 - **NoiseLab (v3 candidates):** «CA lab» mode on the flooded mask; coast roughness number shown live.
+
+---
+
+## Tier 3 update (2026-11-01)
+
+Group C adds the first **climate and hydrology realism** candidates. Ranked additions:
+
+- **New, quick win (XS):** turn on `moistureModulation` in a preset and measure (forests near water). The code exists; only a tunable and a golden check.
+- **New, S:** **export `FillDepth`** from Priority-Flood (lakes in wet climate, salt pans/ephemeral lakes in arid, oases in wadis). Fixes the missing natural lakes; contract change in Hydrology outputs.
+- **New, M, high value:** **prevailing wind + orographic moisture + rain shadow** in `Stage_Biome2D` (wind from latitude band or a tunable; windward gain, leeward loss). Biggest realism gap: today every island is wet all round. Validator: windward mean moisture ≥ leeward per ridge. Good NoiseLab / Islands Lab demo («why one side of the island is green»).
+- **New, S–M:** floodplain mask + `BiomeType.Wetland`; river width by flow + sinuosity metric (Hydrology sub-stage, since L-9 forbids touching the river mask).
+- **New, S:** continentality and coast-ratio metrics in `MapStatsExporter2D` (pairs with coast roughness from Tier 2).
+- **New, M:** desert surface sub-classifier (needs `FillDepth` first).
+- **New, M:** reaction-diffusion field in `Runtime/Noise` (dryland spotted/banded vegetation, run per region). Also NoiseLab v3 / web emergence material.
+- **New, L (design first):** `Stage_Tectonics2D` from Voronoi plates (uplift field before base terrain; fjords and rift islands follow). Phase-sized.
+- Low: island archetype presets (atoll, sea stack) as test shapes; strata material layer; natural borders (mundo-islas).
+
+Suggested order now: moistureModulation → validators (n.º 1) → CA (n.º 3) → FillDepth → wind/orographic → chained splines (n.º 2). Nothing here is roadmapped; Claudio decides.
+
+Route elsewhere: web Labs (snowflake / Nakaya explainer; Turing patterns with the fire-and-firefighters framing; strata time slider); videojuego-colonizacion (drained marsh rivers, forest that makes its own rain, windward/leeward peoples, atoll for the sea people, Dejima as a trade enclave); cuadernos (Wampís Nation, Runit Dome, Atacama as the Chilean desert parallel).
