@@ -124,6 +124,14 @@ public class NoiseLab : MonoBehaviour
     [SerializeField, Range(0f, 1f)] float coastDecayRate = 0.3f;
     [SerializeField, Range(0f, 1f)] float moistureNoiseAmplitude = 0.3f;
 
+    // Wind (v3): one direction; the angle is where it blows toward (0 = east, 90 = north).
+    [SerializeField] bool wind = false;
+    [SerializeField, Range(0f, 360f)] float windAngle = 0f;              // 0 = from the west (westerlies)
+    [SerializeField, Range(0f, 1f)] float windStrength = 0.6f;            // weight of the air's humidity in the moisture
+    [SerializeField, Range(0f, 1f)] float windLift = 0.6f;                // rain when the air climbs
+    [SerializeField, Range(0f, 0.05f)] float windDry = 0.01f;             // loss per cell over flat land
+    [SerializeField, Range(0f, 0.2f)] float windEvaporation = 0.05f;      // gain per cell over the sea
+
     const float LatitudeSpan = 8f;   // view widths from the equator to a pole
     const float CoastUnits = 256f;   // coast distance unit: one cell of a 256 map
 
@@ -691,6 +699,7 @@ public class NoiseLab : MonoBehaviour
         int landCount = source.Length - below;
         float[] tn = viewField[FTemp], mn = viewField[FMoist];
 
+        landRank = Ensure(landRank, count);
         for (int y = 0; y < n; y++)
         {
             float yWorld = offset.y + (y + 0.5f) / n;
@@ -702,6 +711,7 @@ public class NoiseLab : MonoBehaviour
                 float rank = landCount > 0
                     ? math.saturate((float)(LowerBound(source, values[i]) - below) / landCount)
                     : 0f;
+                landRank[i] = rank;
                 float cd = coast[i] * toUnits;
 
                 float t = baseTemperature
@@ -710,13 +720,91 @@ public class NoiseLab : MonoBehaviour
                         + coastModeration / (1f + cd)
                         + tempNoiseAmplitude * 0.5f * tn[i];        // amplitude · (noise01 − 0.5)
                 temp[i] = math.saturate(t);
+            }
+        }
 
-                float m = moistureNoiseAmplitude * math.saturate(mn[i] * 0.5f + 0.5f)
-                        + coastalMoistureBonus / (1f + cd * coastDecayRate);
-                moist[i] = math.saturate(m);
+        if (wind) WindField(n);
+
+        for (int i = 0; i < count; i++)
+        {
+            float cd = coast[i] * toUnits;
+            float m = moistureNoiseAmplitude * math.saturate(mn[i] * 0.5f + 0.5f)
+                    + coastalMoistureBonus / (1f + cd * coastDecayRate)
+                    + (wind ? windStrength * windAir[i] : 0f);
+            moist[i] = math.saturate(m);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Wind: one direction for the whole map. Air enters at the upwind edge of the view,
+    // saturated, and moves cell by cell along the wind. Over water it picks up moisture;
+    // over land it slowly dries, and much faster when it climbs (orographic rain): the
+    // windward slope gets the rain, the lee gets dry air (rain shadow). windAir is the
+    // humidity of the air passing each cell, 0–1.
+    // The sweep goes line by line along the axis the wind moves most on; the air of a cell
+    // comes from the previous line, interpolated at the point one step upwind. O(n²), any
+    // angle. Air entering the view is assumed to come from the sea, so land near the
+    // upwind edge looks wetter than it would with the real terrain beyond the edge.
+    // ---------------------------------------------------------------------------------
+
+    float[] landRank, windAir;
+
+    const float LiftScale = 4f; // lift 1 = the air keeps e^−4 ≈ 2 % after climbing the whole land range
+
+    void WindField(int n)
+    {
+        windAir = Ensure(windAir, n * n);
+        float a = windAngle * Mathf.Deg2Rad;
+        float wx = Mathf.Cos(a), wy = Mathf.Sin(a);      // direction the wind blows toward (y up)
+        bool xMajor = Mathf.Abs(wx) >= Mathf.Abs(wy);
+        float major = xMajor ? wx : wy, minor = xMajor ? wy : wx;
+        int dir = major >= 0f ? 1 : -1;
+        float slope = minor / Mathf.Abs(major);          // minor-axis shift per major step
+        float dist = Mathf.Sqrt(1f + slope * slope) * CoastUnits / n; // step length, in cells of a 256 map
+        float keepFlat = Mathf.Exp(-windDry * dist);
+        float pickUp = 1f - Mathf.Exp(-windEvaporation * dist);
+
+        int Cell(int u, int j) => xMajor ? j * n + u : u * n + j;
+
+        int first = dir > 0 ? 0 : n - 1;
+        for (int k = 0; k < n; k++)
+        {
+            int u = first + dir * k;
+            for (int j = 0; j < n; j++)
+            {
+                int i = Cell(u, j);
+                float air, rankBefore;
+                float pj = j - slope;                     // where this air was one step ago
+                if (k == 0 || pj < 0f || pj > n - 1)
+                {
+                    air = 1f;                             // enters the view: sea air
+                    rankBefore = landRank[i];
+                }
+                else
+                {
+                    int j0 = Mathf.Min((int)pj, n - 2);
+                    float f = pj - j0;
+                    int prev = u - dir;
+                    air = Mathf.Lerp(windAir[Cell(prev, j0)], windAir[Cell(prev, j0 + 1)], f);
+                    rankBefore = Mathf.Lerp(landRank[Cell(prev, j0)], landRank[Cell(prev, j0 + 1)], f);
+                }
+
+                if (values[i] < threshold)
+                    air += (1f - air) * pickUp;           // over the sea
+                else
+                {
+                    float rise = Mathf.Max(0f, landRank[i] - rankBefore);
+                    air *= keepFlat * Mathf.Exp(-windLift * LiftScale * rise);
+                }
+                windAir[i] = air;
             }
         }
     }
+
+    static readonly string[] Compass = { "E", "NE", "N", "NW", "W", "SW", "S", "SE" };
+
+    // "from W": meteorology names a wind by where it comes from.
+    string WindName() => $"from {Compass[Mathf.RoundToInt(((windAngle + 180f) % 360f) / 45f) % 8]}";
 
     // Distance from each land cell to the nearest water cell of the view, in cells (0 on
     // water). Exact Euclidean distance transform (Felzenszwalb & Huttenlocher, "Distance
@@ -889,14 +977,15 @@ public class NoiseLab : MonoBehaviour
     // ---------------------------------------------------------------------------------
 
     // What the image shows. Map: bands or biomes. The rest: one field on its own.
-    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks }
-    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)" };
+    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir }
+    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air" };
     Show show = Show.Map;
 
     bool Available(Show s) => s switch
     {
         Show.Temperature or Show.Moisture => colouring == Colouring.Biomes,
         Show.Continent or Show.Erosion or Show.Peaks => heightSource == HeightSource.Splines,
+        Show.WindAir => colouring == Colouring.Biomes && wind,
         _ => true
     };
 
@@ -945,6 +1034,7 @@ public class NoiseLab : MonoBehaviour
                 case Show.Height: c = Gray(values[i]); break;
                 case Show.Temperature: c = Ramp3(Cold, Mild, Hot, temp[i]); break;
                 case Show.Moisture: c = Color32.Lerp(Dry, Wet, moist[i]); break;
+                case Show.WindAir: c = Color32.Lerp(Dry, Wet, windAir[i]); break;
                 default: c = Gray(viewField[FCont + (show - Show.Continent)][i]); break;
             }
             pixels[i] = c;
@@ -1018,6 +1108,8 @@ public class NoiseLab : MonoBehaviour
             code += $";k=z;n4={FieldCode(FTemp)};n5={FieldCode(FMoist)};cl=" +
                     string.Join(",", F(baseTemperature), F(lapseRate), F(latitudeEffect), F(coastModeration),
                                 F(tempNoiseAmplitude), F(coastalMoistureBonus), F(coastDecayRate), F(moistureNoiseAmplitude));
+        if (colouring == Colouring.Biomes && wind)
+            code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (shade) code += $";sh={F(relief)}";
         return code;
     }
@@ -1058,6 +1150,12 @@ public class NoiseLab : MonoBehaviour
         coastalMoistureBonus = 0.5f;
         coastDecayRate = 0.3f;
         moistureNoiseAmplitude = 0.3f;
+        wind = false;
+        windAngle = 0f;
+        windStrength = 0.6f;
+        windLift = 0.6f;
+        windDry = 0.01f;
+        windEvaporation = 0.05f;
     }
 
     // Returns null on success, or a short error.
@@ -1118,6 +1216,7 @@ public class NoiseLab : MonoBehaviour
                 case "n5": ReadField(FMoist, val); break;
                 case "c": ReadCurves(val); break;
                 case "cl": ReadClimate(val); break;
+                case "wd": ReadWind(val); break;
                 case "sh":
                     if (TryF(val, out float r)) { shade = true; relief = Mathf.Clamp(r, 0f, 3f); }
                     break;
@@ -1193,6 +1292,20 @@ public class NoiseLab : MonoBehaviour
         moistureNoiseAmplitude = Mathf.Clamp01(v[7]);
     }
 
+    void ReadWind(string text)
+    {
+        string[] p = text.Split(',');
+        if (p.Length != 5) return;
+        var v = new float[5];
+        for (int i = 0; i < 5; i++) if (!TryF(p[i], out v[i])) return;
+        wind = true;
+        windAngle = Mathf.Repeat(v[0], 360f);
+        windStrength = Mathf.Clamp01(v[1]);
+        windLift = Mathf.Clamp01(v[2]);
+        windDry = Mathf.Clamp(v[3], 0f, 0.05f);
+        windEvaporation = Mathf.Clamp(v[4], 0f, 0.2f);
+    }
+
     // ---------------------------------------------------------------------------------
     // On-screen controls. Everything is laid out in a virtual screen 800 units tall and
     // scaled to the real one, so text and sliders stay finger-sized on a phone.
@@ -1213,7 +1326,7 @@ public class NoiseLab : MonoBehaviour
     static readonly string[] WaterLabels = { "Raw threshold", "% water" };
     static readonly string[] HeightLabels = { "One noise", "Splines" };
     static readonly string[] ColouringLabels = { "Bands", "Biomes" };
-    static readonly string[] ClimateLabels = { "Temperature", "Moisture" };
+    static readonly string[] ClimateLabels = { "Temperature", "Moisture", "Wind" };
 
     NoiseType lastSimplex = NoiseType.SimplexPerlinOnSimplex;
     int selectedBand = BandCount - 1;
@@ -1633,11 +1746,27 @@ public class NoiseLab : MonoBehaviour
             coastModeration = R2(Slider("Coast", coastModeration, 0f, 0.5f, "0.00"));
             tempNoiseAmplitude = R2(Slider("Noise", tempNoiseAmplitude, 0f, 0.3f, "0.00"));
         }
-        else
+        else if (climateTab == 1)
         {
             coastalMoistureBonus = R2(Slider("Coast", coastalMoistureBonus, 0f, 1f, "0.00"));
             coastDecayRate = R2(Slider("Decay", coastDecayRate, 0f, 1f, "0.00"));
             moistureNoiseAmplitude = R2(Slider("Noise", moistureNoiseAmplitude, 0f, 1f, "0.00"));
+        }
+        else
+        {
+            // One row for on/off and the direction; the arrow on the map shows it too.
+            GUILayout.BeginHorizontal(GUILayout.Height(30f));
+            wind = GUILayout.Toggle(wind, " Wind", GUILayout.Width(110f));
+            GUI.enabled = wind;
+            windAngle = Mathf.Round(GUILayout.HorizontalSlider(windAngle, 0f, 360f, GUILayout.ExpandWidth(true)) / 15f) * 15f % 360f;
+            GUILayout.Label(WindName(), GUILayout.Width(70f));
+            GUILayout.EndHorizontal();
+            windStrength = R2(Slider("Strength", windStrength, 0f, 1f, "0.00"));
+            windLift = R2(Slider("Lift", windLift, 0f, 1f, "0.00"));
+            windDry = Mathf.Round(Slider("Dry", windDry, 0f, 0.05f, "0.000") * 1000f) / 1000f;
+            windEvaporation = Mathf.Round(Slider("Sea", windEvaporation, 0f, 0.2f, "0.000") * 1000f) / 1000f;
+            GUI.enabled = true;
+            return; // no room for the legend under five sliders on a phone
         }
 
         // Whittaker legend: rows hot (top) → cold, columns dry → wet. Next to it, the
@@ -1776,6 +1905,7 @@ public class NoiseLab : MonoBehaviour
     {
         imageRect = new Rect(left, top, side, side);
         GUI.DrawTexture(imageRect, texture);
+        if (colouring == Colouring.Biomes && wind) DrawWindArrow(new Vector2(left + side - 34f, top + 34f));
 
         // Histogram strip under the image. x axis: raw value from -1 (left) to +1 (right).
         var plot = new Rect(left, top + side + 8f, side, 70f);
@@ -1805,6 +1935,31 @@ public class NoiseLab : MonoBehaviour
             $"water {waterFraction * 100f:0.0}%   threshold {threshold:+0.000;-0.000}   " +
             (waterMode == WaterMode.Percentage ? "(from %)" : "(raw)"));
         return numbers.yMax;
+    }
+
+    // Arrow in the corner of the map: where the wind blows toward. The rotation is built
+    // on top of the virtual-screen scale (GUIUtility.RotateAroundPivot ignores that scale).
+    void DrawWindArrow(Vector2 centre)
+    {
+        DrawRect(new Rect(centre.x - 26f, centre.y - 26f, 52f, 52f), new Color(0f, 0f, 0f, 0.45f));
+        Matrix4x4 baseMatrix = GUI.matrix;
+        void Rotate(float degrees, Vector2 pivot) =>
+            GUI.matrix = baseMatrix * Matrix4x4.TRS(pivot, Quaternion.Euler(0f, 0f, degrees), Vector3.one) *
+                         Matrix4x4.TRS(-pivot, Quaternion.identity, Vector3.one);
+
+        float guiAngle = -windAngle; // GUI y grows down
+        Rotate(guiAngle, centre);
+        DrawRect(new Rect(centre.x - 18f, centre.y - 2f, 36f, 4f), Color.white);
+        var tip = new Vector2(centre.x + 18f, centre.y);
+        foreach (float side in new[] { 150f, -150f })
+        {
+            Rotate(guiAngle, centre);
+            GUI.matrix = GUI.matrix * Matrix4x4.TRS(tip, Quaternion.Euler(0f, 0f, side), Vector3.one) *
+                         Matrix4x4.TRS(-tip, Quaternion.identity, Vector3.one);
+            DrawRect(new Rect(tip.x, tip.y - 2f, 14f, 4f), Color.white);
+        }
+        GUI.matrix = baseMatrix;
+        GUI.Label(new Rect(centre.x - 26f, centre.y + 26f, 80f, 20f), WindName());
     }
 
     void DrawMarker(Rect plot, float value, Color color) =>
