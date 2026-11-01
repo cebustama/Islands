@@ -109,6 +109,14 @@ public class NoiseLab : MonoBehaviour
     [SerializeField] Colouring colouring = Colouring.Bands;
 
     [SerializeField] bool shade = false;
+
+    // Contour lines every contourStep of raw height (absolute, unlike the bands, which are
+    // percentages). Every fifth line is darker.
+    [SerializeField] bool contours = false;
+    [SerializeField, Range(0.01f, 0.2f)] float contourStep = 0.05f;
+
+    // Camera background behind the view and the controls (Unity's default blue, replaced).
+    [SerializeField] Color background = new Color32(0x22, 0x26, 0x2E, 0xFF);
     [SerializeField, Range(0f, 3f)] float relief = 1f;
 
     // Climate tunables. Same formulas and defaults as Stage_Biome2D, except that the lapse
@@ -184,7 +192,16 @@ public class NoiseLab : MonoBehaviour
     void OnValidate() => dirty = true;
 
     // v3: 60 fps instead of Android's default 30 (the S22 screen runs at 120 Hz).
-    void Start() => Application.targetFrameRate = 60;
+    void Start()
+    {
+        Application.targetFrameRate = 60;
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.backgroundColor = background;
+        }
+    }
 
     void Update()
     {
@@ -1037,10 +1054,25 @@ public class NoiseLab : MonoBehaviour
                 case Show.WindAir: c = Color32.Lerp(Dry, Wet, windAir[i]); break;
                 default: c = Gray(viewField[FCont + (show - Show.Continent)][i]); break;
             }
+            if (contours && (show == Show.Map || show == Show.Height)) c = Contour(c, i, n);
             pixels[i] = c;
         }
         texture.SetPixels32(pixels);
         texture.Apply();
+    }
+
+    // A cell is on a line when its right or upper neighbour is in another step of height.
+    Color32 Contour(Color32 c, int i, int n)
+    {
+        int x = i % n, y = i / n;
+        int level = (int)math.floor(values[i] / contourStep);
+        int right = x < n - 1 ? (int)math.floor(values[i + 1] / contourStep) : level;
+        int up = y < n - 1 ? (int)math.floor(values[i + n] / contourStep) : level;
+        if (right == level && up == level) return c;
+        int line = math.max(level, math.max(right, up));            // the line between the two steps
+        float f = line % 5 == 0 ? 0.45f : 0.7f;
+        if (values[i] < threshold) f = math.lerp(f, 1f, 0.5f);       // fainter under water
+        return new Color32((byte)(c.r * f), (byte)(c.g * f), (byte)(c.b * f), 255);
     }
 
     static Color32 Gray(float v)
@@ -1111,6 +1143,7 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (shade) code += $";sh={F(relief)}";
+        if (contours) code += $";ct={F(contourStep)}";
         return code;
     }
 
@@ -1140,6 +1173,8 @@ public class NoiseLab : MonoBehaviour
         colouring = Colouring.Bands;
         shade = false;
         relief = 1f;
+        contours = false;
+        contourStep = 0.05f;
         extraFields = DefaultExtraFields();
         curves = DefaultCurves();
         baseTemperature = 0.7f;
@@ -1217,6 +1252,9 @@ public class NoiseLab : MonoBehaviour
                 case "c": ReadCurves(val); break;
                 case "cl": ReadClimate(val); break;
                 case "wd": ReadWind(val); break;
+                case "ct":
+                    if (TryF(val, out float ct)) { contours = true; contourStep = Mathf.Clamp(ct, 0.01f, 0.2f); }
+                    break;
                 case "sh":
                     if (TryF(val, out float r)) { shade = true; relief = Mathf.Clamp(r, 0f, 3f); }
                     break;
@@ -1416,6 +1454,7 @@ public class NoiseLab : MonoBehaviour
         GUILayout.Space(4f);
 
         GUI.changed = false;
+        Row(2);
         switch (page)
         {
             case Page.Noise: NoisePage(); break;
@@ -1426,8 +1465,24 @@ public class NoiseLab : MonoBehaviour
             case Page.Perf: PerfPage(); break;
         }
         if (GUI.changed && page != Page.Perf) dirty = true; // Perf buttons must not resample (they would pollute the log)
+        GUI.backgroundColor = Color.white;
         GUILayout.EndArea();
     }
+
+    // Each section tints its controls; a deeper row of tabs gets a lighter tint, so the rows
+    // of buttons read as levels (top tabs → section → sub-section).
+    static readonly Color[] SectionTints =
+    {
+        new(0.55f, 0.85f, 1f),   // Noise
+        new(1f, 0.78f, 0.45f),   // Shape
+        new(0.6f, 1f, 0.6f),     // Map
+        new(1f, 0.62f, 0.55f),   // Climate
+        new(0.85f, 0.85f, 0.85f),// Code
+        new(0.8f, 0.7f, 1f),     // Perf
+    };
+
+    void Row(int level) =>
+        GUI.backgroundColor = level <= 2 ? SectionTints[(int)page] : Color.Lerp(SectionTints[(int)page], Color.white, 0.55f);
 
     void NoisePage()
     {
@@ -1442,6 +1497,7 @@ public class NoiseLab : MonoBehaviour
         }
         selectedField = active[current];
         var field = GetField(selectedField);
+        if (active.Length > 1) Row(3);
 
         int family = field.type switch
         {
@@ -1468,6 +1524,7 @@ public class NoiseLab : MonoBehaviour
             field.type = lastSimplex = (NoiseType)((int)NoiseType.SimplexOldGradient + variant);
         }
 
+        Row(2);
         GUILayout.BeginHorizontal();
         GUILayout.Label(selectedField == FHeight ? "Seed" : $"Seed (+{selectedField})", GUILayout.Width(110f));
         seed = IntField("seed", ref seedText, seed);
@@ -1545,6 +1602,7 @@ public class NoiseLab : MonoBehaviour
         }
 
         GUILayout.Label("height = C(continent) + E(erosion) · PV(peaks)");
+        Row(3);
         int curve = GUILayout.Toolbar(selectedCurve, CurveNames, GUILayout.Height(30f));
         if (curve != selectedCurve) { selectedCurve = curve; selectedPoint = -1; }
 
@@ -1709,10 +1767,18 @@ public class NoiseLab : MonoBehaviour
 
         // v3: what the image shows.
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
-        GUILayout.Label("Show", GUILayout.Width(110f));
+        GUILayout.Label("Layer", GUILayout.Width(110f));
         if (GUILayout.Button("<", GUILayout.Width(40f), GUILayout.Height(30f))) show = NextShow(-1);
         GUILayout.Label(ShowNames[(int)show], GUILayout.ExpandWidth(true));
         if (GUILayout.Button(">", GUILayout.Width(40f), GUILayout.Height(30f))) show = NextShow(+1);
+        GUILayout.EndHorizontal();
+
+        GUILayout.BeginHorizontal(GUILayout.Height(30f));
+        contours = GUILayout.Toggle(contours, " Contours", GUILayout.Width(110f));
+        GUI.enabled = contours;
+        contourStep = Mathf.Round(GUILayout.HorizontalSlider(contourStep, 0.01f, 0.2f, GUILayout.ExpandWidth(true)) * 100f) / 100f;
+        GUILayout.Label(contourStep.ToString("0.00", Inv), GUILayout.Width(50f));
+        GUI.enabled = true;
         GUILayout.EndHorizontal();
     }
 
@@ -1737,7 +1803,9 @@ public class NoiseLab : MonoBehaviour
             return;
         }
 
+        Row(3);
         climateTab = GUILayout.Toolbar(climateTab, ClimateLabels, GUILayout.Height(30f));
+        Row(2);
         if (climateTab == 0)
         {
             baseTemperature = R2(Slider("Base", baseTemperature, 0f, 1f, "0.00"));
@@ -1761,7 +1829,7 @@ public class NoiseLab : MonoBehaviour
             windAngle = Mathf.Round(GUILayout.HorizontalSlider(windAngle, 0f, 360f, GUILayout.ExpandWidth(true)) / 15f) * 15f % 360f;
             GUILayout.Label(WindName(), GUILayout.Width(70f));
             GUILayout.EndHorizontal();
-            windStrength = R2(Slider("Strength", windStrength, 0f, 1f, "0.00"));
+            windStrength = R2(Slider("Weight", windStrength, 0f, 1f, "0.00"));
             windLift = R2(Slider("Lift", windLift, 0f, 1f, "0.00"));
             windDry = Mathf.Round(Slider("Dry", windDry, 0f, 0.05f, "0.000") * 1000f) / 1000f;
             windEvaporation = Mathf.Round(Slider("Sea", windEvaporation, 0f, 0.2f, "0.000") * 1000f) / 1000f;
@@ -1790,7 +1858,7 @@ public class NoiseLab : MonoBehaviour
     {
         int total = 0;
         foreach (int c in biomeCount) total += c;
-        if (total == 0) return "(no land on screen, or Show is not Map)";
+        if (total == 0) return "(no land on screen, or Layer is not Map)";
         var order = new int[biomeCount.Length];
         for (int i = 0; i < order.Length; i++) order[i] = i;
         System.Array.Sort(order, (a, b) => biomeCount[b].CompareTo(biomeCount[a]));

@@ -82,8 +82,27 @@ del mar con lagos y salares desde la profundidad del relleno (n.º 6); v4 o web,
   Cambiarlo es un cambio gobernado (goldens).
 - **Medido de pasada:** 1.628 ms al soltar el arrastre con 5 campos a 256² en el editor (Mono).
   El móvil, sin medir.
-- **Pendiente:** ver el arreglo; viento (una dirección, flecha en el mapa; la rejilla de flechas
-  solo si hay franjas de latitud); medir en el S22 con Perf; cierre (changelog, `CURRENT_STATE`).
+- **Corrección:** la distancia euclídea no quitó las bandas rectas de la captura de Claudio (van a
+  unos 27°; los octógonos solo daban 0°, 45° y 90°). Hipótesis sin comprobar: ruido de humedad de
+  baja frecuencia con 2 octavas, casi un plano inclinado, cortado por las franjas de la tabla.
+  Prueba: Layer → Moisture y Moist a 4 octavas. Si se confirma, poner 4 octavas por defecto en
+  Temp y Moist.
+- **Viento hecho** (`1d834c5`): una dirección y recorrido por líneas en O(n²); Climate → Wind
+  (Weight, Lift, Dry, Sea), flecha en el mapa, capa «Wind air», clave `wd=`. Comprobado con una
+  copia en Python (la sombra cae a sotavento en las 8 direcciones) y visto por Claudio en el
+  editor («me encanta»).
+- **Retoques de uso** (pedidos por Claudio): fondo de cámara `#22262E` (campo `background`),
+  color por sección en los controles con la fila más profunda más clara, «Show» → «Layer»,
+  curvas de nivel (Map → Contours, clave `ct=`), «Strength» → «Weight». Suite 415/415. Falta
+  que Claudio los vea.
+- **Pendiente para cerrar:** medir en el S22 con Perf (Splines + Biomes + viento, arrastrando);
+  cierre (changelog, `CURRENT_STATE`, arranque de la v4, `proyectos.md` y `foco.md`).
+- **Para la v4 (aceptado por Claudio):** vista dividida 2×2 con una capa por panel (primero) y
+  capas superpuestas con +/− y una casilla cada una (después); nubes animadas con `Simplex3D`
+  (z = tiempo) desplazadas con el viento y disueltas sobre las cumbres; los vórtices de von
+  Kármán detrás de islas altas necesitan simular fluidos (Stam, 1999; sin verificar las
+  imágenes de Alejandro Selkirk y Canarias). Bandas por altura absoluta como alternativa a los
+  porcentajes.
 - **Explainers para la web:** prompt en
   `web/claudiobustamante-site/Documentation~/planning/active/Splines_Biomes_Explainers_Startup.md`.
 
