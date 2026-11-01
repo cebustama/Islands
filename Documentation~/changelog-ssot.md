@@ -9,6 +9,55 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## NoiseLab v2 — explore, map bands, parameter code, perf log (sample only)
+Date: 2026-11-01. Commit `b04522a` on `main` (local). No runtime code changed.
+
+**What.** `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs`, four tabs (Noise, Map, Code, Perf):
+- One Simplex button with an Old / Perlin / Simplex selector underneath (Old kept: the range lesson).
+- Typed seed; offset by dragging the image (one view width = 1) or typed. While dragging, the
+  view is sampled at a lower "drag resolution" (32/64/128/Full, default 64) and the cuts are
+  frozen; full resolution, statistics and cuts again on release.
+- Nine flat colour bands by percentage: 3 of water (deep 50, water 30, shallow 20 % of the
+  water) and 6 of land (beach 4, grass 30, forest 30, hillside 16, rock 12, snow 8 % of the
+  land); editable shares that keep each group at 100; cuts shown as ticks on the histogram.
+- Palettes: built-in map palette (land colours from `BiomeColorPalette` defaults) plus the web
+  palette library, copied to `NoiseLab/Resources/palette-library.json` from
+  `claudiobustamante-site/src/data/palette-library.json` (commit `9914f4c`), sorted dark →
+  light and interpolated to the nine bands.
+- Cuts from "% of the view" or "% of the world". Found in the user's test: per-view
+  percentiles move the sea level as the window moves, so a dragged island changed shape.
+  "World" (default) measures the quantiles once on a fixed 128² grid over 16 × 16 view widths
+  around the origin, independent of the offset; recomputed only when a noise setting changes.
+- Parameter code `NL1;t=…;s=…;f=…;o=…;l=…;g=…;w=%…|r…;x=…;y=…;pal=…;b=w,w,w/l,l,l,l,l,l;q=w|v`,
+  invariant culture, shortest round-trip floats; unknown keys ignored on paste; `c=` reserved
+  for a v3 height curve. Copy / Paste (system clipboard) / Apply text.
+- Perf tab: per-frame chart (frame time, sampling time, 60/30 fps guides) and an export
+  (clipboard + file: `<host>/NoiseLabPerf/` in the editor, `persistentDataPath` on Android)
+  with device, backend, settings code, summary table (count/avg/p50/p95/max) and one CSV row
+  per frame.
+
+**Verified.** User-confirmed in the editor (all features) and on the S22 Ultra (new
+Development Build by USB, IL2CPP): same code ⇒ same map in editor and phone (screenshots,
+seed 10925, Simplex, f 5, 4 octaves, 70 % water). Suite 415/415 (bridge, 14:52).
+
+**Measured** (perf exports; phone file pulled with the SDK's `adb` from
+`/storage/emulated/0/Android/data/com.ClaudioBustamante.SnakeCave/files/`):
+
+| Grid | Editor (Mono, i7-10870H) | S22 Ultra (IL2CPP, dev build) |
+| --- | --- | --- |
+| 64² | 29 ms | 3.3 ms |
+| 128² | 128 ms | 12.8 ms |
+| 256² | 475–500 ms | 24.7–27.5 ms |
+
+Cost is linear in pixels. On the phone, frames sit at exactly 33.3 ms: Android's default
+30 fps cap (`targetFrameRate` −1), not the sampling, so dragging at full resolution already
+feels fluid. The resolution was not lowered for the phone. Burst not needed.
+
+**Host changes (no Git).** `Assets/Editor/ClaudeTestBridge.cs`: `Poll` now waits while
+`EditorApplication.isPlayingOrWillChangePlaymode` (a trigger picked up in Play mode made the
+Test Runner fail and left the bridge stuck in `running` until a domain reload).
+`NoiseLabPerf/` folder (outside `Assets/`) holds the exports.
+
 ## NoiseLab — Android build on the user's phone
 Date: 2026-11-01 (session started 2026-10-31). No package code changed.
 

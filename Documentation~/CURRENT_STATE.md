@@ -32,8 +32,12 @@ W.c implemented and committed, governed docs pending; noise range fix A+D merged
   tests, no goldens; suite 415/415. Tried in the editor by the user (both layouts).
   Detail in `changelog-ssot.md`. **Android build verified 2026-11-01** on the user's
   S22 Ultra (touch, both orientations, histogram as in the editor; package scene builds
-  from `Packages/` without copying). Next on this track: NoiseLab v2
-  (`planning/active/NoiseLab_v2_Startup.md`).
+  from `Packages/` without copying). **NoiseLab v2 DONE 2026-11-01, commit `b04522a`:**
+  Simplex group, drag to explore (drag resolution), nine percentage bands with palettes
+  (map + web library), cuts from view or fixed world reference, parameter code `NL1`
+  (same code ⇒ same map, editor and S22), Perf tab with export. Measured: 256² sample
+  ≈ 25 ms on the S22 (IL2CPP), ≈ 480 ms in the editor (Mono). Next on this track: NoiseLab
+  v3 (`planning/active/NoiseLab_v3_Startup.md`; scope is the user's call).
 - **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
   merged into `main` after a user-confirmed visual smoke test.**
   The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s

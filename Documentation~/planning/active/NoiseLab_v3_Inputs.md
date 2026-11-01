@@ -1,6 +1,6 @@
 # NoiseLab v3 — inputs from the «PCG» playlist analysis
 
-- **Status:** input for planning, not a plan. Written 2026-11-01 from the playlist analysis while NoiseLab v2 was being finished in a parallel session. When v3 starts, read this together with the v2 close-out and `NoiseLab_v2_Startup.md` (which already defers "real biomes with temperature and moisture" to v3). Claudio decides scope; nothing here is roadmapped.
+- **Status:** input for planning, not a plan. Written 2026-11-01 from the playlist analysis while NoiseLab v2 was being finished in a parallel session. When v3 starts, read this together with the v2 close-out and `../archive/NoiseLab_v2_Startup.md` (which already defers "real biomes with temperature and moisture" to v3). Claudio decides scope; nothing here is roadmapped.
 - **Sources:** [`../../research/playlist-pcg/`](../../research/playlist-pcg/) (`cards.md`, `cards-tier2.md`, `cards-tier3.md`, `crossref.md`, `backlog.md`). Private wrapped: https://claude.ai/artifact/2ENwKc2kpHJmcVvpCNfexa.
 - **Why NoiseLab:** several backlog items are best understood visually before they become pipeline stages. A NoiseLab mode is a cheap prototype, a teaching scene and a check that the idea is worth a stage. The rule from v1 still holds: CPU, deterministic, same seed ⇒ same image.
 
