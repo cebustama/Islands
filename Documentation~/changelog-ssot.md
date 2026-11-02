@@ -9,6 +9,55 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## NoiseLab v3 — several fields, chained splines, biomes, wind (sample only)
+Date: 2026-11-01/02. Commits `b3baf01`, `1d834c5`, `7375c29` and the closing commit on
+`main` (local). No runtime code changed. `Islands.Samples.asmdef` now also references
+`Islands.PCG.Runtime` (for `ScalarSpline`, `BiomeTable`, `BiomeType`).
+
+**What.** `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs`, pages Noise, Shape, Map, Climate,
+Code, Perf:
+- Five extra noise fields (continent, erosion, peaks, temperature, moisture); field k uses
+  seed `seed + k·7919`; one cache per field, so editing curves or climate never resamples.
+- Shape: one noise (v2) or splines, `height = C(c) + E(e)·PV(pv)` (piecewise-linear
+  `ScalarSpline`, after Kniberg / Minecraft 1.18, simplified: not nested). Curve editor with
+  draggable points over the input histogram. Relief shading (Shade, relief 0–3).
+- Climate: bands (v2) or biomes. Temperature and moisture use the `Stage_Biome2D` formulas,
+  except that the lapse uses the land rank and latitude the world y; `BiomeTable.Lookup`
+  (Whittaker 4×4), beach when coast < 1.5 and T ≥ 0.25. Coast distance by an exact Euclidean
+  distance transform (Felzenszwalb & Huttenlocher 2012; checked against brute force, error 0),
+  which replaced a chamfer distance. Temperature and moisture noise default to 4 octaves
+  (with 2 the biome borders came out as long, nearly straight bands; user-checked).
+- Wind (one direction): line-by-line sweep along the major axis, O(n²). Air enters saturated,
+  gains moisture over the sea, loses it over land and faster when it climbs (Lift): rain
+  shadow on the lee. Weight, Lift, Dry, Sea; arrow on the map; layer "Wind air". Checked
+  with a Python copy (dry lee in all 8 directions).
+- Map: Layer (map, height, temperature, moisture, raw continent/erosion/peaks, wind air),
+  contour lines (step 0.05, every fifth darker). Usability: camera background `#22262E`,
+  control rows tinted by section and depth.
+- Code keys: `h`, `n1…n5`, `c` (three curves separated by `/`), `k`, `cl`, `wd`, `sh`,
+  `ct`. v3 settings reset before a code is applied, so v2 codes open the same map.
+- `targetFrameRate = 60`.
+
+**Verified.** User-confirmed in the editor (splines, biomes, wind, usability, contours,
+octaves test) and on the S22 Ultra (new Development Build). Suite 415/415 (bridge,
+2026-11-02 15:36).
+
+**Measured** (S22 Ultra, IL2CPP dev build, 5 fields: Splines + Biomes + wind + contours):
+
+| Grid | Sample time | Note |
+| --- | --- | --- |
+| 64² (drag, default) | 7.0 ms avg, 13.4 max | 100 % of drag frames at 60 fps |
+| 128² (drag) | 20.4 ms avg | ≈ 45 fps |
+| 256² (drag, "Full") | 80 ms avg | the slight slowdown the user felt |
+| 256² (release or change) | 85–89 ms | one-off |
+
+About 17 ms per field at 256² (v2: about 25 ms for one field). The editor (Mono) takes ≈ 1.6 s on release with 5 fields.
+
+**Known limits.** Coast distance only sees water inside the view; air entering the view is
+assumed to come from the sea (edge effect while dragging); the 4×4 Whittaker table jumps
+between unrelated biomes; bands and biomes use percentiles or land rank, so "taller"
+mountains only show in Shade, the Height layer and contours.
+
 ## NoiseLab v2 — explore, map bands, parameter code, perf log (sample only)
 Date: 2026-11-01. Commit `b04522a` on `main` (local). No runtime code changed.
 

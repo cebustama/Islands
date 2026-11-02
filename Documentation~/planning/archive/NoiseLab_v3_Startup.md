@@ -95,8 +95,10 @@ del mar con lagos y salares desde la profundidad del relleno (n.º 6); v4 o web,
   color por sección en los controles con la fila más profunda más clara, «Show» → «Layer»,
   curvas de nivel (Map → Contours, clave `ct=`), «Strength» → «Weight». Suite 415/415. Falta
   que Claudio los vea.
-- **Pendiente para cerrar:** medir en el S22 con Perf (Splines + Biomes + viento, arrastrando);
-  cierre (changelog, `CURRENT_STATE`, arranque de la v4, `proyectos.md` y `foco.md`).
+- **Cerrada el 2026-11-02.** Prueba de octavas hecha por Claudio (Noise = 1, Coast = 0): con
+  4 octavas los bordes se ondulan; temperatura y humedad pasan a 4 octavas por defecto. S22:
+  7 ms por muestreo a 64² al arrastrar (60 fps), unos 85 ms a 256² con 5 campos. Detalle en
+  `changelog-ssot.md`; siguiente, `planning/active/NoiseLab_v4_Startup.md`.
 - **Para la v4 (aceptado por Claudio):** vista dividida 2×2 con una capa por panel (primero) y
   capas superpuestas con +/− y una casilla cada una (después); nubes animadas con `Simplex3D`
   (z = tiempo) desplazadas con el viento y disueltas sobre las cumbres; los vórtices de von

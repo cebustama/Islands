@@ -94,8 +94,10 @@ public class NoiseLab : MonoBehaviour
         new NoiseField(NoiseType.SimplexPerlinOnSimplex, 2, 4, 2, 0.5f), // continentalness: big shapes
         new NoiseField(NoiseType.SimplexPerlinOnSimplex, 3, 3, 2, 0.5f), // erosion: where relief is allowed
         new NoiseField(NoiseType.SimplexPerlinOnSimplex, 8, 4, 2, 0.5f), // peaks and valleys: detail
-        new NoiseField(NoiseType.SimplexPerlinOnSimplex, 2, 2, 2, 0.5f), // temperature noise
-        new NoiseField(NoiseType.SimplexPerlinOnSimplex, 3, 2, 2, 0.5f), // moisture noise
+        // Temperature and moisture use 4 octaves: with 2 the field is almost a smooth slope at
+        // view scale, and the biome table cuts it into long, nearly straight bands.
+        new NoiseField(NoiseType.SimplexPerlinOnSimplex, 2, 4, 2, 0.5f), // temperature noise
+        new NoiseField(NoiseType.SimplexPerlinOnSimplex, 3, 4, 2, 0.5f), // moisture noise
     };
 
     [SerializeField] NoiseField[] extraFields = DefaultExtraFields(); // fields 1..5

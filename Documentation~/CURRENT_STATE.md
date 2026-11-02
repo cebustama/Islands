@@ -36,8 +36,14 @@ W.c implemented and committed, governed docs pending; noise range fix A+D merged
   Simplex group, drag to explore (drag resolution), nine percentage bands with palettes
   (map + web library), cuts from view or fixed world reference, parameter code `NL1`
   (same code ⇒ same map, editor and S22), Perf tab with export. Measured: 256² sample
-  ≈ 25 ms on the S22 (IL2CPP), ≈ 480 ms in the editor (Mono). Next on this track: NoiseLab
-  v3 (`planning/active/NoiseLab_v3_Startup.md`; scope is the user's call).
+  ≈ 25 ms on the S22 (IL2CPP), ≈ 480 ms in the editor (Mono). **NoiseLab v3 DONE
+  2026-11-02** (commits `b3baf01`, `1d834c5`, `7375c29` + closing commit): five extra noise
+  fields with per-field caches, chained splines (`C + E·PV`) with a curve editor, biomes
+  from the `Stage_Biome2D` formulas with an exact Euclidean coast distance, one-direction
+  wind with rain shadow, layers and contour lines; `Islands.Samples.asmdef` references
+  `Islands.PCG.Runtime`. S22: 7 ms per drag sample at 64² (60 fps), 85 ms at 256². Detail in
+  `changelog-ssot.md`. Next on this track: NoiseLab v4
+  (`planning/active/NoiseLab_v4_Startup.md`; split view first).
 - **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
   merged into `main` after a user-confirmed visual smoke test.**
   The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s
@@ -571,6 +577,12 @@ each names where it would have to be checked.
   unsupported on Android. Harmless for NoiseLab (IMGUI only); decide before an Android build
   that uses the Input System (SnakeCave, the portfolio app). Host also holds a stale
   `Assets/NoiseLab.unity` copy outside the build list.
+- **Pipeline coast distance is 4-neighbour (recorded 2026-11-02, from NoiseLab v3).**
+  `Stage_Biome2D` reads `CoastDist`, which `Stage_Morphology2D` fills with
+  `MaskMorphologyOps2D.BfsDistanceField`, a
+  4-neighbour BFS: its contours are diamonds, so with a slow coastal moisture decay the biome
+  borders can follow diamond shapes. NoiseLab uses an exact Euclidean transform instead.
+  Changing the pipeline is a governed change (biome goldens move). Not scheduled.
 - ~~**`Stage_Vegetation2D.moistureModulation` may be unreachable.**~~ **RESOLVED at W.b
   (2026-08-20).** Confirmed unreachable — zero assignments anywhere in the corpus outside
   its own declaration, so with the `> 0f` guard the branch had been inert since it was
