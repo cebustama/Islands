@@ -40,14 +40,19 @@ Fecha: 2026-11-02. Rama: `main`. Sigue a `planning/archive/NoiseLab_v3_Startup.m
 4. Bandas por altura absoluta como alternativa a los porcentajes (las montañas «más altas» se
    verían en el color, no solo en el sombreado).
 
-## Decisiones abiertas (presentarlas con recomendación antes de escribir código)
-1. **Alcance.** Recomendación: 1 y 2 (comparten la idea de «elegir capa»), y 3 si alcanza.
-2. **Cómo se ve la vista dividida en el móvil.** Cuatro paneles de 128 px en vertical son
-   pequeños. Recomendación: 2×2 y además 1×2, a elegir.
-3. **Código.** Una clave nueva para los paneles y las capas (por ejemplo `v=` con la capa de
-   cada panel). Recomendación: una sola clave; los códigos viejos abren la vista de un panel.
-4. **Nubes.** Animarlas obliga a repintar en cada fotograma. Recomendación: una textura de
-   nubes aparte, de baja resolución, encima del mapa, sin tocar las cachés del terreno.
+## Decisiones (aceptadas por Claudio el 2026-11-02; no volver a preguntarlas)
+1. **Alcance:** primero la vista dividida y después las capas superpuestas (las dos parten de
+   «elegir capa», que ya existe en Map → Layer). Las nubes, solo si alcanza.
+2. **Paneles:** selector de vista 1 / 1×2 / 2×2. El ruido se muestrea una vez y se comparte;
+   cada panel solo repinta su capa. Arrastrar mueve todos los paneles a la vez.
+3. **Código:** clave nueva `v=` con la vista y la capa de cada panel (por ejemplo
+   `v=4:map,height,moisture,wind`) y `ov=` para las capas superpuestas (capa y opacidad). Un
+   código sin estas claves abre un panel, como hoy.
+4. **Capas superpuestas:** lista bajo Layer, con una casilla y una opacidad por capa, y +/−
+   para añadir y quitar. Se mezclan en orden sobre el mapa base. Las curvas de nivel pasan a
+   ser una capa más de la lista, con sus ajustes actuales.
+5. **Nubes (si alcanza):** una textura de nubes aparte, de baja resolución, encima del mapa,
+   sin tocar las cachés del terreno (animarlas obliga a repintar en cada fotograma).
 
 ## Fuera de alcance
 Burst, UI Toolkit, pasar el viento o la distancia euclídea a `Stage_Biome2D` (cambio gobernado:
@@ -61,8 +66,8 @@ nivel), la build Android y las mediciones.
 1. `git log --oneline -8` y `git status` en `D:\Projects\Islands`.
 2. Con Unity abierto y fuera de Play, `ClaudeTests/run.trigger` vacío en el anfitrión: 415/415.
 3. Leer `NoiseLab.cs` por secciones: `Update`, `Paint`, la UI de la pestaña Map y `BuildCode`.
-4. Presentar las decisiones 1–4 con su recomendación. No escribir código antes de la respuesta
-   de Claudio.
+4. Confirmar en 5 líneas el plan del primer paso (vista dividida) y empezar; las decisiones ya
+   están tomadas. Al terminar cada paso, Claudio lo prueba en el editor antes del siguiente.
 
 ## Archivos
 - `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs` (lo único que se toca).
