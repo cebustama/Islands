@@ -67,3 +67,9 @@ Route elsewhere: web Labs (snowflake / Nakaya explainer; Turing patterns with th
 ## Tier 2 re-read (2026-11-01)
 
 Tier 2 was re-read with full transcripts (26 of 33 usable). No value changed and no candidate moved. The corrections above (CA needs a Moore count and a configurable rule; coast roughness over a limited scale range; 14 Pixel Architect rules; Sunny Valley lineage via the legacy project) are folded into the bullets. New small notes: picoCAD's dithered shading toward darker palette shades and Grant Abbitt's third tree method (rings of linked branches, the araucaria's structure) for the web Flora Lab and sprite tools.
+
+## Captures (outside the playlist)
+
+Pending ideas delivered with `/capturar`. Same rule: nothing here is roadmapped.
+
+- **2026-11-02 · Wave-exposure field (eikonal, fast sweeping), M.** From `shoreMap.js` in Ultra Water: travel time from the coast with c = √(g·depth), then wave direction, shoaling and exposure per coast cell. Feeds beaches / coves / cliffs and settlement siting; a continuous-metric sibling of n.º 1 (`BfsDistanceField`). Not the "ocean waves" rejected above: it is a static generation field, not runtime simulation. Open question: the same sweep for a wind field that bends with terrain (generalises NoiseLab v3's single-direction wind; needs anisotropic speed). Card: [`../2026-11-capturas.md`](../2026-11-capturas.md).
