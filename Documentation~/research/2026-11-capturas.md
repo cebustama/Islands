@@ -2,6 +2,23 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-03 · Potential flow and a Kármán vortex street (matheorem.s, Threads)
+- **Type and origin:** image, screenshot of a Threads post by matheorem.s (2026-11-03): animation of Bernoulli's p + ½ρv² + ρgh = const. Top: Rankine oval (source + sink in a uniform stream). Middle: cylinder shedding a von Kármán vortex street (Strouhal fD/U = 0.2, Kármán spacing h/l = 0.281). Bottom: airfoil with pressure arrows. Post text truncated in the screenshot.
+- **What Claudio said:** (no comment; «Ok a todo» to save it).
+- **Caveat:** the post calls the cylinder flow "potential flow" that sheds vortices. Potential flow cannot shed vortices (no viscosity, no boundary layer; d'Alembert's paradox). The animation is potential flow plus point vortices added by hand at the Strouhal rate. The numbers are right (St ≈ 0.2 for Re ≈ 300–10⁵; h/l = 0.281 from sinh(πh/l) = 1). Good enough as a game trick, not as physics.
+- 💡 **Use here:** (1) wind that goes **around** relief instead of a single sweep direction (`WindField` in NoiseLab, see the Ultra Water entry below): uniform stream + sources per obstacle, or a stream function solved around the land mask; divergence-free, so it pairs with the existing `isCurl` in `Runtime/Surfaces/FlowJob.cs`. (2) **Leeward cloud wakes** behind tall islands, with period from St (f = 0.2·U/D). Real Chilean example: cloud Kármán streets downwind of Alejandro Selkirk (Juan Fernández), NASA Earth Observatory images (not re-checked here).
+- **Sources:** Milne-Thomson, *Theoretical Hydrodynamics*; Bridson, Hourihan and Nordenstam, «Curl-noise for procedural fluid flow», SIGGRAPH 2007 (obstacles in a divergence-free field).
+- **Connects with:** web Islands Lab (`/labs/islands/climate`, possible "wind around the island" explainer).
+- **Status:** seed. Architecture question opened the same day (how flow fits Islands); see the session answer.
+
+## 2026-11-03 · Salt Pyramids of Caldera: yardangs in layered marine rock (Ladera Sur)
+- **Type and origin:** 6 Instagram screenshots (Ladera Sur, saved to Claudio's «Islands» collection) + article: Jǒzepa Benčina Campos, «Pirámides de Sal: Las esculturas del viento ubicadas en el corazón del desierto de Atacama», Ladera Sur, 2025-05-29, https://laderasur.com/articulo/piramides-de-sal-las-esculturas-del-viento-ubicadas-en-el-corazon-del-desierto-de-atacama/ (read in full).
+- **What it is:** Quebrada La Higuera, 32 km from Caldera. Soft Neogene marine rocks (Bahía Inglesa / Estratos de Caldera, ~11 Ma: sandstone, orange siltstone, bioclastic calcarenite, phosphatic breccia) weakly cemented with salts, carved by sand-laden wind into intermediate-scale **yardangs**, long axes NE–SW along the strongest winds (geologist Badith Muñoz). Hard layers stand out as ledges and caps (mushroom rock, photo 6); terraced pyramids (photos 1, 3). Salicornia in brackish channels (photo 5). Municipal protection since 2018; threats: 4×4s, fossil looting. Photo 4 (circular patterns by the sea) is likely the **orbicular granite** of Caldera (Santuario de la Naturaleza), a different site (inferred, not checked).
+- 💡 **Use here:** (1) the **strata layer** already proposed in `playlist-pcg/cards-tier3.md` (tilted strata field), now with a hardness per layer: soft layers erode, hard ones leave ledges and caps. (2) **Wind erosion**: stretch hills along the wind direction (yardangs). Terrace quantisation already exists (`MapTunables2D`) but without hardness. Caveat: yardangs need finer resolution than a world map; maybe a material/visual layer, not a stage.
+- **Sources (not checked):** McCauley, Grolier and Breed (1977) on terrestrial and Martian yardangs; Goudie (2007), «Mega-yardangs», *Geography Compass*.
+- **Connects with:** videojuego-colonizacion (`../../../videojuego-colonizacion/historia/2026-11-capturas.md`); cuaderno-civilizaciones, changos coast near Caldera (Las Lizas, `conocimiento/pueblos/changos.md`).
+- **Status:** seed.
+
 ## 2026-11-02 · Ultra Water: an eikonal shore-wave field (`shoreMap.js`)
 - **Type and origin:** link, GitHub repo https://github.com/Humpalumps/Ultra-Water (Humpalumps, created 2026-10-28, MIT, three.js / WebGL2). Read from the README and file tree; `shoreMap.js` itself not yet read line by line.
 - **What Claudio said:** «me interesa lo de shoreMap, para que lo anotes en las ideas pendientes de Islands. No sé si también servirá para el flujo de las nubes? De acuerdo con el shader, probablemente hay una mejor forma en Unity.»
