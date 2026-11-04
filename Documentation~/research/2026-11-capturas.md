@@ -2,6 +2,14 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-04 · NASA ocean currents map («ríos invisibles», @desde_la_ciencia)
+- **Type and origin:** link, Instagram https://www.instagram.com/p/DfSOVIoHCDW/ (@desde_la_ciencia; read via the embed page; date, full carousel and source not visible without login).
+- **What it is:** animated NASA map of surface ocean currents and eddies (Gulf Stream; heat, rain and nutrient transport). Probably *Perpetual Ocean* (NASA Scientific Visualization Studio, 2012, ECCO2 model, 2005–2007), not confirmed. A model, not direct measurement.
+- 💡 **Use here:** a second consumer for the flow field (see the potential-flow entry below): **ocean currents** as a stream function ψ damped near land with `CoastDist` (candidate C fits better at sea, where all land is the obstacle). A cold current along a coast gives coastal desert and fog, which would make Atacama a rule instead of the "declared trick" in the web climate page.
+- **Connects with:** cuaderno-civilizaciones, Humboldt current and the changos (`../../../cuaderno-civilizaciones/notas/2026-11-02-mchap-2008-pescadores-de-la-niebla.md`); videojuego-colonizacion (currents the sea people know and the outsider doesn't; where wrecks drift).
+- **Sources to check:** NASA SVS *Perpetual Ocean* (ID 3827); Menemenlis et al. (2008), ECCO2.
+- **Status:** seed.
+
 ## 2026-11-03 · Potential flow and a Kármán vortex street (matheorem.s, Threads)
 - **Type and origin:** image, screenshot of a Threads post by matheorem.s (2026-11-03): animation of Bernoulli's p + ½ρv² + ρgh = const. Top: Rankine oval (source + sink in a uniform stream). Middle: cylinder shedding a von Kármán vortex street (Strouhal fD/U = 0.2, Kármán spacing h/l = 0.281). Bottom: airfoil with pressure arrows. Post text truncated in the screenshot.
 - **What Claudio said:** (no comment; «Ok a todo» to save it).
