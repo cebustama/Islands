@@ -104,11 +104,11 @@ public class NoiseLab : MonoBehaviour
 
     // Height: one noise (v2), or three noises chained through splines.
     public enum HeightSource { OneNoise, Splines }
-    [SerializeField] HeightSource heightSource = HeightSource.OneNoise;
+    [SerializeField] HeightSource heightSource = HeightSource.Splines; // v4: default on start (codes without h= still mean one noise)
 
     // Land colour: percentage bands (v2), or biomes from temperature and moisture.
     public enum Colouring { Bands, Biomes }
-    [SerializeField] Colouring colouring = Colouring.Bands;
+    [SerializeField] Colouring colouring = Colouring.Biomes;     // v4: default on start (codes without k= still mean bands)
 
     [SerializeField] bool shade = false;
 
@@ -152,8 +152,11 @@ public class NoiseLab : MonoBehaviour
 
     float[] values, sorted;
     float threshold, waterFraction;
-    Texture2D texture;
-    Color32[] pixels;
+    // v4: split view. 1, 2 or 4 panels share the samples, the cuts and the climate; each
+    // panel only paints its own layer into its own texture.
+    const int MaxPanels = 4;
+    readonly Texture2D[] textures = new Texture2D[MaxPanels];
+    readonly Color32[][] panelPixels = new Color32[MaxPanels][];
     bool dirty = true;
 
     // Step 2: measured statistics of the raw values.
@@ -511,7 +514,7 @@ public class NoiseLab : MonoBehaviour
 
     void OnDestroy()
     {
-        if (texture != null) Destroy(texture);
+        foreach (var t in textures) if (t != null) Destroy(t);
     }
 
     // ---------------------------------------------------------------------------------
@@ -998,7 +1001,18 @@ public class NoiseLab : MonoBehaviour
     // What the image shows. Map: bands or biomes. The rest: one field on its own.
     enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir }
     static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air" };
-    Show show = Show.Map;
+    static readonly string[] ShowCodes = { "map", "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind" };
+
+    // v4: number of panels (1, 2 or 4) and the layer each one shows. A choice that is not
+    // available (Temperature with Bands) is kept, and the panel shows the map meanwhile.
+    static readonly int[] ViewCounts = { 1, 2, 4 };
+    static readonly string[] ViewLabels = { "1", "1×2", "2×2" };
+    static readonly Show[] DefaultPanels = { Show.Map, Show.Height, Show.Temperature, Show.Moisture };
+    int viewCount = 1;
+    readonly Show[] panelShow = (Show[])DefaultPanels.Clone();
+    int selectedPanel;
+
+    Show Effective(int k) => Available(panelShow[k]) ? panelShow[k] : Show.Map;
 
     bool Available(Show s) => s switch
     {
@@ -1014,24 +1028,36 @@ public class NoiseLab : MonoBehaviour
     // Flat colour per band: the map reads by its cuts, not by gradients.
     void Paint()
     {
+        if (palettes == null) LoadPalettes();
+        if (palettes[paletteIndex].id != paletteId) paletteIndex = FindPalette(paletteId); // code or Inspector
+        System.Array.Clear(biomeCount, 0, biomeCount.Length);
+        bool counted = false; // the biome shares come from the first panel that shows the map
+        for (int k = 0; k < viewCount; k++)
+        {
+            Show s = Effective(k);
+            PaintPanel(k, s, s == Show.Map && !counted);
+            if (s == Show.Map) counted = true;
+        }
+    }
+
+    void PaintPanel(int k, Show show, bool countBiomes)
+    {
         int n = sampleN;
+        var texture = textures[k];
         if (texture == null || texture.width != n)
         {
             if (texture != null) Destroy(texture);
-            texture = new Texture2D(n, n, TextureFormat.RGBA32, false)
+            texture = textures[k] = new Texture2D(n, n, TextureFormat.RGBA32, false)
             {
                 filterMode = FilterMode.Point,
                 wrapMode = TextureWrapMode.Clamp
             };
         }
-        if (palettes == null) LoadPalettes();
-        if (palettes[paletteIndex].id != paletteId) paletteIndex = FindPalette(paletteId); // code or Inspector
-        if (!Available(show)) show = Show.Map;
 
-        if (pixels == null || pixels.Length != n * n) pixels = new Color32[n * n];
+        var pixels = panelPixels[k];
+        if (pixels == null || pixels.Length != n * n) pixels = panelPixels[k] = new Color32[n * n];
         var bands = Bands;
         bool biomes = colouring == Colouring.Biomes;
-        System.Array.Clear(biomeCount, 0, biomeCount.Length);
 
         for (int i = 0; i < pixels.Length; i++)
         {
@@ -1044,7 +1070,7 @@ public class NoiseLab : MonoBehaviour
                     if (biomes)
                     {
                         var bt = BiomeAt(i);
-                        biomeCount[(int)bt]++;
+                        if (countBiomes) biomeCount[(int)bt]++;
                         c = BiomeColours[(int)bt];
                     }
                     else c = bands[band];
@@ -1107,7 +1133,7 @@ public class NoiseLab : MonoBehaviour
     // (a phone set to Spanish would otherwise write 0,53). Unknown keys are ignored.
     // v3 adds, only when in use: h=s (splines), n1..n5 (fields: type,f,o,l,g),
     // c= (the three curves, x:y points, curves separated by /), k=z (biomes),
-    // cl= (climate tunables) and sh= (relief shading).
+    // cl= (climate tunables) and sh= (relief shading). v4 adds v= (panels and their layers).
     // ---------------------------------------------------------------------------------
 
     static readonly string[] TypeCodes =
@@ -1146,7 +1172,31 @@ public class NoiseLab : MonoBehaviour
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (shade) code += $";sh={F(relief)}";
         if (contours) code += $";ct={F(contourStep)}";
+        if (viewCount > 1 || Effective(0) != Show.Map) code += ";v=" + ViewCode();
         return code;
+    }
+
+    // v4: v=4:map,height,moisture,wind. Writes what each panel shows.
+    string ViewCode()
+    {
+        var names = new string[viewCount];
+        for (int k = 0; k < viewCount; k++) names[k] = ShowCodes[(int)Effective(k)];
+        return $"{viewCount}:{string.Join(",", names)}";
+    }
+
+    void ReadView(string text)
+    {
+        string[] p = text.Split(':');
+        if (!int.TryParse(p[0], NumberStyles.Integer, Inv, out int count) ||
+            System.Array.IndexOf(ViewCounts, count) < 0) return;
+        viewCount = count;
+        if (p.Length < 2) return;
+        string[] names = p[1].Split(',');
+        for (int k = 0; k < Mathf.Min(names.Length, MaxPanels); k++)
+        {
+            int s = System.Array.IndexOf(ShowCodes, names[k].Trim());
+            if (s >= 0) panelShow[k] = (Show)s;
+        }
     }
 
     string FieldCode(int k)
@@ -1193,6 +1243,10 @@ public class NoiseLab : MonoBehaviour
         windLift = 0.6f;
         windDry = 0.01f;
         windEvaporation = 0.05f;
+        // v4: a code without v= opens one panel with the map.
+        viewCount = 1;
+        DefaultPanels.CopyTo(panelShow, 0);
+        selectedPanel = 0;
     }
 
     // Returns null on success, or a short error.
@@ -1254,6 +1308,7 @@ public class NoiseLab : MonoBehaviour
                 case "c": ReadCurves(val); break;
                 case "cl": ReadClimate(val); break;
                 case "wd": ReadWind(val); break;
+                case "v": ReadView(val); break;
                 case "ct":
                     if (TryF(val, out float ct)) { contours = true; contourStep = Mathf.Clamp(ct, 0.01f, 0.2f); }
                     break;
@@ -1377,37 +1432,47 @@ public class NoiseLab : MonoBehaviour
     string codeText = "", codeStatus = "";
     string offsetXText = "", offsetYText = "";
 
-    // Drag state.
+    // Drag state. imageRect covers all the panels; panelSide converts a drag to view widths.
     Rect imageRect;
+    readonly Rect[] panelRects = new Rect[MaxPanels];
+    float panelSide = 1f;
     bool dragging, moved;
     Vector2 lastPointer;
+    float dragDistance; // a press that barely moves is a tap: it picks the panel
+
+    const float PanelGap = 4f;
 
     void OnGUI()
     {
-        if (texture == null) return;
+        if (textures[0] == null) return;
 
         float scale = Screen.height / VirtualHeight;
         GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
         float width = Screen.width / scale, height = VirtualHeight;
         const float margin = 16f;
+        const float viewExtras = 8f + 70f + 4f + 60f + 8f; // histogram (70) and numbers (60)
 
         Rect controls;
         if (width < height * 0.9f)
         {
             // Portrait: view on top, controls underneath. The controls get their height
-            // first; the image takes what is left after histogram (70) and numbers (60).
-            const float controlsHeight = 350f, viewExtras = 8f + 70f + 4f + 60f + 8f;
-            float side = Mathf.Min(width - 2f * margin,
-                                   height - 2f * margin - viewExtras - controlsHeight);
-            float bottom = DrawView((width - side) * 0.5f, margin, side);
+            // first; the panels take what is left.
+            const float controlsHeight = 350f;
+            Grid(width - 2f * margin, height - 2f * margin - viewExtras - controlsHeight, out int cols, out float side);
+            float gridWidth = GridWidth(cols, side);
+            float bottom = DrawView((width - gridWidth) * 0.5f, margin, cols, side);
             controls = new Rect(margin, bottom + 8f, width - 2f * margin, height - bottom - 8f - margin);
         }
         else
         {
-            // Landscape: view on the left, controls in a column on the right.
+            // Landscape: view on the left, controls in a column on the right. One panel keeps
+            // the v3 size; several panels may use the full height.
+            int cols = 1;
             float side = Mathf.Min(height * 0.6f, width * 0.5f);
-            DrawView(margin, margin, side);
-            float x = 2f * margin + side;
+            if (viewCount > 1)
+                Grid(Mathf.Min(width * 0.5f, width - 3f * margin - 380f), height - 2f * margin - viewExtras, out cols, out side);
+            DrawView(margin, margin, cols, side);
+            float x = 2f * margin + GridWidth(cols, side);
             controls = new Rect(x, margin, Mathf.Min(420f, width - x - margin), height - 2f * margin);
         }
 
@@ -1415,8 +1480,24 @@ public class NoiseLab : MonoBehaviour
         DrawControls(controls);
     }
 
+    // v4: the largest square panels that fit in w × h. Two panels go side by side or one
+    // above the other, whichever leaves them bigger; four make a 2×2.
+    void Grid(float w, float h, out int cols, out float side)
+    {
+        float Side(int c)
+        {
+            int r = (viewCount + c - 1) / c;
+            return Mathf.Min((w - PanelGap * (c - 1)) / c, (h - PanelGap * (r - 1)) / r);
+        }
+        cols = viewCount switch { 1 => 1, 2 => Side(2) >= Side(1) ? 2 : 1, _ => 2 };
+        side = Mathf.Max(32f, Side(cols));
+    }
+
+    static float GridWidth(int cols, float side) => cols * side + PanelGap * (cols - 1);
+
     // One finger (or the mouse) on the image moves the view; the point under the finger
     // stays under it. IMGUI turns touches into mouse events, already in GUI space.
+    // v4: all panels move together; a tap on a panel picks it for the Layer control.
     void HandleDrag()
     {
         Event e = Event.current;
@@ -1426,6 +1507,7 @@ public class NoiseLab : MonoBehaviour
                 if (!imageRect.Contains(e.mousePosition)) return;
                 dragging = true;
                 lastPointer = e.mousePosition;
+                dragDistance = 0f;
                 GUIUtility.keyboardControl = 0; // leave any text field
                 e.Use();
                 break;
@@ -1433,14 +1515,18 @@ public class NoiseLab : MonoBehaviour
                 if (!dragging) return;
                 Vector2 d = e.mousePosition - lastPointer;
                 lastPointer = e.mousePosition;
-                offset.x -= d.x / imageRect.width;
-                offset.y += d.y / imageRect.height; // GUI y grows down, texture y grows up
+                dragDistance += d.magnitude;
+                offset.x -= d.x / panelSide;
+                offset.y += d.y / panelSide; // GUI y grows down, texture y grows up
                 moved = true;
                 e.Use();
                 break;
             case EventType.MouseUp:
                 if (!dragging) return;
                 dragging = false;
+                if (dragDistance < 8f)
+                    for (int k = 0; k < viewCount; k++)
+                        if (panelRects[k].Contains(e.mousePosition)) selectedPanel = k;
                 offset.x = Mathf.Round(offset.x * 1000f) / 1000f; // readable codes
                 offset.y = Mathf.Round(offset.y * 1000f) / 1000f;
                 dirty = true;
@@ -1767,12 +1853,18 @@ public class NoiseLab : MonoBehaviour
         float share = Slider("Share %", shares[i], 0f, 100f, "0");
         if (Mathf.Abs(share - shares[i]) >= 0.5f) SetShare(shares, i, share);
 
-        // v3: what the image shows.
+        // v3: what the image shows. v4: the view (1, 1×2, 2×2) takes the place of the
+        // "Layer" label (no room for another row on a phone); the arrows change the layer of
+        // the selected panel (tap a panel to select it).
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
-        GUILayout.Label("Layer", GUILayout.Width(110f));
-        if (GUILayout.Button("<", GUILayout.Width(40f), GUILayout.Height(30f))) show = NextShow(-1);
-        GUILayout.Label(ShowNames[(int)show], GUILayout.ExpandWidth(true));
-        if (GUILayout.Button(">", GUILayout.Width(40f), GUILayout.Height(30f))) show = NextShow(+1);
+        int view = GUILayout.Toolbar(System.Array.IndexOf(ViewCounts, viewCount), ViewLabels,
+                                     GUILayout.Width(130f), GUILayout.Height(30f));
+        viewCount = ViewCounts[view];
+        selectedPanel = Mathf.Min(selectedPanel, viewCount - 1);
+        if (GUILayout.Button("<", GUILayout.Width(40f), GUILayout.Height(30f))) panelShow[selectedPanel] = NextShow(-1);
+        string layerName = ShowNames[(int)Effective(selectedPanel)];
+        GUILayout.Label(viewCount > 1 ? $"{selectedPanel + 1}: {layerName}" : layerName, GUILayout.ExpandWidth(true));
+        if (GUILayout.Button(">", GUILayout.Width(40f), GUILayout.Height(30f))) panelShow[selectedPanel] = NextShow(+1);
         GUILayout.EndHorizontal();
 
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
@@ -1786,7 +1878,7 @@ public class NoiseLab : MonoBehaviour
 
     Show NextShow(int direction)
     {
-        int count = ShowNames.Length, s = (int)show;
+        int count = ShowNames.Length, s = (int)Effective(selectedPanel);
         for (int k = 0; k < count; k++)
         {
             s = (s + direction + count) % count;
@@ -1860,7 +1952,7 @@ public class NoiseLab : MonoBehaviour
     {
         int total = 0;
         foreach (int c in biomeCount) total += c;
-        if (total == 0) return "(no land on screen, or Layer is not Map)";
+        if (total == 0) return "(no land on screen, or no panel shows the Map)";
         var order = new int[biomeCount.Length];
         for (int i = 0; i < order.Length; i++) order[i] = i;
         System.Array.Sort(order, (a, b) => biomeCount[b].CompareTo(biomeCount[a]));
@@ -1970,15 +2062,31 @@ public class NoiseLab : MonoBehaviour
         return value;
     }
 
-    // Image, histogram and numbers. Returns the y where they end.
-    float DrawView(float left, float top, float side)
+    // Panels, histogram and numbers. Returns the y where they end.
+    float DrawView(float left, float top, int cols, float side)
     {
-        imageRect = new Rect(left, top, side, side);
-        GUI.DrawTexture(imageRect, texture);
-        if (colouring == Colouring.Biomes && wind) DrawWindArrow(new Vector2(left + side - 34f, top + 34f));
+        int rows = (viewCount + cols - 1) / cols;
+        float gridWidth = GridWidth(cols, side), gridHeight = rows * side + PanelGap * (rows - 1);
+        imageRect = new Rect(left, top, gridWidth, gridHeight);
+        panelSide = side;
+        for (int k = 0; k < viewCount; k++)
+        {
+            var r = panelRects[k] = new Rect(left + k % cols * (side + PanelGap), top + k / cols * (side + PanelGap), side, side);
+            if (viewCount > 1 && k == selectedPanel)
+                DrawRect(new Rect(r.x - 2f, r.y - 2f, r.width + 4f, r.height + 4f), Color.white);
+            if (textures[k] != null) GUI.DrawTexture(r, textures[k]);
+            if (viewCount > 1)
+            {
+                string name = $"{k + 1} {ShowNames[(int)Effective(k)]}";
+                DrawRect(new Rect(r.x, r.y, 9f * name.Length + 8f, 22f), new Color(0f, 0f, 0f, 0.5f));
+                GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
+            }
+        }
+        // The wind arrow goes in the top-right panel.
+        if (colouring == Colouring.Biomes && wind) DrawWindArrow(new Vector2(left + gridWidth - 34f, top + 34f));
 
-        // Histogram strip under the image. x axis: raw value from -1 (left) to +1 (right).
-        var plot = new Rect(left, top + side + 8f, side, 70f);
+        // Histogram strip under the panels. x axis: raw value from -1 (left) to +1 (right).
+        var plot = new Rect(left, top + gridHeight + 8f, gridWidth, 70f);
         DrawRect(plot, new Color(0f, 0f, 0f, 0.6f));
         float barWidth = plot.width / Bins;
         for (int b = 0; b < Bins; b++)

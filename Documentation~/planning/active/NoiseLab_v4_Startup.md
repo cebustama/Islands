@@ -39,6 +39,21 @@ Fecha: 2026-11-02. Rama: `main`. Sigue a `planning/archive/NoiseLab_v3_Startup.m
    altas necesitarían simular fluidos (Stam, 1999): fuera de la v4 salvo decisión.
 4. Bandas por altura absoluta como alternativa a los porcentajes (las montañas «más altas» se
    verían en el color, no solo en el sombreado).
+5. **Viento y costa a escala de mundo** (Claudio, 2026-11-04): hoy el viento entra saturado por
+   el borde de la vista que da al viento (`WindField`) y la distancia a la costa no ve el agua
+   fuera de la vista, así que al arrastrar cambia la sombra de lluvia. Opciones: un margen
+   muestreado hacia el viento, o el viento sobre la rejilla de referencia del mundo (128²).
+   Enlaza con la pregunta de mundo infinito frente a planeta (ver «Avance»).
+
+## Avance
+- **Paso 1, vista dividida (2026-11-04):** selector 1 / 1×2 / 2×2 en la fila Layer de Map;
+  un toque elige el panel; el arrastre mueve todos; `v=` en el código; una capa no disponible
+  muestra el mapa y conserva la elección. Suite 415/415 (puente, 2026-11-04 12:42). Claudio lo
+  probó en el editor: todo bien. Falta el S22 (2×2 en vertical y Perf con 4 paneles).
+- Splines y Biomes por defecto al abrir la escena (los códigos sin `h=`/`k=` no cambian).
+- Explicado a Claudio: con los valores por defecto la tierra sale fría y seca (el rango
+  uniforme resta hasta 0,5 de temperatura; el bono de humedad cae a pocas celdas de la
+  costa), de ahí la tundra; el verde de Bands era altura, no vegetación.
 
 ## Decisiones (aceptadas por Claudio el 2026-11-02; no volver a preguntarlas)
 1. **Alcance:** primero la vista dividida y después las capas superpuestas (las dos parten de
