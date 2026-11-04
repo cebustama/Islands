@@ -62,6 +62,10 @@ se mueven goldens), arreglar `Samples~`, Active Input Handling, fluidos.
 v1 a v3 (bandas, paletas, código, Perf, splines, biomas, viento, distancia euclídea, curvas de
 nivel), la build Android y las mediciones.
 
+## Después de la v4
+Fluidos (viento que rodea el relieve, corrientes, nubes, deriva): propuesta de diseño en
+`planning/active/Fluids_Module_Design.md` (2026-11-04). No entra en la v4.
+
 ## Ritual de arranque
 1. `git log --oneline -8` y `git status` en `D:\Projects\Islands`.
 2. Con Unity abierto y fuera de Play, `ClaudeTests/run.trigger` vacío en el anfitrión: 415/415.
