@@ -9,6 +9,50 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## NoiseLab v4 — split view, overlay layers, clouds, tooltips (sample only)
+Date: 2026-11-04/05. Commits `c6e07fb` (split view), `bc6141b` (overlays), `0c75bbe`
+(clouds, tooltips, perf export v2) on `main` (local). No runtime code changed.
+
+**What.** `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs`:
+- Split view 1 / 1×2 / 2×2 (Map → Layers): noise sampled once and shared, each panel paints
+  its own layer, dragging moves all panels, a tap picks the panel. An unavailable layer shows
+  the map and keeps the choice. Code key `v=` (e.g. `v=4:map,height,moisture,wind`).
+- Overlay layers: a list (box, layer, opacity, −, +; up to 4) blended in order over Map
+  panels; contours became one more layer (`ct=` keeps the step; v3 codes with `ct=` and no
+  `ov=` get one contour layer). Code key `ov=` (`-` = off). Map page split in Bands / Layers.
+- Clouds (Climate → Clouds; with Bands, under the label): a separate 96² texture over Map
+  panels, never touching the terrain caches. Fractal `Simplex3D` (5 octaves, time as the
+  third coordinate), drift along the wind angle, cover raised by the air humidity (`windAir`
+  with wind on, moisture otherwise), so a clear gap stays in the rain shadow; smoothstep edge;
+  offset shadow. Cover, Size, Edge, Speed, Change, Humidity, opacity. Code key `cu=` (6 values
+  in old codes, which keep the soft 0.12 edge; 7 with the edge).
+- Tooltips on tabs, sliders (name and number), toggles and row labels. On touch they show
+  only after the finger stays down ~1 s.
+- Defaults on start: Shape = Splines, Climate = Biomes (codes without `h=`/`k=` keep their
+  old meaning).
+- Perf export v2: line with panels / overlays / clouds; rows and CSV columns `paint_ms`,
+  `cloud_ms`.
+
+**Verified.** User-confirmed in the editor and on the S22 Ultra (split view, overlays, clouds,
+tooltips). Suite 415/415 (bridge, 2026-11-05 17:29).
+
+**Measured** (S22 Ultra, IL2CPP dev build, export 2026-11-05 17:25: 2×2 map / continent /
+erosion / peaks, Splines + Bands, clouds on, drag res 32):
+
+| Set | avg | p50 | p95 |
+| --- | --- | --- | --- |
+| paint, all 4 panels, when repainted | 0.4 ms | 0.2 | 1.5 |
+| clouds, every frame (96², 5 octaves) | 7.5 ms | 7.7 | 9.5 |
+| sample while dragging (32²) | 13.3 ms | 4.1 | 62.9 |
+| sample on release (256², 3 fields) | 62.1 ms | 62.9 | 64.4 |
+
+Dragging frames at 60 fps: 79 %. Painting four panels is negligible; the clouds take about
+half of a 60 fps frame.
+
+**Known limits.** Clouds are the largest per-frame cost (CPU, managed loop): halve with fewer
+octaves or 64², or move to a shader/Burst later. Wind and coast distance still depend on the
+view (candidate for v5). The clouds read humidity at the nearest view cell.
+
 ## NoiseLab v3 — several fields, chained splines, biomes, wind (sample only)
 Date: 2026-11-01/02. Commits `b3baf01`, `1d834c5`, `7375c29` and the closing commit on
 `main` (local). No runtime code changed. `Islands.Samples.asmdef` now also references

@@ -1,7 +1,7 @@
 # Mundo infinito, planeta y escalas (tangente de NoiseLab v4)
 
 Fecha: 2026-11-04/05. Origen: pregunta de Claudio al ver que el viento de NoiseLab cambia al
-arrastrar (candidato 5 de `planning/active/NoiseLab_v4_Startup.md`). Investigación, no
+arrastrar (candidato 5 de `planning/archive/NoiseLab_v4_Startup.md`). Investigación, no
 autoridad: lo gobernado sigue en `PCG_Roadmap.md` (Phase K) y `Phase_W_Design.md`.
 
 ## El problema

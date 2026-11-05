@@ -42,8 +42,12 @@ W.c implemented and committed, governed docs pending; noise range fix A+D merged
   from the `Stage_Biome2D` formulas with an exact Euclidean coast distance, one-direction
   wind with rain shadow, layers and contour lines; `Islands.Samples.asmdef` references
   `Islands.PCG.Runtime`. S22: 7 ms per drag sample at 64² (60 fps), 85 ms at 256². Detail in
-  `changelog-ssot.md`. Next on this track: NoiseLab v4
-  (`planning/active/NoiseLab_v4_Startup.md`; split view first).
+  `changelog-ssot.md`. **NoiseLab v4 DONE 2026-11-05** (commits `c6e07fb`, `bc6141b`,
+  `0c75bbe` + closing docs): split view 1 / 1×2 / 2×2 (`v=`), overlay layers with opacity
+  (`ov=`, contours as a layer), animated clouds over the map (`cu=`, 96², never touch the
+  terrain), tooltips on every control, Perf export v2. S22: painting 4 panels 0.4 ms, clouds
+  7.5 ms per frame. Detail in `changelog-ssot.md`. Next on this track: NoiseLab v5, scope to
+  decide (`planning/active/NoiseLab_v5_Startup.md`).
 - **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
   merged into `main` after a user-confirmed visual smoke test.**
   The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s

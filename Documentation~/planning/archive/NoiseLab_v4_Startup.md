@@ -54,6 +54,17 @@ Fecha: 2026-11-02. Rama: `main`. Sigue a `planning/archive/NoiseLab_v3_Startup.m
 - Explicado a Claudio: con los valores por defecto la tierra sale fría y seca (el rango
   uniforme resta hasta 0,5 de temperatura; el bono de humedad cae a pocas celdas de la
   costa), de ahí la tundra; el verde de Bands era altura, no vegetación.
+- **Paso 2, capas superpuestas (2026-11-05, `bc6141b`):** lista con casilla, capa, opacidad,
+  − y +; curvas de nivel como capa; Map en subpestañas Bands / Layers; `ov=`. Probado en el
+  editor y en el S22.
+- **Paso 3, nubes (2026-11-05, `0c75bbe`):** textura aparte de 96² sobre los paneles Map,
+  `Simplex3D` con el tiempo, deriva con el viento, cobertura por la humedad del aire (hueco
+  en la sombra de lluvia), sombra desplazada; control Edge tras pedir Claudio nubes menos
+  borrosas (64² → 96², 4 → 5 octavas). Tooltips en todos los controles (en el móvil, al
+  mantener el dedo ~1 s, a petición de Claudio). Perf export v2.
+- **Medido en el S22 (2026-11-05 17:25, 2×2 con nubes):** pintar 4 paneles 0,4 ms; nubes
+  7,5 ms por fotograma; 79 % de fotogramas de arrastre a 60 fps. Suite 415/415 (17:29).
+- **v4 cerrada el 2026-11-05.** Siguiente: `planning/active/NoiseLab_v5_Startup.md`.
 
 ## Decisiones (aceptadas por Claudio el 2026-11-02; no volver a preguntarlas)
 1. **Alcance:** primero la vista dividida y después las capas superpuestas (las dos parten de
