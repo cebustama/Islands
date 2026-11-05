@@ -113,8 +113,7 @@ public class NoiseLab : MonoBehaviour
     [SerializeField] bool shade = false;
 
     // Contour lines every contourStep of raw height (absolute, unlike the bands, which are
-    // percentages). Every fifth line is darker.
-    [SerializeField] bool contours = false;
+    // percentages). Every fifth line is darker. v4: turned on as an overlay layer.
     [SerializeField, Range(0.01f, 0.2f)] float contourStep = 0.05f;
 
     // Camera background behind the view and the controls (Unity's default blue, replaced).
@@ -1076,17 +1075,99 @@ public class NoiseLab : MonoBehaviour
                     else c = bands[band];
                     if (shade) c = Shade(c, i, n);
                     break;
-                case Show.Height: c = Gray(values[i]); break;
-                case Show.Temperature: c = Ramp3(Cold, Mild, Hot, temp[i]); break;
-                case Show.Moisture: c = Color32.Lerp(Dry, Wet, moist[i]); break;
-                case Show.WindAir: c = Color32.Lerp(Dry, Wet, windAir[i]); break;
-                default: c = Gray(viewField[FCont + (show - Show.Continent)][i]); break;
+                default: c = FieldColour(show, i); break;
             }
-            if (contours && (show == Show.Map || show == Show.Height)) c = Contour(c, i, n);
+            // v4: overlays go over the map; a Height panel keeps the contour lines (as in v3).
+            if (show == Show.Map) c = Overlays(c, i, n, false);
+            else if (show == Show.Height) c = Overlays(c, i, n, true);
             pixels[i] = c;
         }
         texture.SetPixels32(pixels);
         texture.Apply();
+    }
+
+    Color32 FieldColour(Show s, int i) => s switch
+    {
+        Show.Height => Gray(values[i]),
+        Show.Temperature => Ramp3(Cold, Mild, Hot, temp[i]),
+        Show.Moisture => Color32.Lerp(Dry, Wet, moist[i]),
+        Show.WindAir => Color32.Lerp(Dry, Wet, windAir[i]),
+        _ => Gray(viewField[FCont + (s - Show.Continent)][i])
+    };
+
+    // ---------------------------------------------------------------------------------
+    // v4: overlay layers. A list (up to MaxOverlays) of a layer, an on/off box and an
+    // opacity, blended in list order over every panel that shows the map. Contour lines
+    // are one more layer: at opacity 1 they look as in v3.
+    // ---------------------------------------------------------------------------------
+
+    class Overlay
+    {
+        public int layer;          // index into OverlayCodes
+        public bool on = true;
+        public float opacity = 0.5f;
+    }
+
+    const int MaxOverlays = 4;
+    const int OvContours = 7;
+    static readonly string[] OverlayCodes = { "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind", "contours" };
+    static readonly string[] OverlayNames = { "Height", "Temperature", "Moisture", "Continent", "Erosion", "Peaks", "Wind air", "Contours" };
+    readonly System.Collections.Generic.List<Overlay> overlays = new();
+
+    bool OverlayAvailable(int layer) => layer == OvContours || Available((Show)(layer + 1));
+
+    Color32 Overlays(Color32 c, int i, int n, bool contoursOnly)
+    {
+        for (int k = 0; k < overlays.Count; k++)
+        {
+            var o = overlays[k];
+            if (!o.on || o.opacity <= 0f || !OverlayAvailable(o.layer)) continue;
+            if (o.layer == OvContours) c = Color32.Lerp(c, Contour(c, i, n), o.opacity);
+            else if (!contoursOnly) c = Color32.Lerp(c, FieldColour((Show)(o.layer + 1), i), o.opacity);
+        }
+        return c;
+    }
+
+    bool HasContours()
+    {
+        foreach (var o in overlays) if (o.layer == OvContours) return true;
+        return false;
+    }
+
+    // Next available layer in the given direction.
+    int NextOverlay(int layer, int direction)
+    {
+        int count = OverlayCodes.Length;
+        for (int k = 0; k < count; k++)
+        {
+            layer = (layer + direction + count) % count;
+            if (OverlayAvailable(layer)) return layer;
+        }
+        return OvContours;
+    }
+
+    // ov=height:0.5,-contours:1 ("-" = off).
+    string OverlayCode()
+    {
+        var parts = new string[overlays.Count];
+        for (int k = 0; k < parts.Length; k++)
+            parts[k] = $"{(overlays[k].on ? "" : "-")}{OverlayCodes[overlays[k].layer]}:{F(R2(overlays[k].opacity))}";
+        return string.Join(",", parts);
+    }
+
+    void ReadOverlays(string text)
+    {
+        overlays.Clear();
+        foreach (string part in text.Split(','))
+        {
+            if (overlays.Count == MaxOverlays) break;
+            string[] p = part.Trim().Split(':');
+            bool on = !p[0].StartsWith("-");
+            int layer = System.Array.IndexOf(OverlayCodes, p[0].TrimStart('-'));
+            if (layer < 0) continue;
+            float opacity = p.Length > 1 && TryF(p[1], out float op) ? Mathf.Clamp01(op) : 0.5f;
+            overlays.Add(new Overlay { layer = layer, on = on, opacity = opacity });
+        }
     }
 
     // A cell is on a line when its right or upper neighbour is in another step of height.
@@ -1133,7 +1214,8 @@ public class NoiseLab : MonoBehaviour
     // (a phone set to Spanish would otherwise write 0,53). Unknown keys are ignored.
     // v3 adds, only when in use: h=s (splines), n1..n5 (fields: type,f,o,l,g),
     // c= (the three curves, x:y points, curves separated by /), k=z (biomes),
-    // cl= (climate tunables) and sh= (relief shading). v4 adds v= (panels and their layers).
+    // cl= (climate tunables) and sh= (relief shading). v4 adds v= (panels and their layers)
+    // and ov= (overlay layers; ct= keeps the contour step).
     // ---------------------------------------------------------------------------------
 
     static readonly string[] TypeCodes =
@@ -1171,7 +1253,8 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (shade) code += $";sh={F(relief)}";
-        if (contours) code += $";ct={F(contourStep)}";
+        if (HasContours()) code += $";ct={F(contourStep)}";
+        if (overlays.Count > 0) code += ";ov=" + OverlayCode();
         if (viewCount > 1 || Effective(0) != Show.Map) code += ";v=" + ViewCode();
         return code;
     }
@@ -1225,7 +1308,7 @@ public class NoiseLab : MonoBehaviour
         colouring = Colouring.Bands;
         shade = false;
         relief = 1f;
-        contours = false;
+        overlays.Clear();
         contourStep = 0.05f;
         extraFields = DefaultExtraFields();
         curves = DefaultCurves();
@@ -1257,6 +1340,7 @@ public class NoiseLab : MonoBehaviour
         if (!code.StartsWith("NL1;") && code != "NL1") return "not an NL1 code";
 
         ResetV3();
+        bool sawContours = false, sawOverlays = false;
         foreach (string part in code.Split(';'))
         {
             int eq = part.IndexOf('=');
@@ -1309,14 +1393,17 @@ public class NoiseLab : MonoBehaviour
                 case "cl": ReadClimate(val); break;
                 case "wd": ReadWind(val); break;
                 case "v": ReadView(val); break;
+                case "ov": ReadOverlays(val); sawOverlays = true; break;
                 case "ct":
-                    if (TryF(val, out float ct)) { contours = true; contourStep = Mathf.Clamp(ct, 0.01f, 0.2f); }
+                    if (TryF(val, out float ct)) { sawContours = true; contourStep = Mathf.Clamp(ct, 0.01f, 0.2f); }
                     break;
                 case "sh":
                     if (TryF(val, out float r)) { shade = true; relief = Mathf.Clamp(r, 0f, 3f); }
                     break;
             }
         }
+        // A v3 code with ct= and no ov= had the contour lines on: one contour layer at full opacity.
+        if (sawContours && !sawOverlays) overlays.Add(new Overlay { layer = OvContours, opacity = 1f });
         if (type == NoiseType.SimplexOldGradient || type == NoiseType.SimplexPerlinOnSimplex ||
             type == NoiseType.SimplexSimplex)
             lastSimplex = type;
@@ -1807,9 +1894,21 @@ public class NoiseLab : MonoBehaviour
         }
     }
 
+    // v4: two sub-tabs, so the overlay list fits on a phone.
+    static readonly string[] MapTabLabels = { "Bands", "Layers" };
+    int mapTab;
+
     void MapPage()
     {
-        waterMode = (WaterMode)GUILayout.Toolbar((int)waterMode, WaterLabels, GUILayout.Height(30f));
+        mapTab = GUILayout.Toolbar(mapTab, MapTabLabels, GUILayout.Height(30f));
+        Row(3);
+        if (mapTab == 0) BandsTab();
+        else LayersTab();
+    }
+
+    void BandsTab()
+    {
+        waterMode =(WaterMode)GUILayout.Toolbar((int)waterMode, WaterLabels, GUILayout.Height(30f));
         if (waterMode == WaterMode.RawThreshold)
             rawThreshold = Mathf.Round(Slider("Threshold", rawThreshold, -1f, 1f, "+0.00;-0.00") * 100f) / 100f;
         else
@@ -1852,10 +1951,12 @@ public class NoiseLab : MonoBehaviour
         GUILayout.EndHorizontal();
         float share = Slider("Share %", shares[i], 0f, 100f, "0");
         if (Mathf.Abs(share - shares[i]) >= 0.5f) SetShare(shares, i, share);
+    }
 
-        // v3: what the image shows. v4: the view (1, 1×2, 2×2) takes the place of the
-        // "Layer" label (no room for another row on a phone); the arrows change the layer of
-        // the selected panel (tap a panel to select it).
+    void LayersTab()
+    {
+        // v3: what the image shows. v4: the view (1, 1×2, 2×2) and, with the arrows, the
+        // layer of the selected panel (tap a panel to select it).
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
         int view = GUILayout.Toolbar(System.Array.IndexOf(ViewCounts, viewCount), ViewLabels,
                                      GUILayout.Width(130f), GUILayout.Height(30f));
@@ -1867,13 +1968,50 @@ public class NoiseLab : MonoBehaviour
         if (GUILayout.Button(">", GUILayout.Width(40f), GUILayout.Height(30f))) panelShow[selectedPanel] = NextShow(+1);
         GUILayout.EndHorizontal();
 
+        // Overlays over the map, in order: box, < layer >, opacity, remove.
+        GUILayout.Label(overlays.Count == 0 ? "Overlays over the map: none (+ to add)" : "Overlays over the map, in order:");
+        int remove = -1;
+        for (int k = 0; k < overlays.Count; k++)
+        {
+            var o = overlays[k];
+            GUILayout.BeginHorizontal(GUILayout.Height(30f));
+            o.on = GUILayout.Toggle(o.on, "", GUILayout.Width(24f), GUILayout.Height(30f));
+            if (GUILayout.Button("<", GUILayout.Width(30f), GUILayout.Height(30f))) o.layer = NextOverlay(o.layer, -1);
+            string name = OverlayNames[o.layer] + (OverlayAvailable(o.layer) ? "" : " (off)");
+            GUILayout.Label(name, GUILayout.Width(105f));
+            if (GUILayout.Button(">", GUILayout.Width(30f), GUILayout.Height(30f))) o.layer = NextOverlay(o.layer, +1);
+            o.opacity = R2(GUILayout.HorizontalSlider(o.opacity, 0f, 1f, GUILayout.ExpandWidth(true)));
+            GUILayout.Label(o.opacity.ToString("0.00", Inv), GUILayout.Width(40f));
+            if (GUILayout.Button("−", GUILayout.Width(30f), GUILayout.Height(30f))) remove = k;
+            GUILayout.EndHorizontal();
+        }
+        if (remove >= 0) { overlays.RemoveAt(remove); GUI.changed = true; }
+
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
-        contours = GUILayout.Toggle(contours, " Contours", GUILayout.Width(110f));
-        GUI.enabled = contours;
-        contourStep = Mathf.Round(GUILayout.HorizontalSlider(contourStep, 0.01f, 0.2f, GUILayout.ExpandWidth(true)) * 100f) / 100f;
-        GUILayout.Label(contourStep.ToString("0.00", Inv), GUILayout.Width(50f));
+        GUI.enabled = overlays.Count < MaxOverlays;
+        if (GUILayout.Button("+", GUILayout.Width(60f), GUILayout.Height(30f)))
+            overlays.Add(new Overlay { layer = FirstUnusedOverlay() });
         GUI.enabled = true;
+        if (HasContours())
+        {
+            GUILayout.Label("Contour step", GUILayout.Width(100f));
+            contourStep = Mathf.Round(GUILayout.HorizontalSlider(contourStep, 0.01f, 0.2f, GUILayout.ExpandWidth(true)) * 100f) / 100f;
+            GUILayout.Label(contourStep.ToString("0.00", Inv), GUILayout.Width(40f));
+        }
         GUILayout.EndHorizontal();
+    }
+
+    // A new overlay starts on the first available layer not yet in the list.
+    int FirstUnusedOverlay()
+    {
+        for (int layer = 0; layer < OverlayCodes.Length; layer++)
+        {
+            if (!OverlayAvailable(layer)) continue;
+            bool used = false;
+            foreach (var o in overlays) used |= o.layer == layer;
+            if (!used) return layer;
+        }
+        return OvContours;
     }
 
     Show NextShow(int direction)
