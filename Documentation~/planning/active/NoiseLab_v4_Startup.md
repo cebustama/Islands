@@ -43,7 +43,7 @@ Fecha: 2026-11-02. Rama: `main`. Sigue a `planning/archive/NoiseLab_v3_Startup.m
    el borde de la vista que da al viento (`WindField`) y la distancia a la costa no ve el agua
    fuera de la vista, así que al arrastrar cambia la sombra de lluvia. Opciones: un margen
    muestreado hacia el viento, o el viento sobre la rejilla de referencia del mundo (128²).
-   Enlaza con la pregunta de mundo infinito frente a planeta (ver «Avance»).
+   Enlaza con la pregunta de mundo infinito frente a planeta: `research/2026-11-05-mundo-finito-o-infinito.md`.
 
 ## Avance
 - **Paso 1, vista dividida (2026-11-04):** selector 1 / 1×2 / 2×2 en la fila Layer de Map;
