@@ -39,5 +39,6 @@ Claudio con `/capturar`.
 - `planning/active/NoiseLab_v5_Startup.md` (candidatos 1 y 3).
 - Web, Islands Lab: posible página «El viento rodea la isla» (sin hablar).
 - `_comun/conexiones.md`, corriente de Humboldt.
+- Juego de surf de lado (idea de Claudio, mismo día): `banco-ideas-juego/2026-11-05-surf-de-olas.md`, con prototipo «Mar de olas».
 
 **Estado:** semilla.
