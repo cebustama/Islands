@@ -1,0 +1,690 @@
+<title>Fluidos, de partículas a rejillas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna de lectura (~68ch) con secciones numeradas como capítulos; código y demos pueden ensancharse hasta 980px. */
+:root{
+  --bg:#f3f6f7; --paper:#ffffff; --fg:#13212b; --muted:#566771; --line:#d5dfe3;
+  --accent:#0a6a86; --accent-soft:#e0eff4; --warm:#b4511c; --warm-soft:#f7e7dc;
+  --code-bg:#0f1c24; --code-fg:#d8e6ec; --code-key:#7cc7e0; --code-com:#7b929c; --code-num:#f0a46e;
+  --f-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c151b; --paper:#121f27; --fg:#dde8ec; --muted:#93a6af; --line:#24353f;
+  --accent:#5cc0de; --accent-soft:#143241; --warm:#f09a62; --warm-soft:#3a2416;
+  --code-bg:#081016; --code-fg:#d8e6ec; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c151b; --paper:#121f27; --fg:#dde8ec; --muted:#93a6af; --line:#24353f;
+  --accent:#5cc0de; --accent-soft:#143241; --warm:#f09a62; --warm-soft:#3a2416;
+  --code-bg:#081016; --code-fg:#d8e6ec; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:16px/1.62 var(--f-body);margin:0}
+.wrap{max-width:980px;margin:0 auto;padding-block:32px 80px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.col{max-width:68ch}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(2rem,5vw,3.1rem);font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.75rem;font-weight:700;margin-top:3.2rem;padding-top:1.2rem;border-top:2px solid var(--fg);display:flex;gap:.6em;align-items:baseline}
+h2 .n{font-family:var(--f-mono);font-size:1rem;color:var(--accent);font-weight:500}
+h3{font-size:1.2rem;font-weight:500;margin-top:2rem;display:flex;gap:.6em;align-items:baseline}
+h3 .n{font-family:var(--f-mono);font-size:.85rem;color:var(--muted)}
+.part{font-family:var(--f-mono);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--warm);margin-top:4rem}
+.part + h2{margin-top:.4rem}
+p{margin:.8rem 0}
+a{color:var(--accent)}
+.lede{font-size:1.12rem;color:var(--muted);max-width:62ch}
+.meta{font-family:var(--f-mono);font-size:.8rem;color:var(--muted);margin-top:1rem}
+code{font-family:var(--f-mono);font-size:.88em;background:var(--accent-soft);padding:.05em .3em;border-radius:3px}
+pre{background:var(--code-bg);color:var(--code-fg);font:13.5px/1.55 var(--f-mono);padding:14px 16px;border-radius:6px;overflow-x:auto;margin:1rem 0;max-width:100%}
+pre code{background:none;padding:0;font-size:inherit;color:inherit}
+pre .k{color:var(--code-key)} pre .c{color:var(--code-com);font-style:italic} pre .m{color:var(--code-num)}
+pre .new{background:rgba(124,199,224,.13);display:inline-block;width:100%}
+.src{font-family:var(--f-mono);font-size:.75rem;color:var(--muted);margin-top:-.6rem}
+.eq{font-family:var(--f-mono);background:var(--paper);border:1px solid var(--line);padding:10px 14px;border-radius:6px;overflow-x:auto;margin:1rem 0;font-size:.95rem}
+.vid{font-family:var(--f-mono);font-size:.78rem;color:var(--muted)}
+.vid a{color:var(--muted)}
+.note{border-left:3px solid var(--warm);background:var(--warm-soft);padding:10px 14px;margin:1.2rem 0;border-radius:0 6px 6px 0}
+.note b:first-child{color:var(--warm)}
+.bug{border-left:3px solid var(--accent);background:var(--accent-soft);padding:10px 14px;margin:1.2rem 0;border-radius:0 6px 6px 0}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+.tbl{overflow-x:auto;margin:1rem 0}
+th,td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+th{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+td{font-variant-numeric:tabular-nums}
+figure{margin:1.5rem 0}
+figcaption{font-size:.85rem;color:var(--muted);margin-top:.4rem}
+.toc{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:4px 24px;margin:1.6rem 0;font-size:.92rem}
+.toc a{text-decoration:none;color:var(--fg);display:flex;gap:.5em}
+.toc a span{font-family:var(--f-mono);color:var(--accent);min-width:2.2em}
+.toc a:hover{color:var(--accent)}
+/* demos */
+.demo{background:#0b1418;border-radius:8px;padding:12px;margin:1.6rem 0;color:#cfe0e6}
+.demo canvas{display:block;width:100%;height:auto;border-radius:4px;background:#07161d;touch-action:none}
+.ctrls{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:10px;font:12.5px/1.3 var(--f-mono);align-items:center}
+.ctrls label{display:flex;flex-direction:column;gap:3px;min-width:130px;flex:1 1 130px}
+.ctrls input[type=range]{width:100%;accent-color:#5cc0de}
+.ctrls output{color:#f0a46e}
+.ctrls button,.ctrls select{font:inherit;background:#162a33;color:#dfeef3;border:1px solid #2f4a56;border-radius:4px;padding:6px 10px;cursor:pointer}
+.ctrls button:focus-visible,.ctrls select:focus-visible,.ctrls input:focus-visible{outline:2px solid #5cc0de;outline-offset:2px}
+.stat{font:12px var(--f-mono);color:#8fb0bb;margin-top:6px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:1.2rem 0}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:14px 16px;min-width:0}
+.card h4{margin:0 0 .3rem;font-family:var(--f-display);font-size:1.05rem;font-weight:500}
+.card p{margin:.3rem 0;font-size:.92rem}
+.pill{display:inline-block;font:11px var(--f-mono);padding:2px 7px;border-radius:10px;letter-spacing:.04em;text-transform:uppercase}
+.p-yes{background:var(--accent-soft);color:var(--accent)} .p-no{background:var(--warm-soft);color:var(--warm)}
+svg text{font-family:var(--f-mono)}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+
+<div class="wrap">
+<header class="col">
+  <div class="part" style="margin-top:0">Tutorial · Simulación de fluidos</div>
+  <h1>Fluidos, de partículas a rejillas</h1>
+  <p class="lede">Los seis videos de la lista <em>Fluid Simulations</em> de Sebastian Lague, rehechos como un tutorial paso a paso: primero un líquido de partículas (SPH), luego cómo se dibuja, después en un planeta, y por último humo en una rejilla. Al final, qué sirve para el módulo de fluidos de Islands.</p>
+  <p class="meta">Fuente: Sebastian Lague, YouTube, 2023–2025 · código: <a href="https://github.com/SebLague/Fluid-Sim" target="_blank" rel="noopener">SebLague/Fluid-Sim</a>, <a href="https://github.com/SebLague/Smoke-Simulation" target="_blank" rel="noopener">SebLague/Smoke-Simulation</a> · notas propias del 2026-11-05, no transcripción · los fragmentos de código están resumidos o adaptados del suyo, y las demos de esta página están escritas aparte, en JavaScript.</p>
+</header>
+
+<nav class="toc col" aria-label="Contenido">
+  <a href="#p1"><span>1</span>Gravedad y colisiones</a>
+  <a href="#p2"><span>2</span>Densidad suavizada</a>
+  <a href="#p3"><span>3</span>Interpolar y derivar</a>
+  <a href="#p4"><span>4</span>La fuerza de presión</a>
+  <a href="#p5"><span>5</span>Buscar vecinos</a>
+  <a href="#p6"><span>6</span>Predecir, viscosidad, presión cercana</a>
+  <a href="#p7"><span>7</span>A la GPU · demo SPH</a>
+  <a href="#p8"><span>8</span>Dibujar el líquido</a>
+  <a href="#p9"><span>9</span>Un océano en un planeta</a>
+  <a href="#p10"><span>10</span>Rejilla escalonada y divergencia</a>
+  <a href="#p11"><span>11</span>Resolver la presión</a>
+  <a href="#p12"><span>12</span>Advección semi-lagrangiana</a>
+  <a href="#p13"><span>13</span>Humo, calor, Kármán · demo</a>
+  <a href="#p14"><span>14</span>Bad Apple: una imagen como frontera</a>
+  <a href="#p15"><span>15</span>Qué sirve para Islands</a>
+</nav>
+
+<div class="col">
+<div class="tbl"><table>
+<thead><tr><th>Video</th><th>Duración</th><th>Lectura</th><th>Aquí</th></tr></thead>
+<tbody>
+<tr><td><a href="https://youtu.be/rSKMYc1CQHE" target="_blank" rel="noopener">Coding Adventure: Simulating Fluids</a></td><td>47:52</td><td>transcripción completa + código</td><td>§1–7</td></tr>
+<tr><td><a href="https://youtu.be/kOkfC5fLfgE" target="_blank" rel="noopener">Coding Adventure: Rendering Fluids</a></td><td>58:41</td><td>transcripción completa</td><td>§8</td></tr>
+<tr><td><a href="https://youtu.be/8nIB7e_eds4" target="_blank" rel="noopener">Fluidos en un planeta</a></td><td>27:23</td><td>transcripción completa</td><td>§9</td></tr>
+<tr><td><a href="https://youtu.be/Q78wvrQ9xsU" target="_blank" rel="noopener">Coding Adventure: Simulating Smoke</a></td><td>41:40</td><td>transcripción completa + código</td><td>§10–13</td></tr>
+<tr><td><a href="https://youtu.be/2Ni13dnAbSA" target="_blank" rel="noopener">Bad Apple!! (fluido)</a></td><td>3:59</td><td>sin narración: descripción y fotogramas</td><td>§14</td></tr>
+<tr><td><a href="https://youtu.be/8BCdKJ4ObZ4" target="_blank" rel="noopener">Bad Apple!! (humo)</a></td><td>3:51</td><td>sin narración: descripción y un fotograma</td><td>§14</td></tr>
+</tbody></table></div>
+
+<p>Lague usa dos familias de métodos y conviene tenerlas claras desde el principio. En la <b>lagrangiana</b> el fluido son partículas que llevan su propia velocidad: el movimiento sale gratis, pero la incompresibilidad es aproximada. En la <b>euleriana</b> el fluido vive en celdas fijas: la incompresibilidad se impone casi exacta con un solver de presión, pero hay que <em>advectar</em> (mover) cada cantidad a mano. El líquido con superficie libre va en partículas; el humo y el aire, en rejilla.</p>
+</div>
+
+<!-- ===================== PARTE I ===================== -->
+<div class="part">Parte I · Un líquido de partículas (SPH)</div>
+<h2 id="p1"><span class="n">1</span>Gravedad y colisiones</h2>
+<div class="col">
+<p class="vid">Video 1, 0:21–2:30</p>
+<p>Empezamos con una sola partícula: posición, velocidad y gravedad, integradas con Euler semi-implícito (primero la velocidad, después la posición). Si sale de la caja, la devolvemos al borde e invertimos esa componente de la velocidad, multiplicada por un factor que pierde energía en cada rebote.</p>
+<pre><code><span class="k">void</span> ResolveCollisions(<span class="k">inout</span> float2 pos, <span class="k">inout</span> float2 vel) {
+    float2 half = boundsSize * <span class="m">0.5</span>;
+    float2 edge = half - abs(pos);
+    <span class="k">if</span> (edge.x &lt;= <span class="m">0</span>) { pos.x = half.x * sign(pos.x); vel.x *= -collisionDamping; }
+    <span class="k">if</span> (edge.y &lt;= <span class="m">0</span>) { pos.y = half.y * sign(pos.y); vel.y *= -collisionDamping; }
+}  <span class="c">// collisionDamping = 0.95 por defecto</span></code></pre>
+<p>Con miles de partículas en una rejilla inicial, todas acaban apiladas en el fondo. Falta lo que hace fluido a un fluido: algo que las separe cuando se juntan demasiado.</p>
+</div>
+
+<h2 id="p2"><span class="n">2</span>Densidad suavizada</h2>
+<div class="col">
+<p class="vid">Video 1, 2:35–7:50</p>
+<p>Nunca tendremos partículas suficientes, así que cada una se «difumina» en un campo continuo: influye al máximo en su centro y deja de influir a una distancia <b>h</b>, el <em>radio de suavizado</em>. La función que da esa influencia es el <b>núcleo</b> (kernel) <code>W(r, h)</code>. Con él, la densidad en cualquier punto es la suma de las influencias de las partículas cercanas:</p>
+<div class="eq">ρ(x) = Σ<sub>j</sub> m<sub>j</sub> · W(|x − x<sub>j</sub>|, h)        (m<sub>j</sub> = 1 para todas)</div>
+<p>Lague prueba tres formas: <code>h − r</code> (con pico), <code>(h − r)³</code> y <code>(h² − r²)³</code>, suave en los dos extremos. Esa última es la forma <i>poly6</i> de Müller et al. (2003).</p>
+<div class="bug"><b>Fallo:</b> al subir h, la densidad de una rejilla uniforme se disparaba, y no debería cambiar. <b>Arreglo:</b> normalizar el núcleo para que su volumen (su integral) valga 1. Para <code>(h² − r²)³</code> en un disco 2D el volumen es <code>π h⁸ / 4</code>, así que <code>W = 4/(π h⁸) · (h² − r²)³</code>. Después de eso la densidad de prueba se queda en 187 aunque cambie h.</div>
+<figure>
+<canvas id="kplot" width="640" height="220" style="width:100%;height:auto;background:var(--paper);border:1px solid var(--line);border-radius:6px"></canvas>
+<figcaption>Los cinco núcleos que usa el código final, con h = 1 y cada uno escalado a su máximo. Los «spiky» tienen la pendiente más fuerte en r = 0, y eso importa en §4.</figcaption>
+</figure>
+</div>
+
+<h2 id="p3"><span class="n">3</span>Interpolar y derivar</h2>
+<div class="col">
+<p class="vid">Video 1, 7:50–15:35</p>
+<p>Un líquido es casi incompresible: la densidad debería ser igual en todas partes, así que las partículas deben moverse de donde hay más densidad a donde hay menos. Para eso hace falta la ecuación central de SPH, que reconstruye cualquier propiedad A a partir de los valores que llevan las partículas. Cada aporte se divide por la densidad de su partícula; si no, las zonas apiñadas exageran el valor:</p>
+<div class="eq">A(x) = Σ<sub>j</sub> A<sub>j</sub> · (m<sub>j</sub> / ρ<sub>j</sub>) · W(|x − x<sub>j</sub>|, h)</div>
+<p>Comprobación: si A = ρ, el ρ<sub>j</sub> se cancela y vuelve la fórmula de la densidad. Y el gradiente no necesita diferencias finitas: para cada vecino, apunta en la línea que los une y su tamaño es la pendiente del núcleo a esa distancia.</p>
+<div class="eq">∇A(x) = Σ<sub>j</sub> A<sub>j</sub> · (m<sub>j</sub> / ρ<sub>j</sub>) · W′(|x − x<sub>j</sub>|) · dir<sub>j</sub></div>
+<p>Las mediciones de Lague en este paso son una lección de optimización por sí solas: la rejilla de flechas con diferencias finitas tardaba ~20 s; con el gradiente analítico, ~5 s; guardando las densidades en un array una vez por paso (en vez de recalcularlas dentro del bucle), <b>18 ms</b>.</p>
+</div>
+
+<h2 id="p4"><span class="n">4</span>La fuerza de presión</h2>
+<div class="col">
+<p class="vid">Video 1, 15:35–22:05</p>
+<p>La presión sale de la densidad con una ecuación de estado muy simple: positiva por encima de la densidad objetivo, negativa por debajo. Lague advierte que se parece más a un gas que a un líquido, pero es la que usa casi todo el mundo por sencilla.</p>
+<div class="eq">P = (ρ − ρ₀) · k        a<sub>i</sub> = F<sub>i</sub> / ρ<sub>i</sub>   (se divide por la densidad, no por la masa: es un volumen de fluido)</div>
+<p>Tres fallos, en orden, y los tres enseñan algo:</p>
+<div class="bug"><b>NaN en todas partes:</b> la partícula se contaba a sí misma, distancia 0, dirección indefinida. Saltar <code>j == i</code>; si dos partículas distintas coinciden, usar una dirección fija.</div>
+<div class="bug"><b>Partículas pegadas:</b> la pendiente del núcleo poly6 se aplana cerca de 0, así que las partículas muy juntas apenas se repelen. Se cambia a un núcleo <b>spiky</b> <code>(h − r)²</code>, con la pendiente máxima en 0.</div>
+<div class="bug"><b>Empeora con el tiempo:</b> la fuerza entre i y j no era igual y opuesta. Tercera ley de Newton: usar la <b>presión compartida</b> <code>(P<sub>i</sub> + P<sub>j</sub>) / 2</code>. «Quizá ese tal Newton iba por buen camino».</div>
+<pre><code><span class="k">float</span> shared = (pressure + neighbourPressure) * <span class="m">0.5</span>;
+pressureForce += dirToNeighbour * DerivativeSpikyPow2(dst, h) * shared / neighbourDensity;
+<span class="c">// ...después del bucle</span>
+velocity += (pressureForce / density) * deltaTime;</code></pre>
+<p class="src">Adaptado de FluidSim2D.compute (Fluid-Sim, rama Episode-01)</p>
+</div>
+
+<h2 id="p5"><span class="n">5</span>Buscar vecinos: una rejilla infinita con hash</h2>
+<div class="col">
+<p class="vid">Video 1, 22:05–27:45</p>
+<p>Con unos miles de partículas, comparar todas con todas da 5 fps. Si la celda mide h, los vecinos de un punto solo pueden estar en las 3×3 celdas que lo rodean. Pero en la GPU no hay listas que crezcan: la memoria se reserva antes. La solución, tomada del ejemplo de partículas de NVIDIA (Simon Green) y modificada para no tener que saber el tamaño del mundo, es una <b>rejilla con hash</b>:</p>
+<ol>
+<li>Para cada partícula: celda = <code>floor(pos / h)</code>; hash = <code>celda.x · p₁ + celda.y · p₂</code>; clave = <code>hash % N</code>.</li>
+<li><b>Ordenar</b> el array (índice, hash, clave) por clave: las partículas de la misma celda quedan contiguas.</li>
+<li><code>startIndices[clave]</code> = primera posición de esa clave en el array ordenado.</li>
+<li>Para consultar: en cada una de las 9 celdas, saltar a su inicio y recorrer mientras la clave coincida; la distancia se comprueba siempre.</li>
+</ol>
+<pre><code><span class="k">static const uint</span> hashK1 = <span class="m">15823</span>, hashK2 = <span class="m">9737333</span>;
+<span class="k">for</span> (<span class="k">int</span> i = <span class="m">0</span>; i &lt; <span class="m">9</span>; i++) {
+    <span class="k">uint</span> hash = HashCell2D(originCell + offsets2D[i]);
+    <span class="k">uint</span> key  = hash % numParticles;
+    <span class="k">uint</span> idx  = SpatialOffsets[key];            <span class="c">// = numParticles si está vacía</span>
+    <span class="k">while</span> (idx &lt; numParticles) {
+        <span class="k">uint3</span> e = SpatialIndices[idx++];
+        <span class="k">if</span> (e.z != key)  <span class="k">break</span>;                <span class="c">// salimos del cubo</span>
+        <span class="k">if</span> (e.y != hash) <span class="k">continue</span>;             <span class="c">// colisión de hash: otra celda</span>
+        <span class="c">// ... distancia² ≤ h² → acumular</span>
+    }
+}</code></pre>
+<p>Las colisiones de hash solo cuestan comprobaciones de más: es «el precio de una rejilla infinita con memoria finita». Resultado: <b>de 5 a 120 fps</b>, todavía en la CPU.</p>
+</div>
+
+<h2 id="p6"><span class="n">6</span>Predecir, viscosidad, presión cercana</h2>
+<div class="col">
+<h3><span class="n">6.1</span>Posiciones predichas</h3>
+<p class="vid">Video 1, 27:45–30:30</p>
+<p>El arranque era caótico. En vez de calcular densidad y presión donde están las partículas, se calculan donde <em>estarán</em>: <code>x* = x + v · Δt</code>. Gran diferencia. Pero con pasos más cortos la predicción mira menos lejos y el fluido tarda más en asentarse, así que Lague fija la mirada adelante en <b>1/120 s</b>, sea cual sea el paso. «Se siente un poco mal», pero el comportamiento deja de depender del paso.</p>
+
+<h3><span class="n">6.2</span>Viscosidad artificial</h3>
+<p class="vid">Video 1, 33:20–36:50</p>
+<p>Navier–Stokes tiene un término de viscosidad que «difumina» la velocidad entre vecinos. En lugar del laplaciano, Lague acerca la velocidad de cada partícula a la de sus vecinas, ponderada por el núcleo poly6. Con 5 se forman grumos raros; 0,5 se ve bien. Se deja bajo para no borrar el detalle.</p>
+<pre><code>viscosityForce += (neighbourVelocity - velocity) * SmoothingKernelPoly6(dst, h);
+velocity += viscosityForce * viscosityStrength * deltaTime;</code></pre>
+
+<h3><span class="n">6.3</span>Presión cercana (Clavet et al. 2005)</h3>
+<p class="vid">Video 1, 36:50–39:50</p>
+<p>Al soltar agua desde arriba se rompe en gotitas de pocas partículas. Cortar la presión negativa lo evita, pero entonces las partículas caen sueltas como lluvia: la presión negativa hacía de <b>tensión superficial</b> tosca. La solución es una segunda densidad, la <b>densidad cercana</b>, con un núcleo todavía más puntiagudo <code>(h − r)³</code>, y una presión cercana solo repulsiva, sin objetivo: <code>P<sub>near</sub> = k<sub>near</sub> · ρ<sub>near</sub></code>.</p>
+<div class="note"><b>Rigidez frente a subpasos.</b> Subir la constante de presión hasta 1000 asienta antes el «temblor de gelatina», pero fuerzas más grandes exigen más subpasos por fotograma. Quitar un subpaso devuelve el caos. Es el compromiso central de SPH.</div>
+
+<div class="tbl"><table>
+<thead><tr><th>Núcleo</th><th>Forma (r &lt; h)</th><th>Escala 2D</th><th>Uso</th></tr></thead>
+<tbody>
+<tr><td>Poly6</td><td>(h² − r²)³</td><td>4 / (π h⁸)</td><td>viscosidad</td></tr>
+<tr><td>Spiky²</td><td>(h − r)²</td><td>6 / (π h⁴)</td><td>densidad</td></tr>
+<tr><td>Spiky³</td><td>(h − r)³</td><td>10 / (π h⁵)</td><td>densidad cercana</td></tr>
+<tr><td>∂Spiky²</td><td>−(h − r)</td><td>12 / (π h⁴)</td><td>gradiente de presión</td></tr>
+<tr><td>∂Spiky³</td><td>−(h − r)²</td><td>30 / (π h⁵)</td><td>gradiente de presión cercana</td></tr>
+</tbody></table></div>
+<p class="src">Del código de Episode-01 (FluidMaths2D.hlsl); las escalas se calculan en C# cada fotograma</p>
+</div>
+
+<h2 id="p7"><span class="n">7</span>A la GPU, y la demo</h2>
+<div class="col">
+<p class="vid">Video 1, 39:50–47:20</p>
+<p>En compute shaders va a unos 500 fps. Lo difícil fue sustituir <code>Array.Sort</code> por un orden paralelo: el <b>bitonic merge sort</b>, una red de ordenación en la que cada etapa compara e intercambia pares fijos a la vez. La CPU recorre las etapas y lanza un dispatch por cada una. El paso completo, con 64 hilos por grupo:</p>
+<ol>
+<li><code>ExternalForces</code>: <code>v += (gravedad + ratón) · Δt</code>; <code>predicha = x + v / 120</code>.</li>
+<li><code>UpdateSpatialHash</code> sobre las posiciones predichas.</li>
+<li>Ordenar y calcular los inicios.</li>
+<li><code>CalculateDensities</code> → (densidad, densidad cercana).</li>
+<li><code>CalculatePressureForce</code> → <code>v += (F/ρ) · Δt</code>.</li>
+<li><code>CalculateViscosity</code>.</li>
+<li><code>UpdatePositions</code>: <code>x += v · Δt</code> y colisiones.</li>
+</ol>
+<p>Pruebas: 100 partículas hacen gotas que tiemblan; ~40.000 van bien; 100.000 «no le gustaron a mi ordenador». Con un obstáculo con hueco abajo, el agua iguala su nivel a los dos lados, como vasos comunicantes. En 3D basta con pasar a <code>float3</code>, nuevas escalas de núcleo y 3×3×3 = 27 celdas; la caja se puede mover y rotar llevando cada partícula a su espacio local.</p>
+<p>La demo de abajo es una versión propia en JavaScript, en la CPU, con los mismos núcleos, la presión compartida, la presión cercana, las posiciones predichas y la viscosidad. Para la búsqueda de vecinos usa una rejilla acotada con ordenación por conteo (la caja es fija), que hace el mismo trabajo que el hash.</p>
+</div>
+<div class="demo">
+  <canvas id="sph" width="960" height="560" aria-label="Simulación SPH 2D: partículas coloreadas por velocidad"></canvas>
+  <div class="ctrls">
+    <label>Densidad objetivo <output id="o-rho">55</output><input id="s-rho" type="range" min="20" max="90" step="1" value="55"></label>
+    <label>Presión k <output id="o-kp">500</output><input id="s-kp" type="range" min="50" max="1000" step="10" value="500"></label>
+    <label>Presión cercana <output id="o-kn">18</output><input id="s-kn" type="range" min="0" max="60" step="1" value="18"></label>
+    <label>Viscosidad <output id="o-vis">0.06</output><input id="s-vis" type="range" min="0" max="0.5" step="0.01" value="0.06"></label>
+    <label>Gravedad <output id="o-g">12</output><input id="s-g" type="range" min="0" max="25" step="0.5" value="12"></label>
+    <button id="b-sph-reset" type="button">Reiniciar</button>
+    <button id="b-sph-pause" type="button">Pausa</button>
+  </div>
+  <div class="stat" id="sph-stat">Arrastra para atraer el agua; con clic derecho o Mayús la empujas.</div>
+</div>
+
+<!-- ===================== PARTE II ===================== -->
+<div class="part">Parte II · Hacer que parezca agua</div>
+<h2 id="p8"><span class="n">8</span>Dibujar el líquido</h2>
+<div class="col">
+<p class="vid">Video 2, 0:00–58:41</p>
+<p>El segundo video prueba tres maneras de convertir partículas en agua visible, y luego añade espuma. Lo resumo por técnica, con lo que funcionó y lo que no.</p>
+
+<h3><span class="n">8.1</span>Mallas con marching cubes</h3>
+<p>Al final de cada fotograma, un compute shader muestrea la densidad SPH en una textura 3D (30×18×18, luego el doble) y marching cubes extrae la isosuperficie (umbral ~70). Para que la superficie se cierre contra las paredes, la función de muestreo «miente» y devuelve densidad baja en el borde. Al subir la resolución la simulación explotó: leer los triángulos de la GPU a la CPU bajaba los fps y el paso de tiempo dependía del fotograma. Arreglo: dibujar directamente desde el buffer con un <b>draw indirecto</b> (el número de triángulos va en un buffer de argumentos y el vertex shader lee su vértice con <code>SV_VertexID</code>). Lo descartó porque una malla es solo una cáscara.</p>
+
+<h3><span class="n">8.2</span>Raymarching del volumen</h3>
+<p>Por píxel: rayo de cámara, entrada y salida de la caja, y pasos fijos acumulando profundidad óptica. La luz que llega se atenúa con la <b>ley de Beer–Lambert</b> <code>T = exp(−σ · ∫ρ ds)</code>, con un σ distinto por canal RGB; marchando hacia el sol con pasos grandes sale una dispersión simple como la de su atmósfera. Precioso, pero parece niebla. Para que parezca agua:</p>
+<ul>
+<li><b>Snell</b> <code>n₁ sin θ₁ = n₂ sin θ₂</code> (n ≈ 1,33), con reflexión interna total pasado el ángulo crítico.</li>
+<li><b>Fresnel</b>: la fracción reflejada R crece en ángulos rasantes; se mezcla <code>R · reflejo + (1 − R) · refracción</code>.</li>
+<li>Un trazador de <b>un solo camino</b>: en cada superficie sigue la rama «más interesante» (luz × cantidad de fluido en esa dirección) y aproxima la otra con una muestra del entorno. 1, 2 y 3 rebotes mejoran; 4 ya casi no.</li>
+</ul>
+<p>Un suelo de cuadros con cuadrantes de colores ayuda a ver de dónde viene cada reflejo. Demasiado lento a pantalla completa.</p>
+
+<h3><span class="n">8.3</span>Fluidos en espacio de pantalla</h3>
+<p>Siguiendo las diapositivas de Simon Green (GDC 2010), es lo que quedó:</p>
+<ol>
+<li><b>Billboards</b>: cada partícula es un quad orientado a cámara; un millón se dibuja sin problemas (el cuello de botella es la simulación).</li>
+<li><b>Profundidad esférica</b>: <code>z = √(1 − x² − y²)</code> en el fragmento, escrita en <code>SV_Depth</code> convertida a profundidad de dispositivo (el buffer no es lineal).</li>
+<li><b>Desenfoque bilateral</b> del mapa de profundidad: peso gaussiano espacial × peso por diferencia de profundidad, para que lo de delante no se funda con lo de atrás. Separable (horizontal y luego vertical): de 3 a 150 fps en la imagen de prueba. El radio se da en unidades de mundo y se pasa a píxeles según la profundidad.</li>
+<li><b>Normales</b> desde la profundidad: <code>normalize(cross(dx, dy))</code> con los vecinos a +1 píxel.</li>
+<li><b>Grosor</b>: las partículas otra vez, con mezcla aditiva y a menor resolución. Transmitancia <code>exp(−grosor · extinción_rgb)</code>: absorber rojo da el azul verdoso del océano.</li>
+<li><b>Composición</b>: reflejo y refracción mezclados con Fresnel; <b>sombras</b> con el grosor visto desde el sol en proyección ortográfica (sombras de colores).</li>
+</ol>
+
+<h3><span class="n">8.4</span>Espuma, espray y burbujas (Ihmsen et al. 2012)</h3>
+<p>Partículas aparte, <code>{posición, velocidad, vida}</code>, que nacen donde coinciden dos cosas:</p>
+<div class="eq">I<sub>ta</sub>(i) = Σ<sub>j</sub> |v<sub>ij</sub>| · (1 − v̂<sub>ij</sub> · x̂<sub>ij</sub>) · W(x<sub>ij</sub>)    (aire atrapado)      E<sub>k</sub> = ½ m |v|²    (energía cinética)</div>
+<p>Las dos se reescalan a [0, 1] y su producto da cuántas nacen: <code>n = factor · tasa · Δt</code>, se crean <code>floor(n)</code> y una más con probabilidad <code>frac(n)</code>, para que no dependa de los fps. Según cuántos vecinos de fluido tenga cada una se clasifica en <b>burbuja</b> (muchos: flota y sigue al fluido), <b>espuma</b> (intermedio: toma la velocidad media de sus vecinos y es la única que se disuelve) o <b>espray</b> (pocos: gravedad y arrastre cuadrático). Se compactan con dos buffers y un contador atómico. Resultado final: unas 300.000 partículas de agua y 500.000 de espuma en tiempo real.</p>
+</div>
+
+<h2 id="p9"><span class="n">9</span>Un océano en un planeta</h2>
+<div class="col">
+<p class="vid">Video 3, 0:00–27:23</p>
+<ul>
+<li><b>Gravedad que depende del lugar.</b> Primero hacia el centro con 10 m/s², luego <code>a = G M / r²</code>. El punto masa es singular: las partículas que pasan cerca salen disparadas, así que hace falta una superficie. La colisión con la esfera quita la componente de la velocidad hacia dentro.</li>
+<li><b>Órbitas.</b> N cuerpos con Euler semi-implícito; para ajustar las velocidades iniciales dibuja las órbitas predichas simulando miles de pasos por adelantado.</li>
+<li><b>Mareas.</b> La aceleración de marea es la de cada punto <em>menos la del centro del planeta</em>: hacia la luna en la cara cercana, en contra en la lejana, y hacia dentro a los lados. Por eso hay dos mareas altas. En su mundo diminuto el peso aparente baja ~15 % con la luna encima; en la Tierra, ~0,0003 %, fuerzas mínimas que se suman en todo un océano.</li>
+<li><b>Fallo:</b> el agua ondulaba en la dirección del movimiento porque las partículas no heredaban la velocidad del planeta.</li>
+<li><b>La Tierra como SDF.</b> Para cada punto de una rejilla de 70³, unos 500 rayos contra la malla (con BVH); la distancia mínima da el valor y el signo dice si está dentro. Aparecían motas flotando por triángulos casi paralelos: se arregló con una <b>votación por mayoría</b> de impactos por delante y por detrás. Colisión: si <code>sdf(p) &lt; 0</code>, empujar a lo largo del gradiente.</li>
+<li><b>Terraformar.</b> En su planeta procedural (densidad + marching cubes) usa el propio campo de densidad del terreno como colisionador, aunque no sea una distancia: «suficientemente cerca». Cavar un canal entre un lago y una cuenca hace que el agua corra.</li>
+<li><b>Tres cuerpos.</b> Se elige un cuerpo principal y su aceleración se resta a todos los cuerpos <em>y a las partículas</em>: el marco queda fijo y la física del fluido sigue siendo coherente.</li>
+</ul>
+</div>
+
+<!-- ===================== PARTE III ===================== -->
+<div class="part">Parte III · Humo en una rejilla (euleriano)</div>
+<h2 id="p10"><span class="n">10</span>Rejilla escalonada y divergencia</h2>
+<div class="col">
+<p class="vid">Video 4, 0:50–5:09</p>
+<p>Se parte de Navier–Stokes incompresible, sin viscosidad y, de momento, sin fuerzas:</p>
+<div class="eq">∂u/∂t + (u·∇)u = −(1/ρ) ∇p + f        ∇·u = 0</div>
+<p>La <b>divergencia</b> de una celda es el flujo neto que cruza sus bordes. Si la componente normal de la velocidad se guarda <em>en los bordes</em> y no en el centro, comprobarla es directo. Eso es la <b>rejilla escalonada</b> o MAC: para nx × ny celdas, (nx+1) × ny velocidades horizontales y nx × (ny+1) verticales.</p>
+<figure>
+<svg viewBox="0 0 520 250" width="100%" style="max-width:520px" role="img" aria-label="Celda de una rejilla MAC con sus cuatro velocidades en los bordes y la presión en el centro">
+  <g stroke="currentColor" fill="none" opacity=".35"><rect x="60" y="40" width="130" height="130"/><rect x="190" y="40" width="130" height="130"/><rect x="320" y="40" width="130" height="130"/></g>
+  <rect x="190" y="40" width="130" height="130" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+  <circle cx="255" cy="105" r="5" fill="var(--warm)"/><text x="265" y="100" font-size="14" fill="var(--warm)">p<tspan font-size="10" dy="3">C</tspan></text>
+  <circle cx="125" cy="105" r="4" fill="var(--muted)"/><text x="133" y="100" font-size="13" fill="var(--muted)">p<tspan font-size="9" dy="3">L</tspan></text>
+  <circle cx="385" cy="105" r="4" fill="var(--muted)"/><text x="393" y="100" font-size="13" fill="var(--muted)">p<tspan font-size="9" dy="3">R</tspan></text>
+  <g stroke="var(--accent)" stroke-width="2.5" fill="var(--accent)">
+    <line x1="176" y1="105" x2="204" y2="105"/><polygon points="204,100 212,105 204,110"/>
+    <line x1="306" y1="105" x2="334" y2="105"/><polygon points="334,100 342,105 334,110"/>
+    <line x1="255" y1="184" x2="255" y2="156"/><polygon points="250,156 255,148 260,156"/>
+    <line x1="255" y1="54" x2="255" y2="26"/><polygon points="250,26 255,18 260,26"/>
+  </g>
+  <g font-size="13" fill="var(--fg)"><text x="160" y="128">u<tspan font-size="9" dy="3">l</tspan></text><text x="330" y="128">u<tspan font-size="9" dy="3">r</tspan></text><text x="264" y="198">v<tspan font-size="9" dy="3">b</tspan></text><text x="264" y="30">v<tspan font-size="9" dy="3">t</tspan></text></g>
+  <text x="60" y="230" font-size="12" fill="var(--muted)">div = (u_r − u_l) + (v_t − v_b)   (entre Δx)</text>
+</svg>
+<figcaption>Una celda MAC: la presión en el centro, cada componente de la velocidad en su borde. El gradiente de presión entre dos celdas cae justo donde se guarda la velocidad que mueve.</figcaption>
+</figure>
+</div>
+
+<h2 id="p11"><span class="n">11</span>Resolver la presión</h2>
+<div class="col">
+<h3><span class="n">11.1</span>La ecuación</h3>
+<p class="vid">Video 4, 5:09–8:26</p>
+<p>La presión empuja cada borde según la diferencia entre sus dos celdas: <code>v<sub>r</sub> = u<sub>r</sub> − k (p<sub>R</sub> − p<sub>C</sub>)</code>, con <code>k = Δt / (ρ Δx)</code>, y lo mismo en los otros tres bordes. Si exigimos que la divergencia nueva sea cero y despejamos p<sub>C</sub>:</p>
+<div class="eq">p<sub>C</sub> = (p<sub>L</sub> + p<sub>R</sub> + p<sub>T</sub> + p<sub>B</sub>) / 4 − (u<sub>r</sub> − u<sub>l</sub> + u<sub>t</sub> − u<sub>b</sub>) / (4k)</div>
+<p>«La media de los vecinos menos un término de velocidad». Es la ecuación de Poisson discreta <code>∇²p = (ρ/Δt) ∇·u</code>. Las notas de Bridson recomiendan un gradiente conjugado precondicionado (MICCG); Lague empieza por lo más simple.</p>
+
+<h3><span class="n">11.2</span>Gauss–Seidel, SOR y celdas sólidas</h3>
+<p class="vid">Video 4, 8:26–12:26 y 23:43–25:16</p>
+<p><b>Gauss–Seidel</b>: recorrer la rejilla actualizando cada celda en su sitio, con los valores más frescos de sus vecinas, y repetir. <b>SOR</b> (sobrerrelajación) exagera cada cambio: <code>p ← p + ω (p<sub>GS</sub> − p)</code>. Lague barrió ω y midió el error total de divergencia con una entrada de ratón grabada: <b>ω = 1,7</b> fue lo mejor con 15 iteraciones (ω = 2 nunca se estabiliza). Con 3 iteraciones el error era ~190.000; con 15, ~27.000.</p>
+<p>Las <b>celdas sólidas</b> salen de la misma ecuación: el borde con un sólido tiene velocidad 0 y su presión no cuenta, así que se suma solo sobre los vecinos abiertos y se divide por cuántos son. En la GPU, cada celda guarda una máscara de 4 bits con los bordes por los que puede pasar el fluido.</p>
+<pre><code><span class="k">int</span> n = flowL + flowR + flowB + flowT;                     <span class="c">// bordes abiertos</span>
+<span class="k">float</span> velTerm = n == <span class="m">0</span> ? <span class="m">0</span> : (velR - velL + velT - velB) / (n * K);
+<span class="k">float</span> pNew = (pL*flowL + pR*flowR + pB*flowB + pT*flowT) / n - velTerm;
+Pressure[c] = pOld + (pNew - pOld) * weightSOR;           <span class="c">// ω = 1.7</span></code></pre>
+<p class="src">Adaptado de SmokeCompute.compute (PreparePressureSolver, PressureSolve_RedBlack)</p>
+
+<h3><span class="n">11.3</span>En paralelo: Jacobi y rojo-negro</h3>
+<p class="vid">Video 4, 28:14–31:13</p>
+<p>Gauss–Seidel usa valores recién calculados, así que no se paraleliza. <b>Jacobi</b> lee el mapa viejo y escribe uno nuevo: paralelo, pero necesita ~2× iteraciones. <b>Rojo-negro</b> pinta la rejilla como un tablero: todas las rojas a la vez (sus vecinas son negras), luego todas las negras. Vuelve a tener datos frescos y SOR funciona otra vez. El código hace 2 × 40 pasadas por fotograma y arranca la presión desde la del fotograma anterior.</p>
+</div>
+
+<h2 id="p12"><span class="n">12</span>Advección semi-lagrangiana</h2>
+<div class="col">
+<p class="vid">Video 4, 12:26–22:12</p>
+<p>En la rejilla las velocidades están quietas en sus bordes y hay que moverlas con el flujo. Lague primero lo intenta con diferencias finitas (<code>q −= c · pendiente · Δt</code>): aparecen oscilaciones y, al usar la propia velocidad como c, explota («una anémona de mar enfadada»).</p>
+<p>La solución <b>semi-lagrangiana</b> imagina una partícula en cada punto de muestreo sin crearla, y la sigue <em>hacia atrás</em>: ¿de dónde vino lo que ahora está aquí?</p>
+<div class="eq">x<sub>old</sub> = x − u(x) · Δt          q<sub>new</sub>(x) = q(x<sub>old</sub>)   (interpolación bilineal)</div>
+<p>Cada punto se calcula sin depender de los demás, así que no hay carreras en la GPU (la versión hacia delante reparte en los bordes vecinos y sí las tiene). Es <b>incondicionalmente estable</b>, pero disipa: las velocidades se frenan y difuminan solas, y el humo no se conserva (de 5.400 unidades a ~4.000 removiendo).</p>
+<p>Para interpolar en la rejilla escalonada se hacen dos bilineales separadas, una por componente, cada una desplazada medio celda en su eje.</p>
+<pre><code><span class="k">float2</span> RewindPos(<span class="k">float2</span> p) { <span class="k">return</span> p - GetVelocityAtWorldPos(p) * deltaTime; }
+velAdvected.x = GetVelocityAtWorldPos(RewindPos(CellEdgeLeft(x, y))).x;
+velAdvected.y = GetVelocityAtWorldPos(RewindPos(CellEdgeBottom(x, y))).y;
+<span class="c">// se escribe en otra textura y se copia de vuelta (ping-pong)</span></code></pre>
+<p>Orden de cada fotograma: fuerzas → solver de presión → actualizar velocidades (divergencia ≈ 0) → advección (que vuelve a meter algo de divergencia).</p>
+</div>
+
+<h2 id="p13"><span class="n">13</span>Humo, calor y la calle de Kármán</h2>
+<div class="col">
+<p class="vid">Video 4, 25:16–41:40</p>
+<ul>
+<li><b>Mapa de humo</b>: un escalar pasivo por celda, advectado igual que la velocidad. En el código es RGBA: tres colores de humo y la temperatura en el alfa.</li>
+<li><b>Difusión</b> explícita con el laplaciano de 5 puntos, <code>q += D Δt (q<sub>L</sub> + q<sub>R</sub> + q<sub>T</sub> + q<sub>B</sub> − 4q<sub>C</sub>) / Δx²</code>, y decaimiento <code>q *= exp(−Δt · decay)</code>. A 640×360 el humo «hipaba» y se ponía rosa: la difusión explícita es inestable si <code>D Δt / Δx²</code> pasa de 0,25.</li>
+<li><b>Flotación</b> (de Bridson): hacia arriba según <code>T − T<sub>amb</sub></code>, hacia abajo según la concentración de humo. Bolas heladas arriba hacen bajar el aire frío.</li>
+<li><b>Túnel de viento</b>: entrada constante a la izquierda, salida abierta a la derecha (presión 0), un cilindro sólido. El humo se divide, se junta y de pronto empieza a oscilar: <b>desprendimiento de vórtices</b>, la calle de Kármán, «lo mismo que las calles de nubes detrás de las islas». 160×90 con 80 iteraciones a 500 fps; a 1920×1080, 10 fps.</li>
+<li>Pendiente para él: confinamiento de vorticidad, interpolación más fina, 3D, un gigante gaseoso.</li>
+</ul>
+<p>La demo de abajo es un túnel de viento con lo de esta parte: rejilla MAC de 160×90, presión con rojo-negro + SOR, advección semi-lagrangiana y humo en franjas. El obstáculo es una <b>isla de ruido</b>: las celdas cuya altura pasa del umbral son sólidas (el aire las rodea) y las más bajas se pintan pero dejan pasar el aire. Es la decisión «opción b» del diseño de fluidos de Islands.</p>
+</div>
+<div class="demo">
+  <canvas id="grid" width="960" height="540" aria-label="Túnel de viento euleriano con una isla de ruido como obstáculo"></canvas>
+  <div class="ctrls">
+    <label>Obstáculo<select id="g-obs"><option value="island">Isla de ruido</option><option value="cyl">Cilindro</option><option value="arch">Archipiélago</option></select></label>
+    <label>Umbral de altura <output id="o-thr">0.55</output><input id="g-thr" type="range" min="0.3" max="0.9" step="0.01" value="0.55"></label>
+    <label>Viento <output id="o-u">0.9</output><input id="g-u" type="range" min="0.2" max="1.6" step="0.05" value="0.9"></label>
+    <label>Iteraciones <output id="o-it">40</output><input id="g-it" type="range" min="2" max="120" step="1" value="40"></label>
+    <label>ω (SOR) <output id="o-w">1.7</output><input id="g-w" type="range" min="1" max="1.95" step="0.05" value="1.7"></label>
+    <label>Ver<select id="g-view"><option value="smoke">Humo</option><option value="speed">Velocidad</option><option value="pressure">Presión</option><option value="curl">Vorticidad</option></select></label>
+    <button id="g-seed" type="button">Otra isla</button>
+    <button id="g-reset" type="button">Reiniciar</button>
+  </div>
+  <div class="stat" id="grid-stat">—</div>
+</div>
+<div class="col">
+<p>Prueba a bajar las iteraciones a 2–3: el error de divergencia sube y el humo se acumula o se vacía delante de la isla. Con ω = 1 (Gauss–Seidel puro) hacen falta muchas más iteraciones para el mismo error. Con el cilindro, la estela tarda unos segundos en empezar a oscilar.</p>
+</div>
+
+<!-- ===================== PARTE IV ===================== -->
+<div class="part">Parte IV · Una imagen como frontera</div>
+<h2 id="p14"><span class="n">14</span>Bad Apple!!</h2>
+<div class="col">
+<p class="vid">Videos 5 y 6. Sin narración: lo que sigue sale de las descripciones y de fotogramas pausados.</p>
+<p>Los dos videos pasan la animación de sombras <i>Bad Apple!!</i> por sus simuladores. La descripción del de humo dice el método: <b>los píxeles blancos se vuelven celdas sólidas, se aplica una fuerza constante hacia fuera a lo largo de su contorno y se añade humo poco a poco en ese contorno</b>. Como el mapa de obstáculos se reconstruye en cada paso (<code>UpdateObstacleMap</code>), una silueta que cambia 30 veces por segundo es una frontera móvil, y la proyección de presión convierte el empujón en remolinos.</p>
+<p>En el de partículas se ve que el agua llena las zonas blancas y deja vacías las siluetas negras, que hacen de obstáculo móvil. Cómo lo resuelve no está dicho; lo razonable es lo de §9: un campo de distancia de la máscara y empujar a lo largo de su gradiente. <i>(Inferencia, no confirmada.)</i></p>
+<p>La lección para un generador: <b>cualquier máscara</b> (una imagen, un umbral de altura, la tierra frente al mar) puede ser la frontera de un fluido, y su contorno puede emitir fuerza y materia.</p>
+</div>
+
+<!-- ===================== PARTE V ===================== -->
+<div class="part">Parte V · Para el módulo de fluidos</div>
+<h2 id="p15"><span class="n">15</span>Qué sirve para Islands</h2>
+<div class="col">
+<p>Contrastado con <code>planning/active/Fluids_Module_Design.md</code> (propuesta del 2026-11-04, sin código) y el arranque de NoiseLab v5. Islands es determinista y trabaja sobre una rejilla 2D vista desde arriba; eso descarta bastante de lo anterior y hace muy útil el resto.</p>
+</div>
+<div class="cards">
+  <div class="card"><h4>Viento que rodea el relieve</h4><span class="pill p-yes">directo</span>
+  <p>Umbral de altura → máscara sólida (§13, §14). Viento de fondo uniforme o por latitud (+ curl noise) y <b>una sola proyección de presión</b>: sale un campo sin divergencia que rodea las montañas, sin pasos de tiempo. Es el candidato D del diseño, en forma de presión.</p></div>
+  <div class="card"><h4>Corrientes marinas</h4><span class="pill p-yes">directo</span>
+  <p>El mismo solver con la tierra como sólido. Forzar a lo largo de la costa como en <i>Bad Apple</i> (tangencial en vez de hacia fuera); la disipación de velocidad hace de rozamiento con el fondo.</p></div>
+  <div class="card"><h4>Nubes animadas</h4><span class="pill p-yes">directo</span>
+  <p>El mapa de humo: advección semi-lagrangiana de un escalar por un viento <em>fijo</em> (sin auto-advección ni presión por fotograma), difusión con <code>DΔt/Δx² &lt; 0,25</code> y decaimiento. Sombreado con Beer–Lambert (§8.2).</p></div>
+  <div class="card"><h4>Deriva de canoas y semillas</h4><span class="pill p-yes">directo</span>
+  <p>Trazadores <code>x += u(x)·Δt</code> con la bilineal escalonada, y arrastre como la espuma: <code>v += (u − v)·k·Δt</code>. Contra la costa, empujar por el gradiente de la distancia a la costa (§9).</p></div>
+  <div class="card"><h4>Estelas de Kármán tras islas</h4><span class="pill p-no">solo visual</span>
+  <p>Solo aparecen con el bucle completo (advección + proyección en el tiempo). Depende de la historia: candidato E, fuera del pipeline.</p></div>
+  <div class="card"><h4>SPH, renderizado, espuma, n cuerpos</h4><span class="pill p-no">no portar</span>
+  <p>Un mapa visto desde arriba no tiene superficie libre. Quizá útil: la interpolación SPH para puntos dispersos y la presión cercana para separar barcas.</p></div>
+</div>
+<div class="col">
+<h3><span class="n">15.1</span>Una ventaja de la presión frente a ψ</h3>
+<p>El diseño propone guardar la función de corriente ψ y resolver Laplace con el obstáculo como borde. Con <b>varias islas</b>, ψ tiene que ser constante en cada una, pero ese valor no se conoce de antemano (depende de cuánto aire pasa por cada hueco), y hay que resolverlo aparte. La forma de presión de Lague no tiene ese problema: los sólidos son paredes de Neumann (se quita el término y se divide por los bordes abiertos), sirve para cualquier número de islas y el código ya está escrito. Para ψ los sólidos son Dirichlet; para p, Neumann. Si se elige ψ, hay que dejarlo dicho. <i>(Análisis propio, por comprobar en el prototipo.)</i></p>
+
+<h3><span class="n">15.2</span>Determinismo</h3>
+<p>Lague no promete determinismo. Leyendo su código:</p>
+<ul>
+<li>La rejilla de humo es «gather» puro (cada celda lee vecinas y escribe solo la suya) y rojo-negro no tiene carreras: repetible en una misma GPU con Δt fijo. Pero el muestreo bilineal por hardware usa pesos de poca precisión que cambian entre fabricantes, y la presión arranca de la del fotograma anterior, así que depende de toda la historia.</li>
+<li>SPH: el bitonic sort no es estable y la suma en coma flotante depende del orden y de la GPU. La espuma usa contadores atómicos y semillas por tiempo.</li>
+</ul>
+<p>Receta para Islands: Δt fijo; número de iteraciones fijo; presión inicial a 0 (sin arranque en caliente) en todo lo que sea dato; bilineal escrita a mano; orden de fila estable; CPU/Burst para los goldens; azar con hash de (seed, celda, paso), nunca del tiempo; nada de atómicos ni append buffers en datos con autoridad.</p>
+
+<h3><span class="n">15.3</span>Números para llevarse</h3>
+<div class="tbl"><table>
+<tbody>
+<tr><td>SOR</td><td>ω ≈ 1,7 con 15 iteraciones de Gauss–Seidel; ω = 2 no converge</td></tr>
+<tr><td>Jacobi</td><td>~2× las iteraciones de Gauss–Seidel para el mismo error</td></tr>
+<tr><td>Rejilla</td><td>160×90, 80 iteraciones, 500 fps (GPU); a 640×360 hizo falta 4× pasos y 10× iteraciones</td></tr>
+<tr><td>Difusión explícita</td><td>estable si D·Δt/Δx² ≤ 0,25 en 2D</td></tr>
+<tr><td>SPH</td><td>mirada adelante 1/120 s; viscosidad ~0,06–0,5; rigidez hasta 1000 con más subpasos; hash 15823 / 9737333</td></tr>
+<tr><td>Strouhal</td><td>f ≈ 0,2 · U / D para el ritmo de la estela (del diseño, no de Lague)</td></tr>
+</tbody></table></div>
+
+<h3><span class="n">15.4</span>Qué cambiaría en el plan</h3>
+<ol>
+<li>Añadir al diseño la variante «proyección única» (viento de fondo + máscara + un solve de presión, sin tiempo) al lado de C y D, y medirla con el protocolo de la v5 (divergencia, ms en el S22 a 64², 128² y 256²).</li>
+<li>Para el solver: rojo-negro + SOR con ω y número de iteraciones fijos; multigrid solo si a 256² no alcanza.</li>
+<li>Nubes de NoiseLab: dejar el ruido animado de la v4 y probar advección semi-lagrangiana por el viento fijo; es barato y ya no depende de que el ruido «parezca» moverse.</li>
+<li>Las fuentes nuevas (Bridson y Müller-Fischer 2007; Müller et al. 2003; Clavet et al. 2005; Ihmsen et al. 2012) van a la lista del diseño.</li>
+</ol>
+
+<h3><span class="n">15.5</span>Referencias</h3>
+<ul style="font-size:.92rem">
+<li>Bridson, R. y Müller-Fischer, M. (2007). <i>Fluid Simulation</i>. Notas del curso SIGGRAPH. La guía de Lague para el humo.</li>
+<li>Müller, Charypar y Gross (2003). Particle-Based Fluid Simulation for Interactive Applications. <i>SCA</i>.</li>
+<li>Clavet, Beaudoin y Poulin (2005). Particle-based Viscoelastic Fluid Simulation. <i>SCA</i>. Presión cercana.</li>
+<li>Koschier et al. (2019). SPH Techniques for the Physics Based Simulation of Fluids and Solids. Tutorial de Eurographics.</li>
+<li>Green, S. (2008). Particle Simulation using CUDA. NVIDIA. Y (2010) Screen Space Fluid Rendering for Games, GDC.</li>
+<li>Ihmsen, Akinci, Akinci y Teschner (2012). Unified spray, foam and air bubbles for particle-based fluids. <i>The Visual Computer</i>.</li>
+<li>Müller, M. Ten Minute Physics #17, «How to write an Eulerian fluid simulator».</li>
+<li>Stam, J. (1999). Stable Fluids. <i>SIGGRAPH</i>. Bridson, Hourihan y Nordenstam (2007). Curl-noise for procedural fluid flow. <i>SIGGRAPH</i>.</li>
+</ul>
+</div>
+</div>
+
+<script>
+/* ---------- kernel plot ---------- */
+(function(){
+  const c=document.getElementById('kplot'), g=c.getContext('2d');
+  function draw(){
+    const cs=getComputedStyle(document.documentElement);
+    const fg=cs.getPropertyValue('--fg').trim(), mu=cs.getPropertyValue('--muted').trim(), ln=cs.getPropertyValue('--line').trim();
+    const ac=cs.getPropertyValue('--accent').trim(), wm=cs.getPropertyValue('--warm').trim();
+    const W=c.width,H=c.height,L=50,R=170,T=18,B=34; g.clearRect(0,0,W,H);
+    g.strokeStyle=ln; g.lineWidth=1; g.beginPath(); g.moveTo(L,T); g.lineTo(L,H-B); g.lineTo(W-R,H-B); g.stroke();
+    g.fillStyle=mu; g.font='12px "IBM Plex Mono", monospace';
+    [0,0.5,1].forEach(t=>{const x=L+t*(W-R-L); g.fillText(t===1?'r = h':t===0?'0':'h/2',x-8,H-B+18);});
+    g.fillText('1',L-16,T+5); g.fillText('0',L-16,H-B+4);
+    const ks=[
+      ['poly6 (h²−r²)³',r=>Math.pow(1-r*r,3),ac,[]],
+      ['spiky² (h−r)²',r=>Math.pow(1-r,2),wm,[]],
+      ['spiky³ (h−r)³',r=>Math.pow(1-r,3),wm,[6,4]],
+      ['|∂spiky²| (h−r)',r=>1-r,fg,[2,3]],
+      ['|∂poly6| ∝ r(h²−r²)²',r=>r*Math.pow(1-r*r,2)/0.3849,ac,[6,4]],
+    ];
+    ks.forEach(([name,f,col,dash],i)=>{
+      g.strokeStyle=col; g.setLineDash(dash); g.lineWidth=2; g.beginPath();
+      for(let k=0;k<=100;k++){const r=k/100,x=L+r*(W-R-L),y=H-B-f(r)*(H-B-T); k?g.lineTo(x,y):g.moveTo(x,y);} g.stroke();
+      g.beginPath(); g.moveTo(W-R+12,T+10+i*22); g.lineTo(W-R+34,T+10+i*22); g.stroke(); g.setLineDash([]);
+      g.fillStyle=fg; g.font='11px "IBM Plex Mono", monospace'; g.fillText(name.split(' ')[0],W-R+40,T+14+i*22);
+    });
+  }
+  draw(); matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',draw);
+  new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+})();
+
+/* ---------- SPH demo ---------- */
+(function(){
+  const cv=document.getElementById('sph'), ctx=cv.getContext('2d');
+  const BW=16, BH=9.33, h=0.35, h2=h*h;
+  const P={rho0:55,kP:500,kN:18,visc:0.06,g:12,damp:0.95};
+  const N=1600, SUB=3, DT=1/60/SUB;
+  const S={poly6:4/(Math.PI*Math.pow(h,8)), sp2:6/(Math.PI*Math.pow(h,4)), sp3:10/(Math.PI*Math.pow(h,5)), dsp2:12/(Math.PI*Math.pow(h,4)), dsp3:30/(Math.PI*Math.pow(h,5))};
+  const px=new Float32Array(N),py=new Float32Array(N),vx=new Float32Array(N),vy=new Float32Array(N),qx=new Float32Array(N),qy=new Float32Array(N),den=new Float32Array(N),nden=new Float32Array(N);
+  const GW=Math.ceil(BW/h)+2, GH=Math.ceil(BH/h)+2, cellOf=new Int32Array(N), start=new Int32Array(GW*GH+1), sorted=new Int32Array(N);
+  let paused=false, mouse={on:false,x:0,y:0,s:1};
+  function reset(){
+    const sp=Math.sqrt(1/P.rho0)*1.02, cols=Math.ceil(Math.sqrt(N)); let k=0;
+    for(let j=0;k<N;j++)for(let i=0;i<cols&&k<N;i++,k++){px[k]=-BW/2+0.6+i*sp+(j%2)*sp*.5;py[k]=-BH/2+0.5+j*sp;vx[k]=vy[k]=0;}
+  }
+  function build(){
+    start.fill(0);
+    for(let i=0;i<N;i++){let cx=Math.floor((qx[i]+BW/2)/h)+1,cy=Math.floor((qy[i]+BH/2)/h)+1;cx=cx<0?0:cx>=GW?GW-1:cx;cy=cy<0?0:cy>=GH?GH-1:cy;const c=cx+cy*GW;cellOf[i]=c;start[c+1]++;}
+    for(let c=0;c<GW*GH;c++)start[c+1]+=start[c];
+    const fill=start.slice(0,GW*GH); for(let i=0;i<N;i++)sorted[fill[cellOf[i]]++]=i;
+  }
+  function each(i,fn){const c=cellOf[i],cx=c%GW,cy=(c/GW)|0;
+    for(let oy=-1;oy<=1;oy++){const yy=cy+oy;if(yy<0||yy>=GH)continue;for(let ox=-1;ox<=1;ox++){const xx=cx+ox;if(xx<0||xx>=GW)continue;const cc=xx+yy*GW;
+      for(let s=start[cc],e=start[cc+1];s<e;s++){const j=sorted[s];const dx=qx[j]-qx[i],dy=qy[j]-qy[i],d2=dx*dx+dy*dy;if(d2<h2)fn(j,dx,dy,d2);}}}}
+  function step(){
+    for(let i=0;i<N;i++){
+      let ax=0,ay=-P.g;
+      if(mouse.on){const dx=mouse.x-px[i],dy=mouse.y-py[i],d2=dx*dx+dy*dy,R=2.2;
+        if(d2<R*R){const d=Math.sqrt(d2)||1e-6,ct=1-d/R,str=60*mouse.s,gw=1-ct*Math.min(1,Math.max(0,str/10));
+          ax=ax*gw+dx/d*ct*str-vx[i]*ct; ay=ay*gw+dy/d*ct*str-vy[i]*ct;}}
+      vx[i]+=ax*DT; vy[i]+=ay*DT; qx[i]=px[i]+vx[i]/120; qy[i]=py[i]+vy[i]/120;
+    }
+    build();
+    for(let i=0;i<N;i++){let d=0,n=0;each(i,(j,dx,dy,d2)=>{const r=Math.sqrt(d2),t=h-r;d+=t*t*S.sp2;n+=t*t*t*S.sp3;});den[i]=d;nden[i]=n;}
+    for(let i=0;i<N;i++){
+      const pi=(den[i]-P.rho0)*P.kP, ni=nden[i]*P.kN; let fx=0,fy=0,wx=0,wy=0;
+      each(i,(j,dx,dy,d2)=>{ if(j===i)return; const r=Math.sqrt(d2); let ux,uy; if(r>0){ux=dx/r;uy=dy/r}else{ux=0;uy=1}
+        const t=h-r, pj=(den[j]-P.rho0)*P.kP, nj=nden[j]*P.kN;
+        const sp=(pi+pj)*.5, sn=(ni+nj)*.5;
+        const f=(-t*S.dsp2)*sp/den[j] + (-t*t*S.dsp3)*sn/nden[j];
+        fx+=ux*f; fy+=uy*f;
+        const w=Math.pow(h2-d2,3)*S.poly6; wx+=(vx[j]-vx[i])*w; wy+=(vy[j]-vy[i])*w; });
+      vx[i]+=(fx/den[i])*DT + wx*P.visc*DT; vy[i]+=(fy/den[i])*DT + wy*P.visc*DT;
+    }
+    const hx=BW/2,hy=BH/2;
+    for(let i=0;i<N;i++){px[i]+=vx[i]*DT;py[i]+=vy[i]*DT;
+      if(Math.abs(px[i])>=hx){px[i]=hx*Math.sign(px[i])*0.9999;vx[i]*=-P.damp;}
+      if(Math.abs(py[i])>=hy){py[i]=hy*Math.sign(py[i])*0.9999;vy[i]*=-P.damp;}}
+  }
+  const ramp=[[20,60,140],[40,140,210],[120,220,200],[250,240,170],[255,150,90]];
+  function col(t){t=Math.min(1,Math.max(0,t))*(ramp.length-1);const i=Math.min(ramp.length-2,t|0),f=t-i,a=ramp[i],b=ramp[i+1];return `rgb(${a[0]+(b[0]-a[0])*f|0},${a[1]+(b[1]-a[1])*f|0},${a[2]+(b[2]-a[2])*f|0})`;}
+  function draw(){
+    const W=cv.width,H=cv.height,sc=Math.min(W/BW,H/BH);
+    ctx.fillStyle='#07161d';ctx.fillRect(0,0,W,H);
+    const r=Math.max(1.6,sc*0.055);
+    for(let i=0;i<N;i++){const sp=Math.hypot(vx[i],vy[i]);ctx.fillStyle=col(sp/6);ctx.beginPath();ctx.arc(W/2+px[i]*sc,H/2-py[i]*sc,r,0,6.283);ctx.fill();}
+    if(mouse.on){ctx.strokeStyle='rgba(255,255,255,.35)';ctx.beginPath();ctx.arc(W/2+mouse.x*sc,H/2-mouse.y*sc,2.2*sc,0,6.283);ctx.stroke();}
+  }
+  let last=performance.now(),acc=0,fr=0,ms=0;
+  function loop(t){
+    if(!paused){const a=performance.now();for(let s=0;s<SUB;s++)step();ms+=performance.now()-a;fr++;}
+    draw();
+    if(t-last>1000){document.getElementById('sph-stat').textContent=`${N} partículas · ${SUB} subpasos por fotograma · ${(ms/Math.max(1,fr)).toFixed(1)} ms de simulación por fotograma · arrastra para atraer, clic derecho o Mayús para empujar`;last=t;fr=0;ms=0;}
+    requestAnimationFrame(loop);
+  }
+  function toSim(e){const b=cv.getBoundingClientRect(),W=cv.width,H=cv.height,sc=Math.min(W/BW,H/BH);const x=(e.clientX-b.left)*W/b.width,y=(e.clientY-b.top)*H/b.height;return[(x-W/2)/sc,-(y-H/2)/sc];}
+  cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);[mouse.x,mouse.y]=toSim(e);mouse.on=true;mouse.s=(e.button===2||e.shiftKey)?-1:1;});
+  cv.addEventListener('pointermove',e=>{if(mouse.on)[mouse.x,mouse.y]=toSim(e);});
+  ['pointerup','pointercancel','pointerleave'].forEach(n=>cv.addEventListener(n,()=>mouse.on=false));
+  cv.addEventListener('contextmenu',e=>e.preventDefault());
+  const bind=(id,key,o)=>{const el=document.getElementById(id);el.addEventListener('input',()=>{P[key]=+el.value;document.getElementById(o).textContent=el.value;});};
+  bind('s-rho','rho0','o-rho');bind('s-kp','kP','o-kp');bind('s-kn','kN','o-kn');bind('s-vis','visc','o-vis');bind('s-g','g','o-g');
+  document.getElementById('b-sph-reset').onclick=reset;
+  const pb=document.getElementById('b-sph-pause');pb.onclick=()=>{paused=!paused;pb.textContent=paused?'Seguir':'Pausa';};
+  reset(); requestAnimationFrame(loop);
+})();
+
+/* ---------- Eulerian grid demo ---------- */
+(function(){
+  const cv=document.getElementById('grid'), ctx=cv.getContext('2d');
+  const nx=160, ny=90, NU=(nx+1)*ny, NV=nx*(ny+1);
+  let u=new Float32Array(NU), v=new Float32Array(NV), u2=new Float32Array(NU), v2=new Float32Array(NV);
+  const p=new Float32Array(nx*ny), solid=new Uint8Array(nx*ny), height=new Float32Array(nx*ny);
+  let sm=new Float32Array(nx*ny), sm2=new Float32Array(nx*ny);
+  const G={thr:0.55,U:0.9,it:40,w:1.7,view:'smoke',obs:'island',seed:7};
+  const U=(i,j)=>i+j*(nx+1), V=(i,j)=>i+j*nx, C=(i,j)=>i+j*nx;
+  const off=document.createElement('canvas'); off.width=nx; off.height=ny; const octx=off.getContext('2d'); const img=octx.createImageData(nx,ny);
+  function hash(x,y,s){let h=(x*374761393+y*668265263+s*982451653)|0;h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967295;}
+  function vnoise(x,y,s){const xi=Math.floor(x),yi=Math.floor(y),fx=x-xi,fy=y-yi,sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy);
+    const a=hash(xi,yi,s),b=hash(xi+1,yi,s),c=hash(xi,yi+1,s),d=hash(xi+1,yi+1,s);return a+(b-a)*sx+(c-a)*sy+(a-b-c+d)*sx*sy;}
+  function fbm(x,y,s){let t=0,a=.5,f=1;for(let o=0;o<5;o++){t+=a*vnoise(x*f,y*f,s+o*17);a*=.5;f*=2;}return t/0.97;}
+  function buildHeight(){
+    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+      let hgt=0;
+      if(G.obs==='island'){const dx=(i-nx*0.32)/(nx*0.13),dy=(j-ny*0.5)/(ny*0.30);const fall=1-Math.min(1,Math.sqrt(dx*dx+dy*dy));
+        hgt=fall*0.85+ (fbm(i/14,j/14,G.seed)-0.5)*0.75;}
+      else if(G.obs==='arch'){let best=0;[[0.22,0.35,.09],[0.34,0.62,.11],[0.47,0.40,.07],[0.28,0.78,.06]].forEach(([cx,cy,r])=>{const dx=(i-nx*cx)/(nx*r),dy=(j-ny*cy)/(nx*r);best=Math.max(best,1-Math.min(1,Math.sqrt(dx*dx+dy*dy)));});
+        hgt=best*0.95+(fbm(i/10,j/10,G.seed)-0.5)*0.6;}
+      else {const dx=i-nx*0.25,dy=j-(ny*0.5+0.35);hgt=Math.sqrt(dx*dx+dy*dy)<ny*0.09?1:0;}
+      height[C(i,j)]=hgt;
+    }
+    applyThr();
+  }
+  function applyThr(){for(let k=0;k<nx*ny;k++){const t=G.obs==='cyl'?0.5:G.thr;solid[k]=height[k]>t?1:0;}}
+  const S=(i,j)=>(j<0||j>=ny||i<0)?1:(i>=nx?0:solid[C(i,j)]);
+  function reset(){u.fill(0);v.fill(0);p.fill(0);sm.fill(0);for(let j=0;j<ny;j++)for(let i=0;i<=nx;i++)u[U(i,j)]=G.U;}
+  function bc(){
+    for(let j=0;j<ny;j++){u[U(0,j)]=S(0,j)?0:G.U;for(let i=1;i<=nx;i++){if(S(i-1,j)||(i<nx&&S(i,j)))u[U(i,j)]=0;}}
+    for(let i=0;i<nx;i++){v[V(i,0)]=0;v[V(i,ny)]=0;for(let j=1;j<ny;j++)if(S(i,j-1)||S(i,j))v[V(i,j)]=0;}
+  }
+  let divErr=0;
+  function project(){
+    for(let it=0;it<G.it;it++)for(let pass=0;pass<2;pass++)for(let j=0;j<ny;j++)for(let i=(j+pass)&1;i<nx;i+=2){
+      const c=C(i,j); if(solid[c])continue;
+      const fl=(i>0&&!solid[c-1])?1:0, fr=(i===nx-1)?1:(solid[c+1]?0:1), fb=(j>0&&!solid[c-nx])?1:0, ft=(j<ny-1&&!solid[c+nx])?1:0;
+      const n=fl+fr+fb+ft; if(!n){p[c]=0;continue;}
+      const div=u[U(i+1,j)]-u[U(i,j)]+v[V(i,j+1)]-v[V(i,j)];
+      const sum=(fl?p[c-1]:0)+(fr&&i<nx-1?p[c+1]:0)+(fb?p[c-nx]:0)+(ft?p[c+nx]:0);
+      const pn=sum/n-div/n; p[c]+= (pn-p[c])*G.w;
+    }
+    for(let j=0;j<ny;j++)for(let i=1;i<=nx;i++){if(S(i-1,j)||(i<nx&&S(i,j)))continue;const pr=i<nx?p[C(i,j)]:0;u[U(i,j)]-=pr-p[C(i-1,j)];}
+    for(let i=0;i<nx;i++)for(let j=1;j<ny;j++){if(S(i,j-1)||S(i,j))continue;v[V(i,j)]-=p[C(i,j)]-p[C(i,j-1)];}
+    divErr=0;let cnt=0;for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){if(solid[C(i,j)])continue;divErr+=Math.abs(u[U(i+1,j)]-u[U(i,j)]+v[V(i,j+1)]-v[V(i,j)]);cnt++;} divErr/=Math.max(1,cnt);
+  }
+  const cl=(x,a,b)=>x<a?a:x>b?b:x;
+  function bil(arr,w,hh,gx,gy){gx=cl(gx,0,w-1.001);gy=cl(gy,0,hh-1.001);const i=gx|0,j=gy|0,fx=gx-i,fy=gy-j,k=i+j*w;
+    return (arr[k]*(1-fx)+arr[k+1]*fx)*(1-fy)+(arr[k+w]*(1-fx)+arr[k+w+1]*fx)*fy;}
+  const sU=(x,y)=>bil(u,nx+1,ny,x,y-0.5), sV=(x,y)=>bil(v,nx,ny+1,x-0.5,y);
+  function advect(){
+    const dt=1;
+    for(let j=0;j<ny;j++)for(let i=0;i<=nx;i++){const k=U(i,j);if(i===0||S(i-1,j)||(i<nx&&S(i,j))){u2[k]=u[k];continue;}
+      const x=i,y=j+0.5,X=x-sU(x,y)*dt,Y=y-sV(x,y)*dt;u2[k]=sU(X,Y);}
+    for(let j=0;j<=ny;j++)for(let i=0;i<nx;i++){const k=V(i,j);if(j===0||j===ny||S(i,j-1)||S(i,j)){v2[k]=v[k];continue;}
+      const x=i+0.5,y=j,X=x-sU(x,y)*dt,Y=y-sV(x,y)*dt;v2[k]=sV(X,Y);}
+    [u,u2]=[u2,u];[v,v2]=[v2,v];
+    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const c=C(i,j);if(solid[c]){sm2[c]=0;continue;}
+      const x=i+0.5,y=j+0.5,X=x-sU(x,y)*dt,Y=y-sV(x,y)*dt;sm2[c]=bil(sm,nx,ny,X-0.5,Y-0.5)*0.9985;}
+    [sm,sm2]=[sm2,sm];
+    for(let j=0;j<ny;j++){const on=((j>>2)&1)?1:0;sm[C(0,j)]=on;sm[C(1,j)]=on;}
+  }
+  function draw(){
+    const d=img.data;let pmin=1e9,pmax=-1e9;if(G.view==='pressure')for(let k=0;k<nx*ny;k++)if(!solid[k]){pmin=Math.min(pmin,p[k]);pmax=Math.max(pmax,p[k]);}
+    const thr=G.obs==='cyl'?0.5:G.thr;
+    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+      const c=C(i,j),o=((ny-1-j)*nx+i)*4,hgt=height[c]; let r,g,b;
+      if(solid[c]){const t=cl((hgt-thr)/(1-thr+1e-6),0,1);r=150+70*t;g=125+70*t;b=95+60*t;}
+      else{
+        r=8;g=26;b=36;
+        if(G.obs!=='cyl'&&hgt>thr-0.22){const t=cl((hgt-(thr-0.22))/0.22,0,1);r=30+50*t;g=60+45*t;b=40+10*t;}
+        let val=0,tint=[230,245,250];
+        if(G.view==='smoke'){val=cl(sm[c],0,1);}
+        else{const ux=(u[U(i,j)]+u[U(i+1,j)])*.5,vy=(v[V(i,j)]+v[V(i,j+1)])*.5;
+          if(G.view==='speed'){val=cl(Math.hypot(ux,vy)/(G.U*1.8),0,1);tint=[255,170,90];}
+          else if(G.view==='pressure'){const t=(p[c]-pmin)/(pmax-pmin+1e-9);val=1;tint=[40+215*t,90+40*(1-Math.abs(t-.5)*2),255-215*t];val=0.85;}
+          else{const cu=(i>0&&i<nx-1&&j>0&&j<ny-1)?((v[V(i+1,j)]-v[V(i-1,j)])-(u[U(i,j+1)]-u[U(i,j-1)]))*0.5:0;const t=cl(cu*4/G.U,-1,1);val=Math.abs(t);tint=t>0?[255,120,90]:[90,170,255];}
+        }
+        r=r+(tint[0]-r)*val;g=g+(tint[1]-g)*val;b=b+(tint[2]-b)*val;
+      }
+      d[o]=r;d[o+1]=g;d[o+2]=b;d[o+3]=255;
+    }
+    octx.putImageData(img,0,0);
+    ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,cv.width,cv.height);
+  }
+  let last=performance.now(),fr=0,ms=0;
+  function loop(t){const a=performance.now();bc();project();advect();ms+=performance.now()-a;fr++;draw();
+    if(t-last>1000){document.getElementById('grid-stat').textContent=`${nx}×${ny} celdas · ${G.it} iteraciones rojo-negro · error de divergencia medio ${divErr.toExponential(2)} · ${(ms/fr).toFixed(1)} ms por paso`;last=t;fr=0;ms=0;}
+    requestAnimationFrame(loop);}
+  const $=id=>document.getElementById(id);
+  $('g-thr').addEventListener('input',e=>{G.thr=+e.target.value;$('o-thr').textContent=e.target.value;applyThr();});
+  $('g-u').addEventListener('input',e=>{G.U=+e.target.value;$('o-u').textContent=e.target.value;});
+  $('g-it').addEventListener('input',e=>{G.it=+e.target.value;$('o-it').textContent=e.target.value;});
+  $('g-w').addEventListener('input',e=>{G.w=+e.target.value;$('o-w').textContent=e.target.value;});
+  $('g-view').addEventListener('change',e=>G.view=e.target.value);
+  $('g-obs').addEventListener('change',e=>{G.obs=e.target.value;buildHeight();reset();});
+  $('g-seed').onclick=()=>{G.seed=(G.seed*16807+11)%2147483647;buildHeight();reset();};
+  $('g-reset').onclick=reset;
+  buildHeight();reset();requestAnimationFrame(loop);
+})();
+</script>

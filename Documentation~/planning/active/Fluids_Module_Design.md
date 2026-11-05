@@ -80,7 +80,15 @@ rejilla y sin motor gráfico; los adaptadores al final. E queda fuera del núcle
 - Una costa con corriente fría: ¿sale desierto costero?
 - Revisión visual de Claudio en el editor y en el S22.
 
+## Añadido el 2026-11-05 (desde los videos de Lague)
+Variante **«proyección única»** para probar junto a C y D: viento de fondo (+ curl) sobre la
+máscara de sólidos y un solve de presión con rojo-negro + SOR (ω ≈ 1,7, iteraciones fijas), sin
+pasos de tiempo. Ventaja frente a ψ con varias islas: no hace falta la constante de ψ en cada
+una. Detalle y código: `research/2026-11-05-lague-fluidos.md` y `research/fluidos-lague/`.
+
 ## Fuentes (por comprobar)
+- Bridson y Müller-Fischer, *Fluid Simulation*, notas del curso SIGGRAPH 2007.
+- Müller, Ten Minute Physics #17, «How to write an Eulerian fluid simulator».
 - Bridson, Hourihan y Nordenstam, «Curl-noise for procedural fluid flow», SIGGRAPH 2007.
 - Stam, «Stable Fluids», SIGGRAPH 1999.
 - Zhao, «A fast sweeping method for Eikonal equations», *Math. Comp.* 74 (2005).
