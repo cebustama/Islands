@@ -10,6 +10,9 @@ Fecha: 2026-11-05. Rama: `main`. Sigue a `planning/archive/NoiseLab_v4_Startup.m
 - `research/2026-11-05-mundo-finito-o-infinito.md`: mundo infinito frente a planeta, cascada
   de escalas (investigación, no autoridad).
 - `planning/active/Fluids_Module_Design.md`: propuesta del módulo de fluidos (no autoridad).
+- `research/2026-11-05-lague-fluidos.md` y `research/fluidos-lague/` (tutorial, notas, prueba en
+  Node): técnicas de los videos de Lague; la variante «proyección única» y la receta de
+  determinismo sirven para el candidato 3 (investigación, no autoridad).
 
 ## Verificado (con evidencia)
 - NoiseLab v4 cerrada: vista dividida (`v=`), capas superpuestas (`ov=`), nubes (`cu=`),
@@ -28,7 +31,9 @@ Fecha: 2026-11-05. Rama: `main`. Sigue a `planning/archive/NoiseLab_v4_Startup.m
    y costa en la rejilla de referencia del mundo (128²) e interpolar. Es la base de los fluidos.
 2. **Bandas por altura absoluta** como alternativa a los porcentajes.
 3. **Fluidos** (viento que rodea el relieve, corrientes, nubes y deriva más físicas):
-   `Fluids_Module_Design.md`. El más grande.
+   `Fluids_Module_Design.md`. El más grande. Desde el 2026-11-05 tiene una variante más:
+   viento de fondo + máscara de relieve + un solo solve de presión (rojo-negro + SOR, sin
+   tiempo), con código de referencia probado en JS en `research/fluidos-lague/tutorial.html`.
 4. **Quickselect** para el umbral de agua por porcentaje (desde el lab de cuantiles de la web).
 5. **Coste de las nubes** (ver «Sin verificar»).
 
