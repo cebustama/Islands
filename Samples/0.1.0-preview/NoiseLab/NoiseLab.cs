@@ -187,6 +187,7 @@ public class NoiseLab : MonoBehaviour
     // Longer log for the export: every frame since the last Clear, up to LogFrames.
     const int LogFrames = 3600;
     readonly float[] logTime = new float[LogFrames], logFrame = new float[LogFrames], logSample = new float[LogFrames];
+    readonly float[] logPaint = new float[LogFrames], logCloud = new float[LogFrames]; // v4 (export v2)
     readonly int[] logN = new int[LogFrames];
     readonly bool[] logDrag = new bool[LogFrames];
     int logHead, logCount;
@@ -209,7 +210,7 @@ public class NoiseLab : MonoBehaviour
 
     void Update()
     {
-        float sampledMs = 0f;
+        float sampledMs = 0f, paintedMs = 0f, cloudedMs = 0f;
         if (dirty)
         {
             dirty = false;
@@ -221,6 +222,7 @@ public class NoiseLab : MonoBehaviour
             Flood();
             Climate();
             Paint();
+            paintedMs = paintMs;
         }
         else if (moved)
         {
@@ -231,6 +233,14 @@ public class NoiseLab : MonoBehaviour
             sampledMs = sampleMs;
             Climate();
             Paint();
+            paintedMs = paintMs;
+        }
+
+        // v4: the clouds move every frame; the terrain is not touched.
+        if (clouds)
+        {
+            Clouds();
+            cloudedMs = cloudMs;
         }
 
         perfFrame[perfHead] = Time.unscaledDeltaTime * 1000f;
@@ -241,6 +251,8 @@ public class NoiseLab : MonoBehaviour
         logTime[logHead] = Time.unscaledTime - logStart;
         logFrame[logHead] = Time.unscaledDeltaTime * 1000f;
         logSample[logHead] = sampledMs;
+        logPaint[logHead] = paintedMs;
+        logCloud[logHead] = cloudedMs;
         logN[logHead] = sampledMs > 0f ? sampleN : 0;
         logDrag[logHead] = dragging;
         logHead = (logHead + 1) % LogFrames;
@@ -259,6 +271,8 @@ public class NoiseLab : MonoBehaviour
         var dragFrames = new System.Collections.Generic.List<float>();
         var dragSamples = new System.Collections.Generic.List<float>();
         var fullSamples = new System.Collections.Generic.List<float>();
+        var paints = new System.Collections.Generic.List<float>();
+        var cloudTimes = new System.Collections.Generic.List<float>();
         int first = (logHead - logCount + LogFrames) % LogFrames;
         for (int k = 0; k < logCount; k++)
         {
@@ -266,10 +280,12 @@ public class NoiseLab : MonoBehaviour
             frames.Add(logFrame[i]);
             if (logDrag[i]) dragFrames.Add(logFrame[i]);
             if (logSample[i] > 0f) (logDrag[i] ? dragSamples : fullSamples).Add(logSample[i]);
+            if (logPaint[i] > 0f) paints.Add(logPaint[i]);
+            if (logCloud[i] > 0f) cloudTimes.Add(logCloud[i]);
         }
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("# NoiseLab perf export v1");
+        sb.AppendLine("# NoiseLab perf export v2");
         sb.AppendLine($"date: {System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", Inv)}");
         sb.AppendLine($"device: {SystemInfo.deviceModel} | {SystemInfo.operatingSystem}");
         sb.AppendLine($"cpu: {SystemInfo.processorType} x{SystemInfo.processorCount} @ {SystemInfo.processorFrequency} MHz | ram {SystemInfo.systemMemorySize} MB");
@@ -283,6 +299,7 @@ public class NoiseLab : MonoBehaviour
         sb.AppendLine($"screen: {Screen.width}x{Screen.height} | target fps {Application.targetFrameRate}");
         sb.AppendLine($"resolution: {resolution} | drag resolution: {dragResolution} | world reference: {WorldSamples}x{WorldSamples}, last {F(R1(calibrateMs))} ms");
         sb.AppendLine($"fields sampled per view: {ActiveFieldCount()} (height: {heightSource}, colour: {colouring})");
+        sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes : "off")}");
         sb.AppendLine($"code: {BuildCode()}");
         sb.AppendLine();
         sb.AppendLine($"## summary ({logCount} frames, {F(R1(logCount > 0 ? logTime[(logHead - 1 + LogFrames) % LogFrames] : 0f))} s)");
@@ -291,10 +308,12 @@ public class NoiseLab : MonoBehaviour
         sb.AppendLine(StatsRow("frame (dragging)", dragFrames));
         sb.AppendLine(StatsRow("sample (dragging)", dragSamples));
         sb.AppendLine(StatsRow("sample (full, on release or change)", fullSamples));
+        sb.AppendLine(StatsRow("paint (all panels, when repainted)", paints));
+        sb.AppendLine(StatsRow("clouds (every frame while on)", cloudTimes));
         sb.AppendLine($"dragging frames under 33.3 ms (30 fps): {Share(dragFrames, 33.3f)} | under 16.7 ms (60 fps): {Share(dragFrames, 16.7f)}");
         sb.AppendLine();
         sb.AppendLine("## frames");
-        sb.AppendLine("t_s,frame_ms,sample_ms,n,drag");
+        sb.AppendLine("t_s,frame_ms,sample_ms,n,drag,paint_ms,cloud_ms");
         for (int k = 0; k < logCount; k++)
         {
             int i = (first + k) % LogFrames;
@@ -302,7 +321,9 @@ public class NoiseLab : MonoBehaviour
               .Append(logFrame[i].ToString("0.0", Inv)).Append(',')
               .Append(logSample[i].ToString("0.0", Inv)).Append(',')
               .Append(logN[i]).Append(',')
-              .Append(logDrag[i] ? 1 : 0).AppendLine();
+              .Append(logDrag[i] ? 1 : 0).Append(',')
+              .Append(logPaint[i].ToString("0.0", Inv)).Append(',')
+              .Append(logCloud[i].ToString("0.0", Inv)).AppendLine();
         }
         return sb.ToString();
     }
@@ -514,6 +535,7 @@ public class NoiseLab : MonoBehaviour
     void OnDestroy()
     {
         foreach (var t in textures) if (t != null) Destroy(t);
+        if (cloudTexture != null) Destroy(cloudTexture);
     }
 
     // ---------------------------------------------------------------------------------
@@ -822,6 +844,126 @@ public class NoiseLab : MonoBehaviour
         }
     }
 
+    // ---------------------------------------------------------------------------------
+    // v4: clouds, first version. A separate low-resolution texture drawn over the panels
+    // that show the map, recomputed every frame while on; the terrain caches are not
+    // touched. Shape: fractal Simplex3D with time as the third coordinate, so the clouds
+    // change without jumps. They drift with the wind direction and sit in world
+    // coordinates, so they move with the map when dragging. Cover follows the humidity of
+    // the air (windAir, with wind on; the moisture otherwise): rising air forms clouds on
+    // the windward slopes and the peaks, and the dry air coming down the lee dissolves them
+    // (föhn), so a clear gap stays in the rain shadow while the clouds pass.
+    // ---------------------------------------------------------------------------------
+
+    [SerializeField] bool clouds = false;
+    [SerializeField, Range(0f, 1f)] float cloudCover = 0.5f;    // more cover = more sky under cloud
+    [SerializeField, Range(1, 8)] int cloudSize = 3;            // noise frequency: low = big fronts
+    [SerializeField, Range(0f, 1f)] float cloudSpeed = 0.3f;    // drift; 1 = 0.1 view widths per second
+    [SerializeField, Range(0f, 1f)] float cloudChange = 0.3f;   // how fast the shapes evolve
+    [SerializeField, Range(0f, 1f)] float cloudHumidity = 0.5f; // weight of the air humidity in the cover
+    [SerializeField, Range(0f, 1f)] float cloudOpacity = 0.8f;
+    [SerializeField, Range(0.01f, 0.2f)] float cloudEdge = 0.04f; // width of the cloud edge, in noise units (was 0.12, fixed)
+
+    // 96² (was 64²): on a 480-unit panel a cloud texel is 5 units instead of 7.5, so the
+    // bilinear stretch blurs less. One more octave (5) adds the small detail at the edges.
+    const int CloudRes = 96;
+    const int CloudOctaves = 5;
+    const float CloudShadow = 0.025f;   // shadow offset, in view widths (light from the upper left)
+
+    Texture2D cloudTexture;
+    Color32[] cloudPixels;
+    float2 cloudDrift;
+    float cloudPhase, cloudMs;
+
+    void Clouds()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        float dt = Mathf.Min(Time.unscaledDeltaTime, 0.1f); // no jump after a pause
+        float a = windAngle * Mathf.Deg2Rad;
+        cloudDrift += new float2(Mathf.Cos(a), Mathf.Sin(a)) * (cloudSpeed * 0.1f * dt);
+        cloudPhase += cloudChange * 0.2f * dt;
+
+        if (cloudTexture == null)
+        {
+            cloudTexture = new Texture2D(CloudRes, CloudRes, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Bilinear, // soft edges from a coarse grid
+                wrapMode = TextureWrapMode.Clamp
+            };
+            cloudPixels = new Color32[CloudRes * CloudRes];
+        }
+
+        var settings = Settings.Default;
+        settings.seed = seed + 7919; // its own noise, tied to the map seed
+        settings.frequency = cloudSize;
+        settings.octaves = CloudOctaves;
+        settings.lacunarity = 2;
+        settings.persistence = 0.5f;
+
+        // Humidity source, read at the nearest cell of the view grid (the clouds are coarser).
+        bool biomes = colouring == Colouring.Biomes;
+        float[] air = biomes ? (wind && windAir != null ? windAir : moist) : null;
+        int n = sampleN;
+        if (air != null && air.Length != n * n) air = null;
+
+        float step = 1f / CloudRes;
+        for (int y = 0; y < CloudRes; y++)
+        {
+            float pz = offset.y + (y + 0.5f) * step - cloudDrift.y;
+            int vy = Mathf.Min(n - 1, (int)((y + 0.5f) * n / CloudRes));
+            for (int x = 0; x < CloudRes; x += 4)
+            {
+                float4 px = (new float4(x, x + 1, x + 2, x + 3) + 0.5f) * step + offset.x - cloudDrift.x;
+                float4 v = GetFractalNoise<Simplex3D<Simplex>>(new float4x3(px, cloudPhase, pz), settings).v;
+                for (int k = 0; k < 4; k++)
+                {
+                    float d = v[k] * 0.5f + 0.5f;
+                    float cover = cloudCover;
+                    if (air != null)
+                    {
+                        int vx = Mathf.Min(n - 1, (int)((x + k + 0.5f) * n / CloudRes));
+                        cover += cloudHumidity * (air[vy * n + vx] - 0.5f);
+                    }
+                    float edge = 1f - cover;
+                    float t = math.smoothstep(edge - cloudEdge, edge + cloudEdge, d);
+                    cloudPixels[y * CloudRes + x + k] = new Color32(255, 255, 255, (byte)(255f * t * cloudOpacity));
+                }
+            }
+        }
+        cloudTexture.SetPixels32(cloudPixels);
+        cloudTexture.Apply();
+        cloudMs = (float)watch.Elapsed.TotalMilliseconds;
+    }
+
+    // Shadow first (a dark copy, shifted down and right), then the clouds.
+    void DrawClouds(Rect r)
+    {
+        var previous = GUI.color;
+        GUI.color = new Color(0f, 0f, 0f, 0.3f);
+        GUI.DrawTextureWithTexCoords(r, cloudTexture, new Rect(-CloudShadow, CloudShadow, 1f, 1f));
+        GUI.color = previous;
+        GUI.DrawTexture(r, cloudTexture);
+    }
+
+    string CloudCode() => string.Join(",", F(cloudCover), cloudSize.ToString(Inv), F(cloudSpeed),
+                                      F(cloudChange), F(cloudHumidity), F(cloudOpacity), F(cloudEdge));
+
+    void ReadClouds(string text)
+    {
+        string[] p = text.Split(',');
+        if (p.Length != 6 && p.Length != 7) return; // 6 = first version, without the edge
+        var v = new float[p.Length];
+        for (int i = 0; i < p.Length; i++) if (!TryF(p[i], out v[i])) return;
+        clouds = true;
+        cloudCover = Mathf.Clamp01(v[0]);
+        cloudSize = Mathf.Clamp(Mathf.RoundToInt(v[1]), 1, 8);
+        cloudSpeed = Mathf.Clamp01(v[2]);
+        cloudChange = Mathf.Clamp01(v[3]);
+        cloudHumidity = Mathf.Clamp01(v[4]);
+        cloudOpacity = Mathf.Clamp01(v[5]);
+        cloudEdge = p.Length == 7 ? Mathf.Clamp(v[6], 0.01f, 0.2f) : 0.12f; // old codes keep their look
+    }
+
     static readonly string[] Compass = { "E", "NE", "N", "NW", "W", "SW", "S", "SE" };
 
     // "from W": meteorology names a wind by where it comes from.
@@ -1025,8 +1167,11 @@ public class NoiseLab : MonoBehaviour
     static readonly Color32 Dry = Hex("B08850"), Wet = Hex("1E6E6E");
 
     // Flat colour per band: the map reads by its cuts, not by gradients.
+    float paintMs;
+
     void Paint()
     {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         if (palettes == null) LoadPalettes();
         if (palettes[paletteIndex].id != paletteId) paletteIndex = FindPalette(paletteId); // code or Inspector
         System.Array.Clear(biomeCount, 0, biomeCount.Length);
@@ -1037,6 +1182,7 @@ public class NoiseLab : MonoBehaviour
             PaintPanel(k, s, s == Show.Map && !counted);
             if (s == Show.Map) counted = true;
         }
+        paintMs = (float)watch.Elapsed.TotalMilliseconds;
     }
 
     void PaintPanel(int k, Show show, bool countBiomes)
@@ -1215,7 +1361,7 @@ public class NoiseLab : MonoBehaviour
     // v3 adds, only when in use: h=s (splines), n1..n5 (fields: type,f,o,l,g),
     // c= (the three curves, x:y points, curves separated by /), k=z (biomes),
     // cl= (climate tunables) and sh= (relief shading). v4 adds v= (panels and their layers)
-    // and ov= (overlay layers; ct= keeps the contour step).
+    // and ov= (overlay layers; ct= keeps the contour step), cu= (clouds).
     // ---------------------------------------------------------------------------------
 
     static readonly string[] TypeCodes =
@@ -1255,6 +1401,7 @@ public class NoiseLab : MonoBehaviour
         if (shade) code += $";sh={F(relief)}";
         if (HasContours()) code += $";ct={F(contourStep)}";
         if (overlays.Count > 0) code += ";ov=" + OverlayCode();
+        if (clouds) code += ";cu=" + CloudCode();
         if (viewCount > 1 || Effective(0) != Show.Map) code += ";v=" + ViewCode();
         return code;
     }
@@ -1330,6 +1477,14 @@ public class NoiseLab : MonoBehaviour
         viewCount = 1;
         DefaultPanels.CopyTo(panelShow, 0);
         selectedPanel = 0;
+        clouds = false;
+        cloudCover = 0.5f;
+        cloudSize = 3;
+        cloudSpeed = 0.3f;
+        cloudChange = 0.3f;
+        cloudHumidity = 0.5f;
+        cloudOpacity = 0.8f;
+        cloudEdge = 0.04f;
     }
 
     // Returns null on success, or a short error.
@@ -1394,6 +1549,7 @@ public class NoiseLab : MonoBehaviour
                 case "wd": ReadWind(val); break;
                 case "v": ReadView(val); break;
                 case "ov": ReadOverlays(val); sawOverlays = true; break;
+                case "cu": ReadClouds(val); break;
                 case "ct":
                     if (TryF(val, out float ct)) { sawContours = true; contourStep = Mathf.Clamp(ct, 0.01f, 0.2f); }
                     break;
@@ -1508,7 +1664,138 @@ public class NoiseLab : MonoBehaviour
     static readonly string[] WaterLabels = { "Raw threshold", "% water" };
     static readonly string[] HeightLabels = { "One noise", "Splines" };
     static readonly string[] ColouringLabels = { "Bands", "Biomes" };
-    static readonly string[] ClimateLabels = { "Temperature", "Moisture", "Wind" };
+    static readonly string[] ClimateLabels = { "Temperature", "Moisture", "Wind", "Clouds" };
+
+    // v4: tooltips, one per label above (same order). Hover a label (on the phone, hold the
+    // finger on it) to read what it is and what it changes.
+    static readonly string[] PageTips =
+    {
+        "The noise fields: type, seed, frequency and octaves of each one.",
+        "How the height is built: one noise as it is, or splines (continent, erosion, peaks).",
+        "Colours of the map (water and land bands, palette), the split view and the overlay layers.",
+        "Land coloured by biome: temperature, moisture, wind and clouds.",
+        "A text code with every setting. Copy it to open the same map in the editor or on the phone.",
+        "Timings of sampling and painting, the resolution while dragging, and the log export.",
+    };
+    static readonly string[] CutsTips =
+    {
+        "Band cuts measured on what you see: the view keeps its share of water as you move, but the coast shifts.",
+        "Band cuts measured once on a large patch of the world: moving the view does not change the island.",
+    };
+    static readonly string[] DragTips =
+    {
+        "Sample 32×32 while dragging: smoothest, very blocky.",
+        "Sample 64×64 while dragging.",
+        "Sample 128×128 while dragging: sharper, slower.",
+        "Full resolution while dragging: as sharp as at rest, slowest.",
+    };
+    static readonly string[] FamilyTips =
+    {
+        "Value noise: random numbers at the grid points, blended. Soft and blocky.",
+        "Perlin noise: random slopes at the points of a square grid.",
+        "Simplex noise: random slopes on a triangle grid. Fewer grid artefacts than Perlin.",
+        "Voronoi F1: distance to the nearest random point. Makes cells.",
+    };
+    static readonly string[] SimplexTips =
+    {
+        "Old gradients: the same picture as Perlin with a third of the range (kept to compare).",
+        "Perlin gradients on the simplex grid (the default).",
+        "Simplex's own gradients.",
+    };
+    static readonly string[] WaterTips =
+    {
+        "Water is every cell below a fixed height. The amount of water changes with the seed and the view.",
+        "Water is a fixed share of the cells (the sea level is found by percentile).",
+    };
+    static readonly string[] HeightTips =
+    {
+        "Height = the Height noise as it is.",
+        "Height = C(continent) + E(erosion) · PV(peaks): three noises, each bent by its own curve.",
+    };
+    static readonly string[] ColouringTips =
+    {
+        "Land coloured by height bands.",
+        "Land coloured by biome, from temperature and moisture (Whittaker table).",
+    };
+    static readonly string[] ClimateTips =
+    {
+        "What makes a place warm or cold.",
+        "What makes a place wet or dry.",
+        "Air that carries moisture from the sea, rains on the slopes it climbs and leaves a rain shadow behind.",
+        "Animated clouds over the map. They never change the terrain.",
+    };
+    static readonly string[] FieldTips =
+    {
+        "The noise used as height when Shape is One noise.",
+        "Continentalness: large shapes, land against sea. Input of the C curve.",
+        "Erosion: flat or rugged. Its curve scales the peaks.",
+        "Peaks and valleys: the small relief. Input of the PV curve.",
+        "Noise added to the temperature, so climate bands are not straight.",
+        "Noise added to the moisture.",
+    };
+    static readonly string[] CurveTips =
+    {
+        "Curve C: how the continent noise becomes base height.",
+        "Curve E: how the erosion noise scales the peaks (low = flat, high = rugged).",
+        "Curve PV: how the peaks noise becomes relief.",
+    };
+    static readonly string[] MapTabTips =
+    {
+        "Water level, band shares and palette.",
+        "The split view (1, 1×2, 2×2), the layer of each panel and the overlays.",
+    };
+    static readonly string[] ViewTips =
+    {
+        "One panel.",
+        "Two panels. Tap a panel to choose what it shows.",
+        "Four panels. Tap a panel to choose what it shows.",
+    };
+
+    // Content for a toolbar: the labels with their tips, built once per array.
+    static readonly System.Collections.Generic.Dictionary<string[], GUIContent[]> tipped = new();
+
+    static GUIContent[] Tipped(string[] labels, string[] tips)
+    {
+        if (tipped.TryGetValue(labels, out var contents)) return contents;
+        contents = new GUIContent[labels.Length];
+        for (int i = 0; i < labels.Length; i++) contents[i] = new GUIContent(labels[i], tips[i]);
+        return tipped[labels] = contents;
+    }
+
+    GUIStyle tipStyle;
+    const float TouchTipDelay = 1f; // seconds the finger must stay down before a tip shows
+    float touchStart = -1f;
+
+    // Drawn last, over everything. With a mouse it follows the hover; on a touch screen it
+    // shows only while the finger is down (after a tap the pointer stays where it was, and a
+    // tip left open would cover the controls).
+    void DrawTooltip(float width, float height)
+    {
+        if (Event.current.type != EventType.Repaint) return;
+        if (Application.isMobilePlatform)
+        {
+            // Hold about a second: a quick tap on a tab or a slider shows nothing. Timed on
+            // every repaint (with or without a tip), so a new touch never inherits an old start.
+            if (Input.touchCount == 0) { touchStart = -1f; return; }
+            if (touchStart < 0f || Input.GetTouch(0).phase == TouchPhase.Began) touchStart = Time.unscaledTime;
+            if (Time.unscaledTime - touchStart < TouchTipDelay) return;
+        }
+        string tip = GUI.tooltip;
+        if (string.IsNullOrEmpty(tip)) return;
+        tipStyle ??= new GUIStyle(GUI.skin.label) { wordWrap = true, padding = new RectOffset(8, 8, 6, 6) };
+        tipStyle.normal.textColor = Color.white;
+        var content = new GUIContent(tip);
+        float w = Mathf.Min(320f, width - 16f);
+        float h = tipStyle.CalcHeight(content, w);
+        Vector2 m = Event.current.mousePosition;
+        float x = Mathf.Clamp(m.x + 12f, 8f, width - w - 8f);
+        float y = m.y - h - 16f;          // above the pointer: a finger would cover it below
+        if (y < 8f) y = Mathf.Min(m.y + 28f, height - h - 8f);
+        var r = new Rect(x, y, w, h);
+        DrawRect(new Rect(r.x - 1f, r.y - 1f, r.width + 2f, r.height + 2f), new Color(1f, 1f, 1f, 0.5f));
+        DrawRect(r, new Color(0.08f, 0.09f, 0.11f, 0.96f));
+        GUI.Label(r, content, tipStyle);
+    }
 
     NoiseType lastSimplex = NoiseType.SimplexPerlinOnSimplex;
     int selectedBand = BandCount - 1;
@@ -1565,6 +1852,7 @@ public class NoiseLab : MonoBehaviour
 
         HandleDrag();
         DrawControls(controls);
+        DrawTooltip(width, height);
     }
 
     // v4: the largest square panels that fit in w × h. Two panels go side by side or one
@@ -1625,10 +1913,11 @@ public class NoiseLab : MonoBehaviour
     void DrawControls(Rect area)
     {
         GUILayout.BeginArea(area);
-        page = (Page)GUILayout.Toolbar((int)page, PageLabels, GUILayout.Height(30f));
+        page = (Page)GUILayout.Toolbar((int)page, Tipped(PageLabels, PageTips), GUILayout.Height(30f));
         GUILayout.Space(4f);
 
         GUI.changed = false;
+        cloudControlsOnly = false;
         Row(2);
         switch (page)
         {
@@ -1639,7 +1928,9 @@ public class NoiseLab : MonoBehaviour
             case Page.Code: CodePage(); break;
             case Page.Perf: PerfPage(); break;
         }
-        if (GUI.changed && page != Page.Perf) dirty = true; // Perf buttons must not resample (they would pollute the log)
+        // Perf buttons must not resample (they would pollute the log); cloud controls neither
+        // (the clouds are recomputed every frame anyway).
+        if (GUI.changed && page != Page.Perf && !cloudControlsOnly) dirty = true;
         GUI.backgroundColor = Color.white;
         GUILayout.EndArea();
     }
@@ -1666,8 +1957,8 @@ public class NoiseLab : MonoBehaviour
         int current = Mathf.Max(0, System.Array.IndexOf(active, selectedField));
         if (active.Length > 1)
         {
-            var labels = new string[active.Length];
-            for (int i = 0; i < active.Length; i++) labels[i] = FieldNames[active[i]];
+            var labels = new GUIContent[active.Length];
+            for (int i = 0; i < active.Length; i++) labels[i] = new GUIContent(FieldNames[active[i]], FieldTips[active[i]]);
             current = GUILayout.Toolbar(current, labels, GUILayout.Height(30f));
         }
         selectedField = active[current];
@@ -1681,7 +1972,7 @@ public class NoiseLab : MonoBehaviour
             NoiseType.VoronoiF1 => 3,
             _ => 2
         };
-        int newFamily = GUILayout.Toolbar(family, FamilyLabels, GUILayout.Height(30f));
+        int newFamily = GUILayout.Toolbar(family, Tipped(FamilyLabels, FamilyTips), GUILayout.Height(30f));
         if (newFamily != family)
             field.type = newFamily switch
             {
@@ -1695,28 +1986,29 @@ public class NoiseLab : MonoBehaviour
         {
             // Old stays here on purpose: same picture as Perlin, a third of the range.
             int variant = (int)field.type - (int)NoiseType.SimplexOldGradient;
-            variant = GUILayout.Toolbar(variant, SimplexLabels, GUILayout.Height(30f));
+            variant = GUILayout.Toolbar(variant, Tipped(SimplexLabels, SimplexTips), GUILayout.Height(30f));
             field.type = lastSimplex = (NoiseType)((int)NoiseType.SimplexOldGradient + variant);
         }
 
         Row(2);
         GUILayout.BeginHorizontal();
-        GUILayout.Label(selectedField == FHeight ? "Seed" : $"Seed (+{selectedField})", GUILayout.Width(110f));
+        GUILayout.Label(new GUIContent(selectedField == FHeight ? "Seed" : $"Seed (+{selectedField})",
+            "The number every noise starts from. Same seed and settings = same map. Each field adds its own number (+1, +2...)."), GUILayout.Width(110f));
         seed = IntField("seed", ref seedText, seed);
         if (GUILayout.Button("−", GUILayout.Height(30f))) seed--;
         if (GUILayout.Button("+", GUILayout.Height(30f))) seed++;
         if (GUILayout.Button("Random", GUILayout.Height(30f))) seed = UnityEngine.Random.Range(0, 100000); // UI only; the noise itself stays seeded
         GUILayout.EndHorizontal();
 
-        field.frequency = IntSlider("Frequency", field.frequency, 1, 32);
-        field.octaves = IntSlider("Octaves", field.octaves, 1, 6);
-        field.lacunarity = IntSlider("Lacunarity", field.lacunarity, 2, 4);
-        field.gain = Mathf.Round(Slider("Gain", field.gain, 0f, 1f, "0.00") * 100f) / 100f;
+        field.frequency = IntSlider("Frequency", field.frequency, 1, 32, "Features per view width. Higher = smaller, more numerous shapes.");
+        field.octaves = IntSlider("Octaves", field.octaves, 1, 6, "Layers of noise added together, each finer than the last. More = more detail.");
+        field.lacunarity = IntSlider("Lacunarity", field.lacunarity, 2, 4, "How much finer each octave is than the previous one (its frequency is multiplied by this).");
+        field.gain = Mathf.Round(Slider("Gain", field.gain, 0f, 1f, "0.00", "How strong each octave is compared with the previous one. Low = smooth, high = rough.") * 100f) / 100f;
         SetField(selectedField, field);
 
         // Offset: drag the image, or type it. The fields follow the drag unless focused.
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
-        GUILayout.Label("Offset x, y", GUILayout.Width(110f));
+        GUILayout.Label(new GUIContent("Offset x, y", "Where the view is in the world, in view widths. Dragging the map changes it."), GUILayout.Width(110f));
         offset.x = OffsetField("offset-x", ref offsetXText, offset.x);
         offset.y = OffsetField("offset-y", ref offsetYText, offset.y);
         if (GUILayout.Button("0", GUILayout.Width(40f), GUILayout.Height(30f))) offset = Vector2.zero;
@@ -1760,10 +2052,10 @@ public class NoiseLab : MonoBehaviour
     // v3: where the height comes from, the curves, and relief shading.
     void ShapePage()
     {
-        heightSource = (HeightSource)GUILayout.Toolbar((int)heightSource, HeightLabels, GUILayout.Height(30f));
+        heightSource = (HeightSource)GUILayout.Toolbar((int)heightSource, Tipped(HeightLabels, HeightTips), GUILayout.Height(30f));
 
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
-        shade = GUILayout.Toggle(shade, " Shade", GUILayout.Width(110f));
+        shade = GUILayout.Toggle(shade, new GUIContent(" Shade", "Relief shading, lit from the upper left. The slider is its strength."), GUILayout.Width(110f));
         GUI.enabled = shade;
         relief = Mathf.Round(GUILayout.HorizontalSlider(relief, 0f, 3f, GUILayout.ExpandWidth(true)) * 10f) / 10f;
         GUILayout.Label(relief.ToString("0.0", Inv), GUILayout.Width(50f));
@@ -1778,7 +2070,7 @@ public class NoiseLab : MonoBehaviour
 
         GUILayout.Label("height = C(continent) + E(erosion) · PV(peaks)");
         Row(3);
-        int curve = GUILayout.Toolbar(selectedCurve, CurveNames, GUILayout.Height(30f));
+        int curve = GUILayout.Toolbar(selectedCurve, Tipped(CurveNames, CurveTips), GUILayout.Height(30f));
         if (curve != selectedCurve) { selectedCurve = curve; selectedPoint = -1; }
 
         CurveEditor(curves[selectedCurve], viewField[FCont + selectedCurve]);
@@ -1900,7 +2192,7 @@ public class NoiseLab : MonoBehaviour
 
     void MapPage()
     {
-        mapTab = GUILayout.Toolbar(mapTab, MapTabLabels, GUILayout.Height(30f));
+        mapTab = GUILayout.Toolbar(mapTab, Tipped(MapTabLabels, MapTabTips), GUILayout.Height(30f));
         Row(3);
         if (mapTab == 0) BandsTab();
         else LayersTab();
@@ -1908,16 +2200,16 @@ public class NoiseLab : MonoBehaviour
 
     void BandsTab()
     {
-        waterMode =(WaterMode)GUILayout.Toolbar((int)waterMode, WaterLabels, GUILayout.Height(30f));
+        waterMode =(WaterMode)GUILayout.Toolbar((int)waterMode, Tipped(WaterLabels, WaterTips), GUILayout.Height(30f));
         if (waterMode == WaterMode.RawThreshold)
-            rawThreshold = Mathf.Round(Slider("Threshold", rawThreshold, -1f, 1f, "+0.00;-0.00") * 100f) / 100f;
+            rawThreshold = Mathf.Round(Slider("Threshold", rawThreshold, -1f, 1f, "+0.00;-0.00", "Sea level: cells below this height are water.") * 100f) / 100f;
         else
-            waterPercent = Mathf.Round(Slider("Water %", waterPercent, 0f, 100f, "0"));
-        cutsFrom = (CutsFrom)GUILayout.Toolbar((int)cutsFrom, CutsLabels, GUILayout.Height(30f));
+            waterPercent = Mathf.Round(Slider("Water %", waterPercent, 0f, 100f, "0", "Share of the cells that are water. The sea level is found to match it."));
+        cutsFrom = (CutsFrom)GUILayout.Toolbar((int)cutsFrom, Tipped(CutsLabels, CutsTips), GUILayout.Height(30f));
 
         if (palettes == null) LoadPalettes();
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
-        GUILayout.Label("Palette", GUILayout.Width(110f));
+        GUILayout.Label(new GUIContent("Palette", "Colours of the bands (the website's palettes)."), GUILayout.Width(110f));
         if (GUILayout.Button("<", GUILayout.Width(40f), GUILayout.Height(30f)))
             paletteIndex = (paletteIndex + palettes.Length - 1) % palettes.Length;
         GUILayout.Label(palettes[paletteIndex].name, GUILayout.ExpandWidth(true));
@@ -1943,13 +2235,13 @@ public class NoiseLab : MonoBehaviour
         int i = water ? selectedBand : selectedBand - WaterBands;
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
         GUILayout.Label($"{BandNames[selectedBand]}: share of the {(water ? "water" : "land")}");
-        if (GUILayout.Button("Default bands", GUILayout.Width(130f), GUILayout.Height(30f)))
+        if (GUILayout.Button(new GUIContent("Default bands", "Back to the default share of every band."), GUILayout.Width(130f), GUILayout.Height(30f)))
         {
             DefaultWaterShares.CopyTo(waterShares, 0);
             DefaultLandShares.CopyTo(landShares, 0);
         }
         GUILayout.EndHorizontal();
-        float share = Slider("Share %", shares[i], 0f, 100f, "0");
+        float share = Slider("Share %", shares[i], 0f, 100f, "0", "Share of the water (or of the land) that the selected band takes. The other bands adjust.");
         if (Mathf.Abs(share - shares[i]) >= 0.5f) SetShare(shares, i, share);
     }
 
@@ -1958,13 +2250,14 @@ public class NoiseLab : MonoBehaviour
         // v3: what the image shows. v4: the view (1, 1×2, 2×2) and, with the arrows, the
         // layer of the selected panel (tap a panel to select it).
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
-        int view = GUILayout.Toolbar(System.Array.IndexOf(ViewCounts, viewCount), ViewLabels,
+        int view = GUILayout.Toolbar(System.Array.IndexOf(ViewCounts, viewCount), Tipped(ViewLabels, ViewTips),
                                      GUILayout.Width(130f), GUILayout.Height(30f));
         viewCount = ViewCounts[view];
         selectedPanel = Mathf.Min(selectedPanel, viewCount - 1);
         if (GUILayout.Button("<", GUILayout.Width(40f), GUILayout.Height(30f))) panelShow[selectedPanel] = NextShow(-1);
         string layerName = ShowNames[(int)Effective(selectedPanel)];
-        GUILayout.Label(viewCount > 1 ? $"{selectedPanel + 1}: {layerName}" : layerName, GUILayout.ExpandWidth(true));
+        GUILayout.Label(new GUIContent(viewCount > 1 ? $"{selectedPanel + 1}: {layerName}" : layerName,
+            "What the selected panel shows. < > to change it."), GUILayout.ExpandWidth(true));
         if (GUILayout.Button(">", GUILayout.Width(40f), GUILayout.Height(30f))) panelShow[selectedPanel] = NextShow(+1);
         GUILayout.EndHorizontal();
 
@@ -1975,10 +2268,10 @@ public class NoiseLab : MonoBehaviour
         {
             var o = overlays[k];
             GUILayout.BeginHorizontal(GUILayout.Height(30f));
-            o.on = GUILayout.Toggle(o.on, "", GUILayout.Width(24f), GUILayout.Height(30f));
+            o.on = GUILayout.Toggle(o.on, new GUIContent("", "Show this layer."), GUILayout.Width(24f), GUILayout.Height(30f));
             if (GUILayout.Button("<", GUILayout.Width(30f), GUILayout.Height(30f))) o.layer = NextOverlay(o.layer, -1);
             string name = OverlayNames[o.layer] + (OverlayAvailable(o.layer) ? "" : " (off)");
-            GUILayout.Label(name, GUILayout.Width(105f));
+            GUILayout.Label(new GUIContent(name, "A layer blended over the map, in list order. The slider is its opacity; − removes it."), GUILayout.Width(105f));
             if (GUILayout.Button(">", GUILayout.Width(30f), GUILayout.Height(30f))) o.layer = NextOverlay(o.layer, +1);
             o.opacity = R2(GUILayout.HorizontalSlider(o.opacity, 0f, 1f, GUILayout.ExpandWidth(true)));
             GUILayout.Label(o.opacity.ToString("0.00", Inv), GUILayout.Width(40f));
@@ -1989,12 +2282,12 @@ public class NoiseLab : MonoBehaviour
 
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
         GUI.enabled = overlays.Count < MaxOverlays;
-        if (GUILayout.Button("+", GUILayout.Width(60f), GUILayout.Height(30f)))
+        if (GUILayout.Button(new GUIContent("+", "Add a layer over the map (up to four)."), GUILayout.Width(60f), GUILayout.Height(30f)))
             overlays.Add(new Overlay { layer = FirstUnusedOverlay() });
         GUI.enabled = true;
         if (HasContours())
         {
-            GUILayout.Label("Contour step", GUILayout.Width(100f));
+            GUILayout.Label(new GUIContent("Contour step", "Height between two contour lines."), GUILayout.Width(100f));
             contourStep = Mathf.Round(GUILayout.HorizontalSlider(contourStep, 0.01f, 0.2f, GUILayout.ExpandWidth(true)) * 100f) / 100f;
             GUILayout.Label(contourStep.ToString("0.00", Inv), GUILayout.Width(40f));
         }
@@ -2028,43 +2321,50 @@ public class NoiseLab : MonoBehaviour
     // v3: land colour, and the climate tunables (Stage_Biome2D's, see the fields above).
     void ClimatePage()
     {
-        colouring = (Colouring)GUILayout.Toolbar((int)colouring, ColouringLabels, GUILayout.Height(30f));
+        colouring = (Colouring)GUILayout.Toolbar((int)colouring, Tipped(ColouringLabels, ColouringTips), GUILayout.Height(30f));
         if (colouring == Colouring.Bands)
         {
             GUILayout.Label("Biomes: temperature and moisture over the land, Whittaker table (BiomeTable).");
+            Row(3);
+            CloudControls(); // v4: the clouds work with bands too (without the humidity)
             return;
         }
 
         Row(3);
-        climateTab = GUILayout.Toolbar(climateTab, ClimateLabels, GUILayout.Height(30f));
+        climateTab = GUILayout.Toolbar(climateTab, Tipped(ClimateLabels, ClimateTips), GUILayout.Height(30f));
         Row(2);
         if (climateTab == 0)
         {
-            baseTemperature = R2(Slider("Base", baseTemperature, 0f, 1f, "0.00"));
-            lapseRate = R2(Slider("Altitude", lapseRate, 0f, 1f, "0.00"));
-            latitudeEffect = R2(Slider("Latitude", latitudeEffect, 0f, 1f, "0.00"));
-            coastModeration = R2(Slider("Coast", coastModeration, 0f, 0.5f, "0.00"));
-            tempNoiseAmplitude = R2(Slider("Noise", tempNoiseAmplitude, 0f, 0.3f, "0.00"));
+            baseTemperature = R2(Slider("Base", baseTemperature, 0f, 1f, "0.00", "Temperature at sea level on the equator (the row y = 0 of the world)."));
+            lapseRate = R2(Slider("Altitude", lapseRate, 0f, 1f, "0.00", "How much colder the land gets with height. It uses the height rank, so it cools the whole land."));
+            latitudeEffect = R2(Slider("Latitude", latitudeEffect, 0f, 1f, "0.00", "How much colder it gets away from the equator (north or south of y = 0)."));
+            coastModeration = R2(Slider("Coast", coastModeration, 0f, 0.5f, "0.00", "Warmth from the sea: the coast is milder, fading with distance inland."));
+            tempNoiseAmplitude = R2(Slider("Noise", tempNoiseAmplitude, 0f, 0.3f, "0.00", "Random variation of the temperature (the Temp noise), so the bands are not straight."));
         }
         else if (climateTab == 1)
         {
-            coastalMoistureBonus = R2(Slider("Coast", coastalMoistureBonus, 0f, 1f, "0.00"));
-            coastDecayRate = R2(Slider("Decay", coastDecayRate, 0f, 1f, "0.00"));
-            moistureNoiseAmplitude = R2(Slider("Noise", moistureNoiseAmplitude, 0f, 1f, "0.00"));
+            coastalMoistureBonus = R2(Slider("Coast", coastalMoistureBonus, 0f, 1f, "0.00", "Extra moisture near the sea."));
+            coastDecayRate = R2(Slider("Decay", coastDecayRate, 0f, 1f, "0.00", "How fast the coastal moisture fades inland. Low = it reaches far."));
+            moistureNoiseAmplitude = R2(Slider("Noise", moistureNoiseAmplitude, 0f, 1f, "0.00", "Moisture from the Moist noise, everywhere: random wet and dry patches."));
+        }
+        else if (climateTab == 3)
+        {
+            CloudControls();
+            return;
         }
         else
         {
             // One row for on/off and the direction; the arrow on the map shows it too.
             GUILayout.BeginHorizontal(GUILayout.Height(30f));
-            wind = GUILayout.Toggle(wind, " Wind", GUILayout.Width(110f));
+            wind = GUILayout.Toggle(wind, new GUIContent(" Wind", "Wind on or off. The slider is where it blows from; the arrow on the map shows where it goes."), GUILayout.Width(110f));
             GUI.enabled = wind;
             windAngle = Mathf.Round(GUILayout.HorizontalSlider(windAngle, 0f, 360f, GUILayout.ExpandWidth(true)) / 15f) * 15f % 360f;
             GUILayout.Label(WindName(), GUILayout.Width(70f));
             GUILayout.EndHorizontal();
-            windStrength = R2(Slider("Weight", windStrength, 0f, 1f, "0.00"));
-            windLift = R2(Slider("Lift", windLift, 0f, 1f, "0.00"));
-            windDry = Mathf.Round(Slider("Dry", windDry, 0f, 0.05f, "0.000") * 1000f) / 1000f;
-            windEvaporation = Mathf.Round(Slider("Sea", windEvaporation, 0f, 0.2f, "0.000") * 1000f) / 1000f;
+            windStrength = R2(Slider("Weight", windStrength, 0f, 1f, "0.00", "How much the moisture carried by the wind adds to the land's moisture."));
+            windLift = R2(Slider("Lift", windLift, 0f, 1f, "0.00", "Rain when the air climbs a slope. High = wet windward slopes and a dry rain shadow behind."));
+            windDry = Mathf.Round(Slider("Dry", windDry, 0f, 0.05f, "0.000", "Moisture the air loses per cell over flat land.") * 1000f) / 1000f;
+            windEvaporation = Mathf.Round(Slider("Sea", windEvaporation, 0f, 0.2f, "0.000", "Moisture the air picks up per cell over the sea.") * 1000f) / 1000f;
             GUI.enabled = true;
             return; // no room for the legend under five sliders on a phone
         }
@@ -2085,6 +2385,31 @@ public class NoiseLab : MonoBehaviour
     }
 
     static float R2(float v) => Mathf.Round(v * 100f) / 100f;
+
+    bool cloudControlsOnly;
+
+    // v4: cloud controls. Changing them does not touch the terrain. The tab switch above
+    // them still counts as a change (one repaint), which is harmless.
+    void CloudControls()
+    {
+        bool before = GUI.changed;
+        GUI.changed = false;
+        GUILayout.BeginHorizontal(GUILayout.Height(30f));
+        clouds = GUILayout.Toggle(clouds, new GUIContent(" Clouds", "Clouds on or off. The slider is their opacity."), GUILayout.Width(110f));
+        GUI.enabled = clouds;
+        cloudOpacity = R2(GUILayout.HorizontalSlider(cloudOpacity, 0f, 1f, GUILayout.ExpandWidth(true)));
+        GUILayout.Label(new GUIContent(cloudOpacity.ToString("0.00", Inv), "Cloud opacity."), GUILayout.Width(50f));
+        GUILayout.EndHorizontal();
+        cloudCover = R2(Slider("Cover", cloudCover, 0f, 1f, "0.00", "How much of the sky is under cloud."));
+        cloudSize = IntSlider("Size", cloudSize, 1, 8, "Cloud scale: 1 = large fronts, 8 = small scattered clouds.");
+        cloudEdge = R2(Slider("Edge", cloudEdge, 0.01f, 0.2f, "0.00", "Width of the cloud edges: low = crisp, high = soft and hazy."));
+        cloudSpeed = R2(Slider("Speed", cloudSpeed, 0f, 1f, "0.00", "How fast the clouds drift, in the direction of the wind (even with the wind off)."));
+        cloudChange = R2(Slider("Change", cloudChange, 0f, 1f, "0.00", "How fast the clouds change shape."));
+        cloudHumidity = R2(Slider("Humidity", cloudHumidity, 0f, 1f, "0.00", "How much the air's moisture decides where clouds form: more over wet air and windward slopes, fewer in the rain shadow. No effect with Bands."));
+        GUI.enabled = true;
+        if (GUI.changed && !before) cloudControlsOnly = true;
+        GUI.changed |= before;
+    }
 
     string TopBiomes()
     {
@@ -2168,9 +2493,9 @@ public class NoiseLab : MonoBehaviour
             $"world reference {calibrateMs:0} ms ({WorldSamples}×{WorldSamples}, only when a height setting changes)");
 
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
-        GUILayout.Label("Drag res", GUILayout.Width(110f));
+        GUILayout.Label(new GUIContent("Drag res", "Resolution used while dragging. Full resolution comes back when you let go."), GUILayout.Width(110f));
         int current = System.Array.IndexOf(DragResolutions, dragResolution);
-        int chosen = GUILayout.Toolbar(current < 0 ? 1 : current, DragLabels, GUILayout.Height(30f));
+        int chosen = GUILayout.Toolbar(current < 0 ? 1 : current, Tipped(DragLabels, DragTips), GUILayout.Height(30f));
         dragResolution = DragResolutions[chosen];
         GUILayout.EndHorizontal();
 
@@ -2187,15 +2512,16 @@ public class NoiseLab : MonoBehaviour
         GUILayout.Label(perfStatus);
     }
 
-    static int IntSlider(string label, int value, int min, int max) =>
-        Mathf.RoundToInt(Slider(label, value, min, max, "0"));
+    static int IntSlider(string label, int value, int min, int max, string tip) =>
+        Mathf.RoundToInt(Slider(label, value, min, max, "0", tip));
 
-    static float Slider(string label, float value, float min, float max, string format)
+    // The tip shows over the name and over the number (the slider bar itself has none).
+    static float Slider(string label, float value, float min, float max, string format, string tip)
     {
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
-        GUILayout.Label(label, GUILayout.Width(110f));
+        GUILayout.Label(new GUIContent(label, tip), GUILayout.Width(110f));
         value = GUILayout.HorizontalSlider(value, min, max, GUILayout.ExpandWidth(true));
-        GUILayout.Label(value.ToString(format), GUILayout.Width(50f));
+        GUILayout.Label(new GUIContent(value.ToString(format), tip), GUILayout.Width(50f));
         GUILayout.EndHorizontal();
         return value;
     }
@@ -2213,6 +2539,7 @@ public class NoiseLab : MonoBehaviour
             if (viewCount > 1 && k == selectedPanel)
                 DrawRect(new Rect(r.x - 2f, r.y - 2f, r.width + 4f, r.height + 4f), Color.white);
             if (textures[k] != null) GUI.DrawTexture(r, textures[k]);
+            if (clouds && cloudTexture != null && Effective(k) == Show.Map) DrawClouds(r);
             if (viewCount > 1)
             {
                 string name = $"{k + 1} {ShowNames[(int)Effective(k)]}";
