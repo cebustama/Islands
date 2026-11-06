@@ -1,4 +1,7 @@
 using System.Globalization;
+using Unity.Burst;
+using Unity.Collections;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 
@@ -302,6 +305,8 @@ public class NoiseLab : MonoBehaviour
         sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes : "off")}");
         sb.AppendLine($"climate margin: {(climateMargin ? "on" : "off")} | cells L/R/B/T {mL}/{mR}/{mB}/{mT} at {sampleN} | climate grid {extW}x{extH} | last climate {F(R1(climateMs))} ms");
         if (edgeStatus.Length > 0) sb.AppendLine($"edge test: {edgeStatus.Replace("\n", " | ")}");
+        sb.AppendLine($"burst: {(useBurst ? "on" : "off")} | last sampling {GridNoiseJob<Simplex2D<Simplex>>.StateName(burstState)} | jobs workers {Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount}");
+        if (burstStatus.Length > 0) sb.AppendLine($"burst check: {burstStatus}");
         sb.AppendLine($"code: {BuildCode()}");
         sb.AppendLine();
         sb.AppendLine($"## summary ({logCount} frames, {F(R1(logCount > 0 ? logTime[(logHead - 1 + LogFrames) % LogFrames] : 0f))} s)");
@@ -645,6 +650,59 @@ public class NoiseLab : MonoBehaviour
 
     [SerializeField] bool climateMargin = true;
 
+    // v5 (B1): sampling with Burst (GridNoiseJob, below the class). burstState: what the
+    // last sampling did (GridNoiseJob.Off / Compiled / Managed).
+    [SerializeField] bool useBurst = true;
+    int burstState = -1;
+    string burstStatus = "";
+
+    // Forget the cached samples, so the next sampling runs again (after Burst on/off).
+    void ForgetSamples()
+    {
+        for (int k = 0; k < FieldCount; k++) viewFieldKey[k] = extFieldKey[k] = worldFieldKey[k] = null;
+        worldKey = null;
+        dirty = true;
+    }
+
+    // Samples every active field of the view at full resolution twice, managed and with
+    // Burst, into scratch arrays (the caches are not touched), and compares them.
+    void BurstCheck()
+    {
+        int n = resolution;
+        float step = 1f / n;
+        var a = new float[n * n];
+        var b = new float[n * n];
+        double managedMs = 0, burstMs = 0;
+        int differ = 0, total = 0;
+        float worst = 0f;
+        int state = -1;
+        foreach (int k in ActiveFields())
+        {
+            bool keep = useBurst;
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            useBurst = false;
+            SampleInto(a, GetField(k), FieldSeed(k), n, offset.x + 0.5f * step, offset.y + 0.5f * step, step);
+            managedMs += watch.Elapsed.TotalMilliseconds;
+            watch.Restart();
+            useBurst = true;
+            SampleInto(b, GetField(k), FieldSeed(k), n, offset.x + 0.5f * step, offset.y + 0.5f * step, step);
+            burstMs += watch.Elapsed.TotalMilliseconds;
+            state = burstState;
+            useBurst = keep;
+            for (int i = 0; i < a.Length; i++)
+            {
+                float d = Mathf.Abs(a[i] - b[i]);
+                if (d > 0f) differ++;
+                worst = Mathf.Max(worst, d);
+            }
+            total += a.Length;
+        }
+        burstStatus = $"Burst check at {n}², {ActiveFieldCount()} field(s): managed {managedMs:0} ms, Burst {burstMs:0} ms " +
+                      $"({(burstMs > 0 ? managedMs / burstMs : 0):0.0}×, {GridNoiseJob<Simplex2D<Simplex>>.StateName(state)}); " +
+                      $"values that differ {differ} of {total}, max |Δ| {worst:G3}";
+        Debug.Log($"[NoiseLab] {burstStatus}");
+    }
+
     const float MarginLoss = 3f;          // e^−3 ≈ 5 % left of the edge's error
     const float WindMarginCap = 384f;     // 1.5 view widths
     const float CoastMarginMin = 19f;     // 1 / (1 + 19) = 5 % of the coast moderation
@@ -758,30 +816,12 @@ public class NoiseLab : MonoBehaviour
 
         switch (field.type)
         {
-            case NoiseType.Value: Fill<Lattice2D<LatticeNormal, Value>>(settings, target, w, h, originX, originZ, step); break;
-            case NoiseType.PerlinSquare: Fill<Lattice2D<LatticeNormal, Perlin>>(settings, target, w, h, originX, originZ, step); break;
-            case NoiseType.SimplexOldGradient: Fill<Simplex2D<Perlin>>(settings, target, w, h, originX, originZ, step); break;
-            case NoiseType.SimplexPerlinOnSimplex: Fill<Simplex2D<PerlinOnSimplex>>(settings, target, w, h, originX, originZ, step); break;
-            case NoiseType.SimplexSimplex: Fill<Simplex2D<Simplex>>(settings, target, w, h, originX, originZ, step); break;
-            case NoiseType.VoronoiF1: Fill<Voronoi2D<LatticeNormal, Worley, F1>>(settings, target, w, h, originX, originZ, step); break;
-        }
-    }
-
-    // Same sampling as MapNoiseBridge2D (cell centres, four at a time), but the value is
-    // stored raw (no remap, no clamp). Point (x, y) is at origin + (x, y) · step.
-    static void Fill<N>(Settings settings, float[] target, int w, int h, float originX, float originZ, float step)
-        where N : struct, INoise
-    {
-        for (int y = 0; y < h; y++)
-        {
-            float pz = originZ + y * step;
-            for (int x = 0; x < w; x += 4)
-            {
-                float4 px = new float4(x, x + 1, x + 2, x + 3) * step + originX;
-                float4 v = GetFractalNoise<N>(new float4x3(px, 0f, pz), settings).v;
-                for (int k = 0; k < 4 && x + k < w; k++)
-                    target[y * w + x + k] = v[k];
-            }
+            case NoiseType.Value: burstState = GridNoiseJob<Lattice2D<LatticeNormal, Value>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.PerlinSquare: burstState = GridNoiseJob<Lattice2D<LatticeNormal, Perlin>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.SimplexOldGradient: burstState = GridNoiseJob<Simplex2D<Perlin>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.SimplexPerlinOnSimplex: burstState = GridNoiseJob<Simplex2D<PerlinOnSimplex>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.SimplexSimplex: burstState = GridNoiseJob<Simplex2D<Simplex>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.VoronoiF1: burstState = GridNoiseJob<Voronoi2D<LatticeNormal, Worley, F1>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
         }
     }
 
@@ -2041,14 +2081,32 @@ public class NoiseLab : MonoBehaviour
         }
     }
 
+    readonly Vector2[] pageScroll = new Vector2[6]; // one per Page
+    bool pageDrag;
+
     void DrawControls(Rect area)
     {
         GUILayout.BeginArea(area);
         page = (Page)GUILayout.Toolbar((int)page, Tipped(PageLabels, PageTips), GUILayout.Height(30f));
         GUILayout.Space(4f);
 
+        // v5: the page scrolls under the fixed tabs. A finger dragged over text or empty space
+        // scrolls it (IMGUI's scroll view only follows its bar on a touch screen); a drag that
+        // starts on a slider or a button belongs to that control (it holds hotControl).
+        Rect body = new Rect(0f, 38f, area.width, area.height - 38f);
+        Event e = Event.current;
+        if (e.type == EventType.MouseDown && body.Contains(e.mousePosition)) pageDrag = GUIUtility.hotControl == 0;
+        if (e.type == EventType.MouseUp) pageDrag = false;
+        // The curve editor drags its points by hand (no hotControl): its drags are not scrolls.
+        if (e.type == EventType.MouseDrag && pageDrag && GUIUtility.hotControl == 0 && !curveDragging)
+        {
+            pageScroll[(int)page].y -= e.delta.y;
+            e.Use();
+        }
+
         GUI.changed = false;
         cloudControlsOnly = false;
+        pageScroll[(int)page] = GUILayout.BeginScrollView(pageScroll[(int)page], GUIStyle.none, GUI.skin.verticalScrollbar);
         Row(2);
         switch (page)
         {
@@ -2059,6 +2117,7 @@ public class NoiseLab : MonoBehaviour
             case Page.Code: CodePage(); break;
             case Page.Perf: PerfPage(); break;
         }
+        GUILayout.EndScrollView();
         // Perf buttons must not resample (they would pollute the log); cloud controls neither
         // (the clouds are recomputed every frame anyway).
         if (GUI.changed && page != Page.Perf && !cloudControlsOnly) dirty = true;
@@ -2654,6 +2713,19 @@ public class NoiseLab : MonoBehaviour
             GUILayout.Width(110f), GUILayout.Height(30f))) EdgeTest();
         GUILayout.EndHorizontal();
         if (edgeStatus.Length > 0) GUILayout.Label(edgeStatus);
+
+        // v5 (B1): Burst on/off and the check.
+        GUILayout.BeginHorizontal(GUILayout.Height(30f));
+        bool burst = GUILayout.Toggle(useBurst, new GUIContent(" Burst",
+            "Sample the noises with a Burst job on every core. Off = plain C# on one thread, as in v4."),
+            GUILayout.Width(110f));
+        if (burst != useBurst) { useBurst = burst; ForgetSamples(); }
+        GUILayout.Label($"last sampling: {GridNoiseJob<Simplex2D<Simplex>>.StateName(burstState)}");
+        if (GUILayout.Button(new GUIContent("Burst check",
+            "Samples the view's fields with and without Burst, times both and counts the values that differ."),
+            GUILayout.Width(110f), GUILayout.Height(30f))) BurstCheck();
+        GUILayout.EndHorizontal();
+        if (burstStatus.Length > 0) GUILayout.Label(burstStatus);
     }
 
     // ---------------------------------------------------------------------------------
@@ -2829,5 +2901,98 @@ public class NoiseLab : MonoBehaviour
         GUI.color = color;
         GUI.DrawTexture(r, Texture2D.whiteTexture);
         GUI.color = previous;
+    }
+}
+
+// ---------------------------------------------------------------------------------
+// v5 (B1): the grid sampling as a Burst job. One row per index; the rows are spread over
+// the worker threads (ScheduleParallel) and Burst compiles Execute to native code with
+// SIMD. The arithmetic is the managed loop's, line by line. FloatMode.Strict: Burst may
+// not reorder or fuse the float operations, so the values stay as close as possible to
+// the managed path (Perf → Burst check counts the ones that differ).
+// Burst only compiles generic jobs whose type it can see: each GridNoiseJob<N> is named
+// with a concrete N in NoiseLab.SampleInto. If one ran without Burst anyway, the job says
+// so: MarkManaged is [BurstDiscard], so it only runs in the managed version.
+// ---------------------------------------------------------------------------------
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+public struct GridNoiseJob<N> : IJobFor where N : struct, INoise
+{
+    public const int Off = 0, Compiled = 1, Managed = 2;
+
+    public Settings settings;
+    public int w;
+    public float originX, originZ, step;
+
+    // Each index writes a whole row, not only element y.
+    [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> target;
+    [NativeDisableParallelForRestriction] public NativeArray<int> state;
+
+    public void Execute(int y)
+    {
+        if (y == 0)
+        {
+            bool managed = false;
+            MarkManaged(ref managed);
+            state[0] = managed ? Managed : Compiled;
+        }
+        float pz = originZ + y * step;
+        for (int x = 0; x < w; x += 4)
+        {
+            float4 px = new float4(x, x + 1, x + 2, x + 3) * step + originX;
+            float4 v = GetFractalNoise<N>(new float4x3(px, 0f, pz), settings).v;
+            for (int k = 0; k < 4 && x + k < w; k++)
+                target[y * w + x + k] = v[k];
+        }
+    }
+
+    [BurstDiscard]
+    static void MarkManaged(ref bool managed) => managed = true;
+
+    public static string StateName(int s) =>
+        s == Compiled ? "Burst" : s == Managed ? "Burst NOT compiled (managed job)" : s == Off ? "plain C#" : "-";
+
+    // Fills target[0 .. w·h) and returns Off, Compiled or Managed.
+    public static int Fill(bool burst, Settings settings, float[] target, int w, int h,
+                           float originX, float originZ, float step)
+    {
+        if (!burst)
+        {
+            FillManaged(settings, target, w, h, originX, originZ, step);
+            return Off;
+        }
+        var buffer = new NativeArray<float>(w * h, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var flag = new NativeArray<int>(1, Allocator.TempJob);
+        try
+        {
+            new GridNoiseJob<N>
+            {
+                settings = settings, w = w, originX = originX, originZ = originZ, step = step,
+                target = buffer, state = flag
+            }.ScheduleParallel(h, 4, default).Complete();
+            NativeArray<float>.Copy(buffer, 0, target, 0, w * h);
+            return h > 0 ? flag[0] : Compiled;
+        }
+        finally
+        {
+            buffer.Dispose();
+            flag.Dispose();
+        }
+    }
+
+    // Same sampling as MapNoiseBridge2D (cell centres, four at a time), but the value is
+    // stored raw (no remap, no clamp). Point (x, y) is at origin + (x, y) · step.
+    static void FillManaged(Settings settings, float[] target, int w, int h, float originX, float originZ, float step)
+    {
+        for (int y = 0; y < h; y++)
+        {
+            float pz = originZ + y * step;
+            for (int x = 0; x < w; x += 4)
+            {
+                float4 px = new float4(x, x + 1, x + 2, x + 3) * step + originX;
+                float4 v = GetFractalNoise<N>(new float4x3(px, 0f, pz), settings).v;
+                for (int k = 0; k < 4 && x + k < w; k++)
+                    target[y * w + x + k] = v[k];
+            }
+        }
     }
 }
