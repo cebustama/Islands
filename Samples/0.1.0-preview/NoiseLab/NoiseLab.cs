@@ -302,7 +302,7 @@ public class NoiseLab : MonoBehaviour
         sb.AppendLine($"screen: {Screen.width}x{Screen.height} | target fps {Application.targetFrameRate}");
         sb.AppendLine($"resolution: {resolution} | drag resolution: {dragResolution} | world reference: {WorldSamples}x{WorldSamples}, last {F(R1(calibrateMs))} ms");
         sb.AppendLine($"fields sampled per view: {ActiveFieldCount()} (height: {heightSource}, colour: {colouring})");
-        sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes : "off")}");
+        sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes + ", " + GridNoiseJob<Simplex2D<Simplex>>.StateName(cloudBurstState) : "off")}");
         sb.AppendLine($"climate margin: {(climateMargin ? "on" : "off")} | cells L/R/B/T {mL}/{mR}/{mB}/{mT} at {sampleN} | climate grid {extW}x{extH} | last climate {F(R1(climateMs))} ms");
         if (edgeStatus.Length > 0) sb.AppendLine($"edge test: {edgeStatus.Replace("\n", " | ")}");
         sb.AppendLine($"burst: {(useBurst ? "on" : "off")} | last sampling {GridNoiseJob<Simplex2D<Simplex>>.StateName(burstState)} | jobs workers {Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount}");
@@ -543,6 +543,8 @@ public class NoiseLab : MonoBehaviour
     {
         foreach (var t in textures) if (t != null) Destroy(t);
         if (cloudTexture != null) Destroy(cloudTexture);
+        if (cloudNoise.IsCreated) cloudNoise.Dispose();
+        if (cloudState.IsCreated) cloudState.Dispose();
     }
 
     // ---------------------------------------------------------------------------------
@@ -1041,6 +1043,9 @@ public class NoiseLab : MonoBehaviour
 
     Texture2D cloudTexture;
     Color32[] cloudPixels;
+    NativeArray<float> cloudNoise;   // v5: CloudRes² raw noise values, filled by CloudNoiseJob
+    NativeArray<int> cloudState;
+    int cloudBurstState = -1;
     float2 cloudDrift;
     float cloudPhase, cloudMs;
 
@@ -1075,18 +1080,38 @@ public class NoiseLab : MonoBehaviour
         int n = sampleN;
         if (air != null && air.Length != n * n) air = null;
 
-        float step = 1f / CloudRes;
+        // v5 (step 5): the noise, the expensive part, in CloudNoiseJob (Burst, every core);
+        // with Burst off the same Execute runs in a plain loop. Cover and colour stay here.
+        if (!cloudNoise.IsCreated)
+        {
+            cloudNoise = new NativeArray<float>(CloudRes * CloudRes, Allocator.Persistent);
+            cloudState = new NativeArray<int>(1, Allocator.Persistent);
+        }
+        var job = new CloudNoiseJob
+        {
+            settings = settings, res = CloudRes, step = 1f / CloudRes,
+            offsetX = offset.x, offsetY = offset.y, driftX = cloudDrift.x, driftY = cloudDrift.y,
+            phase = cloudPhase, target = cloudNoise, state = cloudState
+        };
+        if (useBurst)
+        {
+            job.ScheduleParallel(CloudRes, 4, default).Complete();
+            cloudBurstState = cloudState[0];
+        }
+        else
+        {
+            for (int y = 0; y < CloudRes; y++) job.Execute(y);
+            cloudBurstState = GridNoiseJob<Simplex2D<Simplex>>.Off;
+        }
+
         for (int y = 0; y < CloudRes; y++)
         {
-            float pz = offset.y + (y + 0.5f) * step - cloudDrift.y;
             int vy = Mathf.Min(n - 1, (int)((y + 0.5f) * n / CloudRes));
             for (int x = 0; x < CloudRes; x += 4)
             {
-                float4 px = (new float4(x, x + 1, x + 2, x + 3) + 0.5f) * step + offset.x - cloudDrift.x;
-                float4 v = GetFractalNoise<Simplex3D<Simplex>>(new float4x3(px, cloudPhase, pz), settings).v;
                 for (int k = 0; k < 4; k++)
                 {
-                    float d = v[k] * 0.5f + 0.5f;
+                    float d = cloudNoise[y * CloudRes + x + k] * 0.5f + 0.5f;
                     float cover = cloudCover;
                     if (air != null)
                     {
@@ -2717,7 +2742,7 @@ public class NoiseLab : MonoBehaviour
         // v5 (B1): Burst on/off and the check.
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
         bool burst = GUILayout.Toggle(useBurst, new GUIContent(" Burst",
-            "Sample the noises with a Burst job on every core. Off = plain C# on one thread, as in v4."),
+            "Sample the noises (terrain and clouds) with Burst jobs on every core. Off = plain C# on one thread, as in v4."),
             GUILayout.Width(110f));
         if (burst != useBurst) { useBurst = burst; ForgetSamples(); }
         GUILayout.Label($"last sampling: {GridNoiseJob<Simplex2D<Simplex>>.StateName(burstState)}");
@@ -2995,4 +3020,41 @@ public struct GridNoiseJob<N> : IJobFor where N : struct, INoise
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------------
+// v5 (step 5): the cloud noise as a Burst job. Fractal Simplex3D with the time phase as
+// the second coordinate, one row of the CloudRes² texture per index. Same arithmetic as
+// the v4 loop; NoiseLab calls this Execute directly when Burst is off.
+// ---------------------------------------------------------------------------------
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+public struct CloudNoiseJob : IJobFor
+{
+    public Settings settings;
+    public int res;
+    public float step, offsetX, offsetY, driftX, driftY, phase;
+
+    [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> target;
+    [NativeDisableParallelForRestriction] public NativeArray<int> state;
+
+    public void Execute(int y)
+    {
+        if (y == 0)
+        {
+            bool managed = false;
+            MarkManaged(ref managed);
+            state[0] = managed ? GridNoiseJob<Simplex2D<Simplex>>.Managed : GridNoiseJob<Simplex2D<Simplex>>.Compiled;
+        }
+        float pz = offsetY + (y + 0.5f) * step - driftY;
+        for (int x = 0; x < res; x += 4)
+        {
+            float4 px = (new float4(x, x + 1, x + 2, x + 3) + 0.5f) * step + offsetX - driftX;
+            float4 v = GetFractalNoise<Simplex3D<Simplex>>(new float4x3(px, phase, pz), settings).v;
+            for (int k = 0; k < 4 && x + k < res; k++)
+                target[y * res + x + k] = v[k];
+        }
+    }
+
+    [BurstDiscard]
+    static void MarkManaged(ref bool managed) => managed = true;
 }
