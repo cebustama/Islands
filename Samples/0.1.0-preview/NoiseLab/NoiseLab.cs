@@ -303,7 +303,7 @@ public class NoiseLab : MonoBehaviour
         sb.AppendLine($"resolution: {resolution} | drag resolution: {dragResolution} | world reference: {WorldSamples}x{WorldSamples}, last {F(R1(calibrateMs))} ms");
         sb.AppendLine($"fields sampled per view: {ActiveFieldCount()} (height: {heightSource}, colour: {colouring})");
         sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes + ", " + GridNoiseJob<Simplex2D<Simplex>>.StateName(cloudBurstState) : "off")}");
-        sb.AppendLine($"climate margin: {(climateMargin ? "on" : "off")} | cells L/R/B/T {mL}/{mR}/{mB}/{mT} at {sampleN} | climate grid {extW}x{extH} | last climate {F(R1(climateMs))} ms");
+        sb.AppendLine($"climate margin: {(climateMargin ? "on" : "off")} | cells L/R/B/T {mL}/{mR}/{mB}/{mT} at {sampleN} | climate grid {extW}x{extH} | last climate {F(R1(climateMs))} ms, {GridNoiseJob<Simplex2D<Simplex>>.StateName(climateBurstState)}");
         if (edgeStatus.Length > 0) sb.AppendLine($"edge test: {edgeStatus.Replace("\n", " | ")}");
         sb.AppendLine($"burst: {(useBurst ? "on" : "off")} | last sampling {GridNoiseJob<Simplex2D<Simplex>>.StateName(burstState)} | jobs workers {Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount}");
         if (burstStatus.Length > 0) sb.AppendLine($"burst check: {burstStatus}");
@@ -701,7 +701,8 @@ public class NoiseLab : MonoBehaviour
         }
         burstStatus = $"Burst check at {n}², {ActiveFieldCount()} field(s): managed {managedMs:0} ms, Burst {burstMs:0} ms " +
                       $"({(burstMs > 0 ? managedMs / burstMs : 0):0.0}×, {GridNoiseJob<Simplex2D<Simplex>>.StateName(state)}); " +
-                      $"values that differ {differ} of {total}, max |Δ| {worst:G3}";
+                      $"values that differ {differ} of {total}, max |Δ| {worst:G3}\n" + ClimateCheck();
+        dirty = true; // repaint with the path in use
         Debug.Log($"[NoiseLab] {burstStatus}");
     }
 
@@ -878,6 +879,15 @@ public class NoiseLab : MonoBehaviour
     {
         if (colouring != Colouring.Biomes) return;
         var watch = System.Diagnostics.Stopwatch.StartNew();
+        if (useBurst) ClimateBurst(); else ClimateManaged();
+        climateMs = (float)watch.Elapsed.TotalMilliseconds;
+    }
+
+    // The climate in plain C#, one thread (v3–v5 step 1). Kept as the Burst-off path and
+    // as the reference for the Burst check.
+    void ClimateManaged()
+    {
+        climateBurstState = GridNoiseJob<Simplex2D<Simplex>>.Off;
         int n = sampleN, count = n * n;
         int w = extW, h = extH, extCount = w * h;
         coast = Ensure(coast, count);
@@ -941,10 +951,151 @@ public class NoiseLab : MonoBehaviour
                     + (wind ? windStrength * windAir[i] : 0f);
             moist[i] = math.saturate(m);
         }
-        climateMs = (float)watch.Elapsed.TotalMilliseconds;
     }
 
     float climateMs;
+    int climateBurstState = -1;
+
+    // ---------------------------------------------------------------------------------
+    // v5 (B2): the same climate as four Burst jobs, chained by their dependencies:
+    //   rank (parallel by row) ─┐
+    //   coast columns → coast rows (parallel) ─┴→ wind (one thread) → view climate (parallel)
+    // The wind sweep runs on one thread: each line needs the line before it, and a barrier
+    // per line would cost more than it saves; Burst alone makes it fast. The managed
+    // arrays are copied in and out of NativeArrays (a few hundred KB, well under 1 ms).
+    // The wind uses math.exp and math.lerp in float, where the managed code goes through
+    // Mathf (Exp in double): the last digits may differ (Perf → Burst check measures it).
+    // ---------------------------------------------------------------------------------
+    void ClimateBurst()
+    {
+        int n = sampleN, count = n * n;
+        int w = extW, h = extH, extCount = w * h;
+        coast = Ensure(coast, count);
+        temp = Ensure(temp, count);
+        moist = Ensure(moist, count);
+        extCoast = Ensure(extCoast, extCount);
+        extRank = Ensure(extRank, extCount);
+
+        float[] source = CutSource;
+        int below = LowerBound(source, threshold);
+
+        var heights = new NativeArray<float>(extValues, Allocator.TempJob);
+        var sorted = new NativeArray<float>(source, Allocator.TempJob);
+        var rank = new NativeArray<float>(extCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var dist = new NativeArray<float>(extCount, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var air = new NativeArray<float>(wind ? extCount : 1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var tn = new NativeArray<float>(viewField[FTemp], Allocator.TempJob);
+        var mn = new NativeArray<float>(viewField[FMoist], Allocator.TempJob);
+        var coastV = new NativeArray<float>(count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var tempV = new NativeArray<float>(count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var moistV = new NativeArray<float>(count, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var airV = new NativeArray<float>(wind ? count : 1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        // 1 if a job ran without Burst. The rank job runs at the same time as the coast jobs,
+        // so it gets its own (two parallel jobs may not write the same array).
+        var probe = new NativeArray<int>(1, Allocator.TempJob);
+        var rankProbe = new NativeArray<int>(1, Allocator.TempJob);
+        try
+        {
+            var hRank = new RankJob
+            {
+                heights = heights, sorted = sorted, rank = rank, w = w,
+                below = below, landCount = sorted.Length - below, probe = rankProbe
+            }.ScheduleParallel(h, 8, default);
+            var hCols = new CoastColumnsJob
+            {
+                heights = heights, dist = dist, w = w, h = h, threshold = threshold, probe = probe
+            }.ScheduleParallel(w, 8, default);
+            var hRows = new CoastRowsJob { dist = dist, w = w, probe = probe }.ScheduleParallel(h, 8, hCols);
+            var deps = JobHandle.CombineDependencies(hRank, hRows);
+
+            if (wind)
+            {
+                float a = windAngle * Mathf.Deg2Rad;
+                float wx = Mathf.Cos(a), wy = Mathf.Sin(a);
+                bool xMajor = Mathf.Abs(wx) >= Mathf.Abs(wy);
+                float major = xMajor ? wx : wy, minor = xMajor ? wy : wx;
+                float slope = minor / Mathf.Abs(major);
+                float stepLen = Mathf.Sqrt(1f + slope * slope) * CoastUnits / n;
+                deps = new WindJob
+                {
+                    heights = heights, rank = rank, air = air, w = w, h = h, threshold = threshold,
+                    xMajor = xMajor, dir = major >= 0f ? 1 : -1, slope = slope,
+                    keepFlat = Mathf.Exp(-windDry * stepLen), pickUp = 1f - Mathf.Exp(-windEvaporation * stepLen),
+                    lift = windLift * LiftScale, probe = probe
+                }.Schedule(deps);
+            }
+
+            new ViewClimateJob
+            {
+                extCoast = dist, extRank = rank, extAir = air, tn = tn, mn = mn,
+                coast = coastV, temp = tempV, moist = moistV, air = airV,
+                n = n, w = w, mL = mL, mB = mB, wind = wind, toUnits = CoastUnits / n,
+                offsetY = offset.y, latitudeSpan = LatitudeSpan,
+                baseTemperature = baseTemperature, lapseRate = lapseRate, latitudeEffect = latitudeEffect,
+                coastModeration = coastModeration, tempNoiseAmplitude = tempNoiseAmplitude,
+                moistureNoiseAmplitude = moistureNoiseAmplitude, coastalMoistureBonus = coastalMoistureBonus,
+                coastDecayRate = coastDecayRate, windStrength = windStrength, probe = probe
+            }.ScheduleParallel(n, 8, deps).Complete();
+
+            dist.CopyTo(extCoast);
+            rank.CopyTo(extRank);
+            coastV.CopyTo(coast);
+            tempV.CopyTo(temp);
+            moistV.CopyTo(moist);
+            if (wind)
+            {
+                extAir = Ensure(extAir, extCount);
+                air.CopyTo(extAir);
+                windAir = Ensure(windAir, count);
+                airV.CopyTo(windAir);
+            }
+            climateBurstState = probe[0] != 0 || rankProbe[0] != 0 ? GridNoiseJob<Simplex2D<Simplex>>.Managed : GridNoiseJob<Simplex2D<Simplex>>.Compiled;
+        }
+        finally
+        {
+            heights.Dispose(); sorted.Dispose(); rank.Dispose(); dist.Dispose(); air.Dispose();
+            tn.Dispose(); mn.Dispose(); coastV.Dispose(); tempV.Dispose(); moistV.Dispose(); airV.Dispose();
+            probe.Dispose(); rankProbe.Dispose();
+        }
+    }
+
+    // Burst check, climate part: the current view's climate in plain C# and with Burst,
+    // compared array by array. Leaves the result of the path in use.
+    string ClimateCheck()
+    {
+        if (colouring != Colouring.Biomes) return "climate: choose Biomes colouring to check it";
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        ClimateManaged();
+        double managedMs = watch.Elapsed.TotalMilliseconds;
+        var c0 = (float[])coast.Clone();
+        var t0 = (float[])temp.Clone();
+        var m0 = (float[])moist.Clone();
+        var a0 = wind ? (float[])windAir.Clone() : null;
+        watch.Restart();
+        ClimateBurst();
+        double burstMs = watch.Elapsed.TotalMilliseconds;
+        string state = GridNoiseJob<Simplex2D<Simplex>>.StateName(climateBurstState);
+        float Worst(float[] x, float[] y)
+        {
+            float m = 0f;
+            for (int i = 0; i < x.Length; i++) m = Mathf.Max(m, Mathf.Abs(x[i] - y[i]));
+            return m;
+        }
+        int biomes = 0, land = 0;
+        for (int i = 0; i < m0.Length; i++)
+        {
+            if (values[i] < threshold) continue;
+            land++;
+            if (BiomeTable.Lookup(t0[i], m0[i]) != BiomeTable.Lookup(temp[i], moist[i])) biomes++;
+        }
+        string result = $"climate at {sampleN}² (grid {extW}×{extH}): managed {managedMs:0.0} ms, Burst {burstMs:0.0} ms " +
+                        $"({(burstMs > 0 ? managedMs / burstMs : 0):0.0}×, {state}); max |Δ| coast {Worst(c0, coast):G3}, " +
+                        $"temp {Worst(t0, temp):G3}, moist {Worst(m0, moist):G3}" +
+                        (wind ? $", air {Worst(a0, windAir):G3}" : "") +
+                        $"; biome changed {(land > 0 ? 100f * biomes / land : 0f):0.000} % of {land} land cells";
+        if (!useBurst) ClimateManaged();
+        return result;
+    }
 
     // ---------------------------------------------------------------------------------
     // Wind: one direction for the whole map. Air enters at the upwind edge of the view,
@@ -2732,7 +2883,7 @@ public class NoiseLab : MonoBehaviour
             "Wind and coast look beyond the view (a margin upwind and around it), so the climate does not change when dragging. Off = as in v4."),
             GUILayout.Width(110f));
         if (margin != climateMargin) { climateMargin = margin; dirty = true; }
-        GUILayout.Label($"{mL}/{mR}/{mB}/{mT} cells, grid {extW}×{extH}, climate {climateMs:0.0} ms");
+        GUILayout.Label($"{mL}/{mR}/{mB}/{mT} cells, grid {extW}×{extH}, climate {climateMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(climateBurstState)})");
         if (GUILayout.Button(new GUIContent("Edge test",
             "Moves the view a quarter upwind and back, without and with margin, and measures how much the climate changes where the two views overlap."),
             GUILayout.Width(110f), GUILayout.Height(30f))) EdgeTest();
@@ -3057,4 +3208,223 @@ public struct CloudNoiseJob : IJobFor
 
     [BurstDiscard]
     static void MarkManaged(ref bool managed) => managed = true;
+}
+
+// ---------------------------------------------------------------------------------
+// v5 (B2): climate jobs. Each mirrors a part of NoiseLab.ClimateManaged; the comments
+// there explain the formulas. probe[0] is set to 1 by any job that runs without Burst.
+// ---------------------------------------------------------------------------------
+static class BurstProbe
+{
+    [BurstDiscard]
+    static void MarkManaged(ref bool managed) => managed = true;
+
+    public static void Check(NativeArray<int> probe)
+    {
+        bool managed = false;
+        MarkManaged(ref managed);
+        if (managed) probe[0] = 1;
+    }
+}
+
+// Land rank of each cell of the climate grid: its position among the land values of the
+// cut source (binary search), 0 at the coast, 1 at the top. One row per index.
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct RankJob : IJobFor
+{
+    [ReadOnly] public NativeArray<float> heights, sorted;
+    [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> rank;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int w, below, landCount;
+
+    public void Execute(int y)
+    {
+        if (y == 0) BurstProbe.Check(probe);
+        for (int x = 0; x < w; x++)
+        {
+            int i = y * w + x;
+            float v = heights[i];
+            int lo = 0, hi = sorted.Length;
+            while (lo < hi)
+            {
+                int mid = (lo + hi) >> 1;
+                if (sorted[mid] < v) lo = mid + 1; else hi = mid;
+            }
+            rank[i] = landCount > 0 ? math.saturate((float)(lo - below) / landCount) : 0f;
+        }
+    }
+}
+
+// Exact Euclidean distance transform (Felzenszwalb & Huttenlocher), as
+// NoiseLab.CoastDistance: squared distances down each column, then along each row.
+// Each index is one column (or row) with its own scratch arrays (Allocator.Temp).
+static class Edt
+{
+    public static void Run(NativeArray<double> f, NativeArray<double> d, NativeArray<double> z, NativeArray<int> v, int n)
+    {
+        int k = 0;
+        v[0] = 0;
+        z[0] = double.NegativeInfinity;
+        z[1] = double.PositiveInfinity;
+        for (int q = 1; q < n; q++)
+        {
+            double s = Intersection(f, q, v[k]);
+            while (s <= z[k]) { k--; s = Intersection(f, q, v[k]); }
+            k++;
+            v[k] = q;
+            z[k] = s;
+            z[k + 1] = double.PositiveInfinity;
+        }
+        k = 0;
+        for (int q = 0; q < n; q++)
+        {
+            while (z[k + 1] < q) k++;
+            double dq = q - v[k];
+            d[q] = dq * dq + f[v[k]];
+        }
+    }
+
+    static double Intersection(NativeArray<double> f, int q, int p) =>
+        ((f[q] + (double)q * q) - (f[p] + (double)p * p)) / (2.0 * q - 2.0 * p);
+}
+
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct CoastColumnsJob : IJobFor
+{
+    [ReadOnly] public NativeArray<float> heights;
+    [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> dist;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int w, h;
+    public float threshold;
+
+    public void Execute(int x)
+    {
+        if (x == 0) BurstProbe.Check(probe);
+        var f = new NativeArray<double>(h, Allocator.Temp);
+        var d = new NativeArray<double>(h, Allocator.Temp);
+        var z = new NativeArray<double>(h + 1, Allocator.Temp);
+        var v = new NativeArray<int>(h, Allocator.Temp);
+        for (int y = 0; y < h; y++) f[y] = heights[y * w + x] >= threshold ? 1e20 : 0.0;
+        Edt.Run(f, d, z, v, h);
+        for (int y = 0; y < h; y++) dist[y * w + x] = (float)d[y];
+        f.Dispose(); d.Dispose(); z.Dispose(); v.Dispose();
+    }
+}
+
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct CoastRowsJob : IJobFor
+{
+    [NativeDisableParallelForRestriction] public NativeArray<float> dist;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int w;
+
+    public void Execute(int y)
+    {
+        if (y == 0) BurstProbe.Check(probe);
+        var f = new NativeArray<double>(w, Allocator.Temp);
+        var d = new NativeArray<double>(w, Allocator.Temp);
+        var z = new NativeArray<double>(w + 1, Allocator.Temp);
+        var v = new NativeArray<int>(w, Allocator.Temp);
+        int row = y * w;
+        for (int x = 0; x < w; x++) f[x] = dist[row + x];
+        Edt.Run(f, d, z, v, w);
+        for (int x = 0; x < w; x++) dist[row + x] = (float)math.sqrt(d[x]);
+        f.Dispose(); d.Dispose(); z.Dispose(); v.Dispose();
+    }
+}
+
+// The wind sweep of NoiseLab.WindField, on one thread (each line needs the previous one).
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct WindJob : IJob
+{
+    [ReadOnly] public NativeArray<float> heights, rank;
+    public NativeArray<float> air;
+    public NativeArray<int> probe;
+    public int w, h, dir;
+    public bool xMajor;
+    public float threshold, slope, keepFlat, pickUp, lift;
+
+    int Cell(int u, int j) => xMajor ? j * w + u : u * w + j;
+
+    public void Execute()
+    {
+        BurstProbe.Check(probe);
+        int lu = xMajor ? w : h, lj = xMajor ? h : w;
+        int first = dir > 0 ? 0 : lu - 1;
+        for (int k = 0; k < lu; k++)
+        {
+            int u = first + dir * k;
+            for (int j = 0; j < lj; j++)
+            {
+                int i = Cell(u, j);
+                float a, rankBefore;
+                float pj = j - slope;
+                if (k == 0 || pj < 0f || pj > lj - 1)
+                {
+                    a = 1f;
+                    rankBefore = rank[i];
+                }
+                else
+                {
+                    int j0 = math.min((int)pj, lj - 2);
+                    float f = pj - j0;
+                    int prev = u - dir;
+                    a = math.lerp(air[Cell(prev, j0)], air[Cell(prev, j0 + 1)], f);
+                    rankBefore = math.lerp(rank[Cell(prev, j0)], rank[Cell(prev, j0 + 1)], f);
+                }
+
+                if (heights[i] < threshold)
+                    a += (1f - a) * pickUp;
+                else
+                {
+                    float rise = math.max(0f, rank[i] - rankBefore);
+                    a *= keepFlat * math.exp(-lift * rise);
+                }
+                air[i] = a;
+            }
+        }
+    }
+}
+
+// Temperature and moisture of the view (and its crops of coast distance and air), one
+// view row per index.
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct ViewClimateJob : IJobFor
+{
+    [ReadOnly] public NativeArray<float> extCoast, extRank, extAir, tn, mn;
+    [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> coast, temp, moist, air;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int n, w, mL, mB;
+    public bool wind;
+    public float toUnits, offsetY, latitudeSpan;
+    public float baseTemperature, lapseRate, latitudeEffect, coastModeration, tempNoiseAmplitude;
+    public float moistureNoiseAmplitude, coastalMoistureBonus, coastDecayRate, windStrength;
+
+    public void Execute(int y)
+    {
+        if (y == 0) BurstProbe.Check(probe);
+        float yWorld = offsetY + (y + 0.5f) / n;
+        float lat = math.saturate(math.abs(yWorld) / latitudeSpan);
+        for (int x = 0; x < n; x++)
+        {
+            int i = y * n + x;
+            int e = (y + mB) * w + x + mL;
+            float c = extCoast[e];
+            coast[i] = c;
+            float cd = c * toUnits;
+            float t = baseTemperature
+                    - lapseRate * extRank[e]
+                    - latitudeEffect * lat
+                    + coastModeration / (1f + cd)
+                    + tempNoiseAmplitude * 0.5f * tn[i];
+            temp[i] = math.saturate(t);
+
+            float a = wind ? extAir[e] : 0f;
+            if (wind) air[i] = a;
+            float m = moistureNoiseAmplitude * math.saturate(mn[i] * 0.5f + 0.5f)
+                    + coastalMoistureBonus / (1f + cd * coastDecayRate)
+                    + (wind ? windStrength * a : 0f);
+            moist[i] = math.saturate(m);
+        }
+    }
 }
