@@ -300,6 +300,8 @@ public class NoiseLab : MonoBehaviour
         sb.AppendLine($"resolution: {resolution} | drag resolution: {dragResolution} | world reference: {WorldSamples}x{WorldSamples}, last {F(R1(calibrateMs))} ms");
         sb.AppendLine($"fields sampled per view: {ActiveFieldCount()} (height: {heightSource}, colour: {colouring})");
         sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes : "off")}");
+        sb.AppendLine($"climate margin: {(climateMargin ? "on" : "off")} | cells L/R/B/T {mL}/{mR}/{mB}/{mT} at {sampleN} | climate grid {extW}x{extH} | last climate {F(R1(climateMs))} ms");
+        if (edgeStatus.Length > 0) sb.AppendLine($"edge test: {edgeStatus.Replace("\n", " | ")}");
         sb.AppendLine($"code: {BuildCode()}");
         sb.AppendLine();
         sb.AppendLine($"## summary ({logCount} frames, {F(R1(logCount > 0 ? logTime[(logHead - 1 + LogFrames) % LogFrames] : 0f))} s)");
@@ -618,7 +620,107 @@ public class NoiseLab : MonoBehaviour
         }
         values = Ensure(values, n * n);
         CombineHeight(values, viewField);
+        SampleMargins(n);
         sampleMs = (float)watch.Elapsed.TotalMilliseconds;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // v5: climate beyond the view. Wind and coast depend on what lies outside the view:
+    // without a margin the air enters the upwind edge saturated and the water beyond the
+    // edges is not seen, so the rain shadow and the coastal moisture change when dragging.
+    // The climate runs on an extended grid, extW × extH: the view plus a margin on each
+    // side, at the same cell size. The view's own samples are copied in unchanged (the
+    // view is bit-identical with or without margin); only the margins are sampled, as four
+    // strips. Only the height fields are needed there.
+    //
+    // How wide. The air reaching the view from a cell M steps upwind differs from the true
+    // air by at most the difference at that cell times what it keeps on the way: per cell,
+    // e^−dry over land and e^−sea over water (the deficit 1 − air shrinks by that factor).
+    // So with M = 3 / min(dry, sea) cells the error is at most e^−3 ≈ 5 %. The coast: if
+    // the nearest water is outside the grid, the true distance is at least the margin C,
+    // so the error in the coastal moisture is at most bonus / (1 + C · decay): 5 % with
+    // C = 19 / decay (and 1 / (1 + C) for the temperature, 5 % at C = 19). Both have a cap.
+    // Distances in cells of a 256 map, as the climate sliders.
+    // ---------------------------------------------------------------------------------
+
+    [SerializeField] bool climateMargin = true;
+
+    const float MarginLoss = 3f;          // e^−3 ≈ 5 % left of the edge's error
+    const float WindMarginCap = 384f;     // 1.5 view widths
+    const float CoastMarginMin = 19f;     // 1 / (1 + 19) = 5 % of the coast moderation
+    const float CoastMarginCap = 128f;    // 0.5 view widths
+
+    int mL, mR, mB, mT, extW, extH;       // margins in cells of the current grid
+    float[] extValues, extRank, extCoast, extAir, stripBuffer;
+    readonly float[][] extField = new float[FieldCount][];
+    readonly string[] extFieldKey = new string[FieldCount];
+
+    void Margins(int n)
+    {
+        mL = mR = mB = mT = 0;
+        if (climateMargin && colouring == Colouring.Biomes)
+        {
+            float c = Mathf.Min(CoastMarginCap, CoastMarginMin / Mathf.Max(coastDecayRate, 1e-6f));
+            float left = c, right = c, bottom = c, top = c;
+            if (wind)
+            {
+                float rate = Mathf.Min(windDry, windEvaporation);
+                float m = rate > 0f ? Mathf.Min(WindMarginCap, MarginLoss / rate) : WindMarginCap;
+                float a = windAngle * Mathf.Deg2Rad;
+                float wx = Mathf.Cos(a), wy = Mathf.Sin(a); // where it blows toward: the air comes from the other side
+                if (wx > 0f) left = Mathf.Max(left, m * wx); else right = Mathf.Max(right, -m * wx);
+                if (wy > 0f) bottom = Mathf.Max(bottom, m * wy); else top = Mathf.Max(top, -m * wy);
+            }
+            float toN = n / CoastUnits;
+            mL = Mathf.CeilToInt(left * toN);
+            mR = Mathf.CeilToInt(right * toN);
+            mB = Mathf.CeilToInt(bottom * toN);
+            mT = Mathf.CeilToInt(top * toN);
+        }
+        extW = mL + n + mR;
+        extH = mB + n + mT;
+    }
+
+    void SampleMargins(int n)
+    {
+        Margins(n);
+        if (colouring != Colouring.Biomes) return;
+        if (mL + mR + mB + mT == 0)
+        {
+            extValues = values; // no margin: the climate grid is the view
+            return;
+        }
+
+        float step = 1f / n;
+        foreach (int k in HeightFields())
+        {
+            string key = $"{FieldKey(k)}|{n}|{F(offset.x)}|{F(offset.y)}|{mL},{mR},{mB},{mT}";
+            if (extFieldKey[k] == key && extField[k] != null) continue;
+            float[] ext = extField[k] = Ensure(extField[k], extW * extH);
+            float[] view = viewField[k];
+            for (int y = 0; y < n; y++)
+                System.Array.Copy(view, y * n, ext, (y + mB) * extW + mL, n);
+            Strip(k, ext, 0, 0, extW, mB, step);            // bottom, corners included
+            Strip(k, ext, 0, mB + n, extW, mT, step);       // top, corners included
+            Strip(k, ext, 0, mB, mL, n, step);              // left
+            Strip(k, ext, mL + n, mB, mR, n, step);         // right
+            extFieldKey[k] = key;
+        }
+        if (extValues == values) extValues = null;
+        extValues = Ensure(extValues, extW * extH);
+        CombineHeight(extValues, extField);
+    }
+
+    // Samples the w × h block of the extended grid whose lower-left cell is (x0, y0).
+    // Extended cell (ex, ey) is view cell (ex − mL, ey − mB).
+    void Strip(int k, float[] ext, int x0, int y0, int w, int h, float step)
+    {
+        if (w <= 0 || h <= 0) return;
+        if (stripBuffer == null || stripBuffer.Length < w * h) stripBuffer = new float[w * h];
+        SampleInto(stripBuffer, GetField(k), FieldSeed(k), w, h,
+                   offset.x + (x0 - mL + 0.5f) * step, offset.y + (y0 - mB + 0.5f) * step, step);
+        for (int y = 0; y < h; y++)
+            System.Array.Copy(stripBuffer, y * w, ext, (y0 + y) * extW + x0, w);
     }
 
     // One noise: the height is field 0 as it is (v2). Splines, after Minecraft's terrain
@@ -641,7 +743,11 @@ public class NoiseLab : MonoBehaviour
             target[i] = sc.Evaluate(c[i]) + se.Evaluate(e[i]) * sp.Evaluate(p[i]);
     }
 
-    void SampleInto(float[] target, NoiseField field, int fieldSeed, int n, float originX, float originZ, float step)
+    void SampleInto(float[] target, NoiseField field, int fieldSeed, int n, float originX, float originZ, float step) =>
+        SampleInto(target, field, fieldSeed, n, n, originX, originZ, step);
+
+    // v5: a w × h rectangle (the climate margins).
+    void SampleInto(float[] target, NoiseField field, int fieldSeed, int w, int h, float originX, float originZ, float step)
     {
         var settings = Settings.Default;
         settings.seed = fieldSeed;
@@ -652,29 +758,29 @@ public class NoiseLab : MonoBehaviour
 
         switch (field.type)
         {
-            case NoiseType.Value: Fill<Lattice2D<LatticeNormal, Value>>(settings, target, n, originX, originZ, step); break;
-            case NoiseType.PerlinSquare: Fill<Lattice2D<LatticeNormal, Perlin>>(settings, target, n, originX, originZ, step); break;
-            case NoiseType.SimplexOldGradient: Fill<Simplex2D<Perlin>>(settings, target, n, originX, originZ, step); break;
-            case NoiseType.SimplexPerlinOnSimplex: Fill<Simplex2D<PerlinOnSimplex>>(settings, target, n, originX, originZ, step); break;
-            case NoiseType.SimplexSimplex: Fill<Simplex2D<Simplex>>(settings, target, n, originX, originZ, step); break;
-            case NoiseType.VoronoiF1: Fill<Voronoi2D<LatticeNormal, Worley, F1>>(settings, target, n, originX, originZ, step); break;
+            case NoiseType.Value: Fill<Lattice2D<LatticeNormal, Value>>(settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.PerlinSquare: Fill<Lattice2D<LatticeNormal, Perlin>>(settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.SimplexOldGradient: Fill<Simplex2D<Perlin>>(settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.SimplexPerlinOnSimplex: Fill<Simplex2D<PerlinOnSimplex>>(settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.SimplexSimplex: Fill<Simplex2D<Simplex>>(settings, target, w, h, originX, originZ, step); break;
+            case NoiseType.VoronoiF1: Fill<Voronoi2D<LatticeNormal, Worley, F1>>(settings, target, w, h, originX, originZ, step); break;
         }
     }
 
     // Same sampling as MapNoiseBridge2D (cell centres, four at a time), but the value is
     // stored raw (no remap, no clamp). Point (x, y) is at origin + (x, y) · step.
-    static void Fill<N>(Settings settings, float[] target, int n, float originX, float originZ, float step)
+    static void Fill<N>(Settings settings, float[] target, int w, int h, float originX, float originZ, float step)
         where N : struct, INoise
     {
-        for (int y = 0; y < n; y++)
+        for (int y = 0; y < h; y++)
         {
             float pz = originZ + y * step;
-            for (int x = 0; x < n; x += 4)
+            for (int x = 0; x < w; x += 4)
             {
                 float4 px = new float4(x, x + 1, x + 2, x + 3) * step + originX;
                 float4 v = GetFractalNoise<N>(new float4x3(px, 0f, pz), settings).v;
-                for (int k = 0; k < 4 && x + k < n; k++)
-                    target[y * n + x + k] = v[k];
+                for (int k = 0; k < 4 && x + k < w; k++)
+                    target[y * w + x + k] = v[k];
             }
         }
     }
@@ -729,12 +835,20 @@ public class NoiseLab : MonoBehaviour
     void Climate()
     {
         if (colouring != Colouring.Biomes) return;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         int n = sampleN, count = n * n;
+        int w = extW, h = extH, extCount = w * h;
         coast = Ensure(coast, count);
         temp = Ensure(temp, count);
         moist = Ensure(moist, count);
 
-        CoastDistance(n);
+        // v5: coast distance and land rank on the extended grid (view + margins), then the
+        // view's part is read at (x + mL, y + mB).
+        extCoast = Ensure(extCoast, extCount);
+        CoastDistance(extValues, extCoast, w, h);
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+                coast[y * n + x] = extCoast[(y + mB) * w + x + mL];
         float toUnits = CoastUnits / n;
 
         float[] source = CutSource;
@@ -742,7 +856,13 @@ public class NoiseLab : MonoBehaviour
         int landCount = source.Length - below;
         float[] tn = viewField[FTemp], mn = viewField[FMoist];
 
-        landRank = Ensure(landRank, count);
+        // Land rank: 0 at the coast, 1 at the highest land of the cut source.
+        extRank = Ensure(extRank, extCount);
+        for (int i = 0; i < extCount; i++)
+            extRank[i] = landCount > 0
+                ? math.saturate((float)(LowerBound(source, extValues[i]) - below) / landCount)
+                : 0f;
+
         for (int y = 0; y < n; y++)
         {
             float yWorld = offset.y + (y + 0.5f) / n;
@@ -750,11 +870,7 @@ public class NoiseLab : MonoBehaviour
             for (int x = 0; x < n; x++)
             {
                 int i = y * n + x;
-                // Land rank: 0 at the coast, 1 at the highest land of the cut source.
-                float rank = landCount > 0
-                    ? math.saturate((float)(LowerBound(source, values[i]) - below) / landCount)
-                    : 0f;
-                landRank[i] = rank;
+                float rank = extRank[(y + mB) * w + x + mL];
                 float cd = coast[i] * toUnits;
 
                 float t = baseTemperature
@@ -766,7 +882,14 @@ public class NoiseLab : MonoBehaviour
             }
         }
 
-        if (wind) WindField(n);
+        if (wind)
+        {
+            WindField(w, h);
+            windAir = Ensure(windAir, count);
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                    windAir[y * n + x] = extAir[(y + mB) * w + x + mL];
+        }
 
         for (int i = 0; i < count; i++)
         {
@@ -776,7 +899,10 @@ public class NoiseLab : MonoBehaviour
                     + (wind ? windStrength * windAir[i] : 0f);
             moist[i] = math.saturate(m);
         }
+        climateMs = (float)watch.Elapsed.TotalMilliseconds;
     }
+
+    float climateMs;
 
     // ---------------------------------------------------------------------------------
     // Wind: one direction for the whole map. Air enters at the upwind edge of the view,
@@ -786,17 +912,19 @@ public class NoiseLab : MonoBehaviour
     // humidity of the air passing each cell, 0–1.
     // The sweep goes line by line along the axis the wind moves most on; the air of a cell
     // comes from the previous line, interpolated at the point one step upwind. O(n²), any
-    // angle. Air entering the view is assumed to come from the sea, so land near the
-    // upwind edge looks wetter than it would with the real terrain beyond the edge.
+    // angle. Air entering the grid is assumed to come from the sea. v5: the grid is the
+    // view plus the upwind margin (SampleMargins), so that assumption is made far enough
+    // upwind to fade before the air reaches the view.
     // ---------------------------------------------------------------------------------
 
-    float[] landRank, windAir;
+    float[] windAir;
 
     const float LiftScale = 4f; // lift 1 = the air keeps e^−4 ≈ 2 % after climbing the whole land range
 
-    void WindField(int n)
+    void WindField(int w, int h)
     {
-        windAir = Ensure(windAir, n * n);
+        extAir = Ensure(extAir, w * h);
+        int n = w - mL - mR; // cells per view width
         float a = windAngle * Mathf.Deg2Rad;
         float wx = Mathf.Cos(a), wy = Mathf.Sin(a);      // direction the wind blows toward (y up)
         bool xMajor = Mathf.Abs(wx) >= Mathf.Abs(wy);
@@ -807,39 +935,40 @@ public class NoiseLab : MonoBehaviour
         float keepFlat = Mathf.Exp(-windDry * dist);
         float pickUp = 1f - Mathf.Exp(-windEvaporation * dist);
 
-        int Cell(int u, int j) => xMajor ? j * n + u : u * n + j;
+        int lu = xMajor ? w : h, lj = xMajor ? h : w;   // lengths along the major and minor axes
+        int Cell(int u, int j) => xMajor ? j * w + u : u * w + j;
 
-        int first = dir > 0 ? 0 : n - 1;
-        for (int k = 0; k < n; k++)
+        int first = dir > 0 ? 0 : lu - 1;
+        for (int k = 0; k < lu; k++)
         {
             int u = first + dir * k;
-            for (int j = 0; j < n; j++)
+            for (int j = 0; j < lj; j++)
             {
                 int i = Cell(u, j);
                 float air, rankBefore;
                 float pj = j - slope;                     // where this air was one step ago
-                if (k == 0 || pj < 0f || pj > n - 1)
+                if (k == 0 || pj < 0f || pj > lj - 1)
                 {
-                    air = 1f;                             // enters the view: sea air
-                    rankBefore = landRank[i];
+                    air = 1f;                             // enters the grid: sea air
+                    rankBefore = extRank[i];
                 }
                 else
                 {
-                    int j0 = Mathf.Min((int)pj, n - 2);
+                    int j0 = Mathf.Min((int)pj, lj - 2);
                     float f = pj - j0;
                     int prev = u - dir;
-                    air = Mathf.Lerp(windAir[Cell(prev, j0)], windAir[Cell(prev, j0 + 1)], f);
-                    rankBefore = Mathf.Lerp(landRank[Cell(prev, j0)], landRank[Cell(prev, j0 + 1)], f);
+                    air = Mathf.Lerp(extAir[Cell(prev, j0)], extAir[Cell(prev, j0 + 1)], f);
+                    rankBefore = Mathf.Lerp(extRank[Cell(prev, j0)], extRank[Cell(prev, j0 + 1)], f);
                 }
 
-                if (values[i] < threshold)
+                if (extValues[i] < threshold)
                     air += (1f - air) * pickUp;           // over the sea
                 else
                 {
-                    float rise = Mathf.Max(0f, landRank[i] - rankBefore);
+                    float rise = Mathf.Max(0f, extRank[i] - rankBefore);
                     air *= keepFlat * Mathf.Exp(-windLift * LiftScale * rise);
                 }
-                windAir[i] = air;
+                extAir[i] = air;
             }
         }
     }
@@ -976,33 +1105,35 @@ public class NoiseLab : MonoBehaviour
     // A chamfer (1, √2) was used first; its octagonal contours showed up as straight
     // diagonal biome borders when the moisture decays slowly. The pipeline's CoastDist is
     // a 4-neighbour BFS (diamond contours); changing that is a governed change, not this.
-    // Water outside the view is not seen: near the edges the coast can look farther.
+    // Water outside the grid is not seen: near its edges the coast can look farther. v5: the
+    // grid is the view plus the margins, so only water beyond the margin is missed.
     double[] edtF, edtD, edtZ;
     int[] edtV;
 
-    void CoastDistance(int n)
+    void CoastDistance(float[] src, float[] dst, int w, int h)
     {
         const double Inf = 1e20;
-        if (edtF == null || edtF.Length != n)
+        int len = Mathf.Max(w, h);
+        if (edtF == null || edtF.Length < len)
         {
-            edtF = new double[n];
-            edtD = new double[n];
-            edtZ = new double[n + 1];
-            edtV = new int[n];
+            edtF = new double[len];
+            edtD = new double[len];
+            edtZ = new double[len + 1];
+            edtV = new int[len];
         }
 
-        for (int x = 0; x < n; x++)
+        for (int x = 0; x < w; x++)
         {
-            for (int y = 0; y < n; y++) edtF[y] = values[y * n + x] >= threshold ? Inf : 0.0;
-            Edt1D(n);
-            for (int y = 0; y < n; y++) coast[y * n + x] = (float)edtD[y];
+            for (int y = 0; y < h; y++) edtF[y] = src[y * w + x] >= threshold ? Inf : 0.0;
+            Edt1D(h);
+            for (int y = 0; y < h; y++) dst[y * w + x] = (float)edtD[y];
         }
-        for (int y = 0; y < n; y++)
+        for (int y = 0; y < h; y++)
         {
-            int row = y * n;
-            for (int x = 0; x < n; x++) edtF[x] = coast[row + x];
-            Edt1D(n);
-            for (int x = 0; x < n; x++) coast[row + x] = (float)System.Math.Sqrt(edtD[x]);
+            int row = y * w;
+            for (int x = 0; x < w; x++) edtF[x] = dst[row + x];
+            Edt1D(w);
+            for (int x = 0; x < w; x++) dst[row + x] = (float)System.Math.Sqrt(edtD[x]);
         }
     }
 
@@ -2510,6 +2641,86 @@ public class NoiseLab : MonoBehaviour
         if (GUILayout.Button($"Export ({logCount} frames)", GUILayout.Height(40f))) ExportPerf();
         GUILayout.EndHorizontal();
         GUILayout.Label(perfStatus);
+
+        // v5: climate margin on/off and the edge test.
+        GUILayout.BeginHorizontal(GUILayout.Height(30f));
+        bool margin = GUILayout.Toggle(climateMargin, new GUIContent(" Margin",
+            "Wind and coast look beyond the view (a margin upwind and around it), so the climate does not change when dragging. Off = as in v4."),
+            GUILayout.Width(110f));
+        if (margin != climateMargin) { climateMargin = margin; dirty = true; }
+        GUILayout.Label($"{mL}/{mR}/{mB}/{mT} cells, grid {extW}×{extH}, climate {climateMs:0.0} ms");
+        if (GUILayout.Button(new GUIContent("Edge test",
+            "Moves the view a quarter upwind and back, without and with margin, and measures how much the climate changes where the two views overlap."),
+            GUILayout.Width(110f), GUILayout.Height(30f))) EdgeTest();
+        GUILayout.EndHorizontal();
+        if (edgeStatus.Length > 0) GUILayout.Label(edgeStatus);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // v5: edge test. Same as a drag at full resolution: the view moves a quarter of its
+    // width upwind (whole cells, so the cells of the overlap coincide), cuts unchanged.
+    // Compared on the land of the overlap: moisture and biome before and after the move.
+    // With a perfect climate nothing changes there. Run without and with margin; the
+    // times are sampling + climate at the moved view (caches cold, as after a drag).
+    // ---------------------------------------------------------------------------------
+
+    string edgeStatus = "";
+
+    void EdgeTest()
+    {
+        if (colouring != Colouring.Biomes) { edgeStatus = "Edge test: choose Biomes colouring first."; return; }
+        bool keepMargin = climateMargin;
+        Vector2 keepOffset = offset;
+        string off = EdgeTestOnce(false, keepOffset);
+        string on = EdgeTestOnce(true, keepOffset);
+        climateMargin = keepMargin;
+        offset = keepOffset;
+        dirty = true;
+        edgeStatus = $"Edge test at {resolution}², wind {(wind ? WindName() : "off")}, land of the overlap:\n" +
+                     $"  no margin: {off}\n  margin:    {on}";
+        Debug.Log($"[NoiseLab] {edgeStatus}");
+    }
+
+    string EdgeTestOnce(bool margin, Vector2 start)
+    {
+        climateMargin = margin;
+        int n = resolution;
+        float a = wind ? windAngle * Mathf.Deg2Rad : 0f;
+        int sx = -Mathf.RoundToInt(0.25f * n * Mathf.Cos(a)); // upwind
+        int sy = -Mathf.RoundToInt(0.25f * n * Mathf.Sin(a));
+
+        offset = start;
+        Sample(n);
+        Climate();
+        var m0 = (float[])moist.Clone();
+        var b0 = new BiomeType[n * n];
+        for (int i = 0; i < n * n; i++) b0[i] = BiomeAt(i);
+
+        offset = start + new Vector2(sx, sy) / n;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        Sample(n);
+        Climate();
+        float ms = (float)watch.Elapsed.TotalMilliseconds;
+
+        // New cell (x, y) is old cell (x + sx, y + sy).
+        double sum = 0.0;
+        float worst = 0f;
+        int land = 0, changed = 0;
+        for (int y = Mathf.Max(0, -sy); y < Mathf.Min(n, n - sy); y++)
+            for (int x = Mathf.Max(0, -sx); x < Mathf.Min(n, n - sx); x++)
+            {
+                int i = y * n + x;
+                if (values[i] < threshold) continue;
+                int j = (y + sy) * n + x + sx;
+                float d = Mathf.Abs(moist[i] - m0[j]);
+                sum += d;
+                worst = Mathf.Max(worst, d);
+                land++;
+                if (BiomeAt(i) != b0[j]) changed++;
+            }
+        if (land == 0) return "no land in the overlap";
+        return $"moisture Δ mean {sum / land:0.0000}, max {worst:0.000}; biome changed {100f * changed / land:0.00} % of {land} cells; " +
+               $"{ms:0} ms (grid {extW}×{extH})";
     }
 
     static int IntSlider(string label, int value, int min, int max, string tip) =>
