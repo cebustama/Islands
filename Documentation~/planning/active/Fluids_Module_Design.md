@@ -86,6 +86,12 @@ máscara de sólidos y un solve de presión con rojo-negro + SOR (ω ≈ 1,7, it
 pasos de tiempo. Ventaja frente a ψ con varias islas: no hace falta la constante de ψ en cada
 una. Detalle y código: `research/2026-11-05-lague-fluidos.md` y `research/fluidos-lague/`.
 
+## Añadido el 2026-11-06 (cierre de NoiseLab v5)
+NoiseLab ya muestrea y calcula el clima con jobs de Burst (`GridNoiseJob<N>`, `WindJob`…,
+`FloatMode.Strict`) y el clima ve más allá de la vista (margen hacia el viento). El prototipo
+de fluidos de la v6 parte de ahí: rejilla ampliada, jobs en paralelo y Burst check para
+comparar. Claudio pide incluir las **corrientes marinas** (uso 2) en la v6.
+
 ## Fuentes (por comprobar)
 - Bridson y Müller-Fischer, *Fluid Simulation*, notas del curso SIGGRAPH 2007.
 - Müller, Ten Minute Physics #17, «How to write an Eulerian fluid simulator».

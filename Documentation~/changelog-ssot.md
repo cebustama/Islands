@@ -9,6 +9,52 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## NoiseLab v5 — climate beyond the view, Burst sampling, clouds and climate (sample only)
+Date: 2026-11-05/06. Commits `0cf2af4` (margin), `1d80144` (Burst sampling, scroll),
+`8890317` (clouds in Burst), `caa852d` (climate in Burst) on `main` (local). No runtime code
+changed.
+
+**What.** `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs`:
+- Climate margin. Wind, coast distance and land rank run on an extended grid: the view plus
+  a margin per side, sampled as four strips (height fields only; the view's samples are
+  copied in, so the view is unchanged). Upwind margin 3 / min(Dry, Sea) cells of a 256 map,
+  cap 1.5 view widths; coast ring 19 / Decay, cap 0.5 view widths. Bound: the error left at
+  the view is at most e^−3 ≈ 5 % (air), and bonus / (1 + C·decay) for the coast. Margin
+  toggle and Edge test in Perf (the view moves a quarter upwind; moisture and biome compared
+  on the land of the overlap).
+- Burst. `GridNoiseJob<N>` (IJobFor, one row per index, `FloatMode.Strict`) samples the view,
+  the margin strips and the world reference; each noise type is named concretely in
+  `SampleInto` so Burst compiles it, and a `[BurstDiscard]` probe reports a job that ran
+  managed. `CloudNoiseJob` computes the 96² cloud noise (same `Execute` runs in a plain loop
+  with Burst off). Climate as four chained jobs: `RankJob`, `CoastColumnsJob` →
+  `CoastRowsJob` (parallel), `WindJob` (one thread: each line needs the previous one),
+  `ViewClimateJob`; `ClimateManaged` keeps the plain path. Burst toggle (off = v4 behaviour)
+  and Burst check (noise and climate, managed vs Burst) in Perf.
+- UI: pages scroll under the fixed tabs (touch drag on text or empty space; sliders, buttons
+  and curve points keep their drags); Clear/Export above the new Perf rows.
+
+**Verified.** User-confirmed in the editor and on the S22 Ultra (margin, Burst on/off, clouds,
+climate, scroll). Suite 415/415 (bridge, 2026-11-06 14:35).
+
+**Measured.**
+- Edge test (editor, 256², wind from W): no margin, moisture |Δ| mean 0.0013, max 0.077,
+  biome changed 0.31 %; margin 0.0000, 0.000, 0.00 %.
+- Burst check, noise (256², 5 fields): editor 2150 → 5 ms, 109 772 of 327 680 values differ,
+  max |Δ| 3.05·10⁻⁶; S22 108 → 8 ms, **0 values differ**.
+- Burst check, climate: editor (grid 668×480) 126.3 → 21.4 ms; S22 (grid 684×512) 24.4 →
+  18.5 ms; max |Δ| ≤ 2.4·10⁻⁷, biome changed 0.000 %.
+- S22 (IL2CPP dev build, exports 2026-11-06 14:03 and 14:48): sample on release at 256² with
+  margin 256 ms (before Burst) → 13–35 ms; clouds 7.5 → 1.9–2.4 ms per frame; dragging at full
+  resolution with wind, margin and clouds ≈ 48 ms per frame.
+- Editor clouds 122.5 → 1.7 ms per frame.
+
+**Known limits.** On the S22 the climate barely gains from Burst (1.3×): the wind sweep is
+serial and the margin makes the climate grid ~2.7× the view; dragging at Full runs ~20 fps
+with wind on. The margin is resampled on every drag frame (no strip cache). A Jobs "Leak
+Detected: Persistent" message seen in the editor does not come from NoiseLab (it allocates
+only TempJob arrays and two persistent cloud buffers disposed in `OnDestroy`); source not
+traced. The Burst toggle is not part of the `NL1` code.
+
 ## NoiseLab v4 — split view, overlay layers, clouds, tooltips (sample only)
 Date: 2026-11-04/05. Commits `c6e07fb` (split view), `bc6141b` (overlays), `0c75bbe`
 (clouds, tooltips, perf export v2) on `main` (local). No runtime code changed.

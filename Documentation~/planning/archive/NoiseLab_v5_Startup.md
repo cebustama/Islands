@@ -56,3 +56,20 @@ dividida, capas, nubes, tooltips), la build Android y las mediciones.
 ## Archivos
 - `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs`.
 - `Documentation~/changelog-ssot.md`, `CURRENT_STATE.md` (al cerrar).
+
+## Avance (cerrada el 2026-11-06)
+- Alcance elegido por Claudio: 1 y luego 5; método del 1: margen a la misma resolución y
+  medir. Después, Burst (B1 muestreo, B2 clima), decidido tras ver el coste del margen.
+- **Paso 1** (`0cf2af4`): margen hacia el viento y anillo de costa; Edge test sin margen
+  0,31 % de biomas cambiados, con margen 0,00 %. En el S22 el muestreo subió a 256 ms.
+- **B1** (`1d80144`): `GridNoiseJob<N>`; editor 2150 → 5 ms; S22 256 → 33 ms. Scroll en las
+  páginas (Perf no cabía en el móvil).
+- **Paso 5** (`8890317`): nubes en Burst; editor 122,5 → 1,7 ms, S22 7,5 → ~2 ms. La duda de
+  «Sin verificar» (4 octavas o 64²) deja de importar: resolución y octavas sin tocar.
+- **B2** (`caa852d`): clima en Burst; editor 126 → 21 ms, S22 24,4 → 18,5 ms.
+- Claudio aceptó un nivel pequeño de diferencia entre PC, móvil y web; la medida quedó en
+  3·10⁻⁶ (editor) y 0 (S22).
+- Corrección: el icono del bicho de la vista Game es el Frame Debugger; el modo Debug/Release
+  del código está en la barra de estado del editor (abajo a la derecha).
+- Fuera de la v5: candidatos 2 (bandas por altura absoluta), 3 (fluidos) y 4 (quickselect),
+  que pasan a la v6.

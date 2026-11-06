@@ -46,8 +46,14 @@ W.c implemented and committed, governed docs pending; noise range fix A+D merged
   `0c75bbe` + closing docs): split view 1 / 1×2 / 2×2 (`v=`), overlay layers with opacity
   (`ov=`, contours as a layer), animated clouds over the map (`cu=`, 96², never touch the
   terrain), tooltips on every control, Perf export v2. S22: painting 4 panels 0.4 ms, clouds
-  7.5 ms per frame. Detail in `changelog-ssot.md`. Next on this track: NoiseLab v5, scope to
-  decide (`planning/active/NoiseLab_v5_Startup.md`).
+  7.5 ms per frame. Detail in `changelog-ssot.md`. **NoiseLab v5 DONE 2026-11-06** (commits
+  `0cf2af4`, `1d80144`, `8890317`, `caa852d` + closing docs): wind and coast computed on the
+  view plus a margin (no change when dragging: Edge test 0.00 % biomes), noise sampling,
+  clouds and climate as Burst jobs (`FloatMode.Strict`; S22: 0 of 327 680 noise values
+  differ), Burst toggle and Burst check, scrollable pages. S22: sample on release 13–35 ms
+  at 256² with margin, clouds ~2 ms per frame, climate 18.5 ms. Detail in
+  `changelog-ssot.md`. Next on this track: NoiseLab v6, fluids (wind around the relief,
+  ocean currents), scope to confirm (`planning/active/NoiseLab_v6_Startup.md`).
 - **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
   merged into `main` after a user-confirmed visual smoke test.**
   The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s
