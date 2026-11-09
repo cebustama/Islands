@@ -92,6 +92,21 @@ NoiseLab ya muestrea y calcula el clima con jobs de Burst (`GridNoiseJob<N>`, `W
 de fluidos de la v6 parte de ahí: rejilla ampliada, jobs en paralelo y Burst check para
 comparar. Claudio pide incluir las **corrientes marinas** (uso 2) en la v6.
 
+## Añadido el 2026-11-09 (paso 1a de NoiseLab v6)
+- **Medido:** con rejilla grande, SOR con ω 1,7 y 60 pasadas no converge (la divergencia subió
+  0,044 → 0,053). Con ω óptimo, 2/(1+sin(π/N)), hacen falta cientos de pasadas y el coste
+  crece con el cubo del lado (mitad de la rejilla del clima, 400 pasadas: ~170 ms en el editor).
+  Arreglo de la v6: rejilla a 1/4 del clima, 200 pasadas (31,5 ms; divergencia 0,107 → 0,017),
+  un cuarto de las pasadas al arrastrar y bloques alineados al mundo.
+- **Decisión de Claudio: multirejilla en la versión siguiente (v7).** Mismo resultado mejor
+  convergido, coste proporcional a las celdas; permitiría volver a mitad o resolución completa.
+  Lo difícil: qué es pared en los niveles gruesos (una prueba rápida, ingenua, convergió mal).
+  No arregla el ~4 % que cambia el viento al arrastrar (la presión ve todo el recuadro).
+- **Candidato para un mundo con continentes (razonamiento, sin fuentes revisadas):** viento de
+  fondo por latitud (alisios, del oeste, polares; Coriolis; estaciones) en vez de un ángulo
+  único; el rodeo solo para las grandes cordilleras; los continentes como paredes de las
+  corrientes; cálculo en la generación del mundo, no por fotograma.
+
 ## Fuentes (por comprobar)
 - Bridson y Müller-Fischer, *Fluid Simulation*, notas del curso SIGGRAPH 2007.
 - Müller, Ten Minute Physics #17, «How to write an Eulerian fluid simulator».

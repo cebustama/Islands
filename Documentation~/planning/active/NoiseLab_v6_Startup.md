@@ -92,3 +92,11 @@ build Android y las mediciones.
 - Tangente apuntada (Claudio: «para después»): dos capas de nubes (baja que sigue el viento
   que rodea, alta que lo ignora) y la Alpujarra como prueba de relieve, en
   `research/2026-11-09-alpujarra-nubes-y-relieve.md`.
+- Cambio (Claudio, 2026-11-09, tras medir la 1a): la rejilla del fluido pasa a **1/4** del
+  clima, con menos pasadas al arrastrar. La multirejilla, para la v7.
+
+## Progreso
+- **1a hecha** (`4de55fc`, 1a + 1a.2): proyección de presión, capa *Wind flow*, Burst check y
+  Edge test. Probada en el editor por Claudio.
+- **1a.3** (rejilla a 1/4, 200 pasadas, un cuarto al arrastrar): editor 31,5 ms, divergencia
+  0,107 → 0,017, Edge test viento Δ media 0,041, máx 0,64; Burst dos veces idéntico. Falta el S22.

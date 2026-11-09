@@ -149,7 +149,7 @@ public class NoiseLab : MonoBehaviour
     public enum WindModel { Sweep, Flow }
     [SerializeField] WindModel windModel = WindModel.Sweep;
     [SerializeField, Range(0f, 1f)] float solidAbove = 0.5f;             // land rank above which the air goes around
-    [SerializeField, Range(10, 600)] int flowIterations = 300;           // red-black SOR passes (red + black)
+    [SerializeField, Range(10, 600)] int flowIterations = 200;           // red-black SOR passes (red + black)
 
     const float LatitudeSpan = 8f;   // view widths from the equator to a pole
     const float CoastUnits = 256f;   // coast distance unit: one cell of a 256 map
@@ -1182,8 +1182,11 @@ public class NoiseLab : MonoBehaviour
     // zero on the faces that touch a wall, then the pressure that removes the divergence
     // this leaves (Poisson, red-black SOR, fixed passes, starting from 0, so the same map
     // always gives the same wind), and the faces minus the pressure gradient.
-    // Grid: half the climate grid (one flow cell = 2 × 2 climate cells); the wind is
-    // smooth and the solve costs about 4× less. Outside the grid the pressure is 0 (open
+    // Grid: a quarter of the climate grid (one flow cell = 4 × 4 climate cells; 1a.3, it
+    // was 2 × 2). The passes needed grow with the side and each pass with the cells, so
+    // the cost grows with the cube of the side: a quarter costs ~8× less than a half for
+    // the same quality (half: 400 passes ≈ 170 ms in the editor at 256²). The wind is
+    // smooth anyway; the climate does not need more. Outside the grid the pressure is 0 (open
     // edges: the air leaves and enters freely). Walls are Neumann (Lague's 4-bit rule: sum
     // only over the open neighbours and divide by how many there are).
     // Why pressure and not a stream function ψ: with several islands, ψ needs one unknown
@@ -1198,7 +1201,9 @@ public class NoiseLab : MonoBehaviour
     // worse than 1.7, hence the higher default.
     static float FlowOmega(int fw, int fh) => 2f / (1f + Mathf.Sin(Mathf.PI / Mathf.Max(2, Mathf.Max(fw, fh))));
     int flowW, flowH;                       // flow grid
-    int flowOx, flowOy;                     // 1 = the 2×2 blocks start one climate cell before the grid (world parity)
+    const int FlowBlock = 4;                // climate cells per flow cell, per side
+    int flowOx, flowOy;                     // climate cells the first block starts before the grid (world alignment)
+    int flowPasses;                         // passes of the last solve (fewer while dragging)
     float[] flowU, flowV, flowDiv;          // faces: u (flowW + 1) × flowH, v flowW × (flowH + 1); divergence before
     byte[] flowSolid;
     float[] windU, windV;                   // view cells, bilinear from the flow cell centres
@@ -1212,12 +1217,16 @@ public class NoiseLab : MonoBehaviour
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         int w = extW, h = extH;
-        // The 2×2 blocks follow the world, not the grid: block pairs are (even, odd) world
-        // cells. Otherwise dragging by an odd number of cells regroups them and a wall can
-        // appear or vanish at a mountain's edge (1a edge test: wind Δ max 1.35).
-        int ox = flowOx = (Mathf.RoundToInt(offset.x * sampleN) - mL) & 1;
-        int oy = flowOy = (Mathf.RoundToInt(offset.y * sampleN) - mB) & 1;
-        int fw = flowW = (w + ox + 1) / 2, fh = flowH = (h + oy + 1) / 2;
+        // The blocks follow the world, not the grid: each block starts at a world cell that
+        // is a multiple of FlowBlock. Otherwise dragging regroups them and a wall can appear
+        // or vanish at a mountain's edge (1a edge test: wind Δ max 1.35).
+        const int B = FlowBlock;
+        int ox = flowOx = (Mathf.RoundToInt(offset.x * sampleN) - mL) & (B - 1);
+        int oy = flowOy = (Mathf.RoundToInt(offset.y * sampleN) - mB) & (B - 1);
+        int fw = flowW = (w + ox + B - 1) / B, fh = flowH = (h + oy + B - 1) / B;
+        // While dragging, a quarter of the passes (the wind is half done until the release,
+        // which solves again with all of them). Same map + same passes = same wind.
+        int passes = flowPasses = dragging ? Mathf.Max(20, flowIterations / 4) : flowIterations;
         int cells = fw * fh;
         float a = windAngle * Mathf.Deg2Rad;
 
@@ -1230,7 +1239,7 @@ public class NoiseLab : MonoBehaviour
         var probe = new NativeArray<int>(1, Allocator.TempJob);
         try
         {
-            var mask = new FlowMaskJob { rank = rank, solid = solid, w = w, h = h, fw = fw, ox = ox, oy = oy, solidAbove = solidAbove, probe = probe };
+            var mask = new FlowMaskJob { rank = rank, solid = solid, w = w, h = h, fw = fw, ox = ox, oy = oy, block = B, solidAbove = solidAbove, probe = probe };
             var init = new FlowInitJob { solid = solid, u = u, v = v, div = div, fw = fw, fh = fh, bu = Mathf.Cos(a), bv = Mathf.Sin(a), probe = probe };
             var sor = new FlowSorJob { solid = solid, div = div, p = p, fw = fw, fh = fh, omega = FlowOmega(fw, fh), probe = probe };
             var apply = new FlowApplyJob { solid = solid, p = p, u = u, v = v, fw = fw, fh = fh, probe = probe };
@@ -1238,7 +1247,7 @@ public class NoiseLab : MonoBehaviour
             {
                 var handle = mask.ScheduleParallel(fh, 8, default);
                 handle = init.ScheduleParallel(fh + 1, 8, handle);
-                for (int k = 0; k < flowIterations; k++)
+                for (int k = 0; k < passes; k++)
                 {
                     sor.parity = 0; handle = sor.ScheduleParallel(fh, 8, handle);
                     sor.parity = 1; handle = sor.ScheduleParallel(fh, 8, handle);
@@ -1251,7 +1260,7 @@ public class NoiseLab : MonoBehaviour
                 // Same Execute, plain C# on one thread, in the same order.
                 for (int y = 0; y < fh; y++) mask.Execute(y);
                 for (int y = 0; y <= fh; y++) init.Execute(y);
-                for (int k = 0; k < flowIterations; k++)
+                for (int k = 0; k < passes; k++)
                 {
                     sor.parity = 0; for (int y = 0; y < fh; y++) sor.Execute(y);
                     sor.parity = 1; for (int y = 0; y < fh; y++) sor.Execute(y);
@@ -1315,14 +1324,14 @@ public class NoiseLab : MonoBehaviour
         float fastest = 0f;
         for (int y = 0; y < n; y++)
         {
-            int ey = y + mB + flowOy; // in block coordinates (a leading half block when flowOy = 1)
-            float fy = Mathf.Clamp((ey + 0.5f) * 0.5f - 0.5f, 0f, fh - 1);
+            int ey = y + mB + flowOy; // counted from the first block's start
+            float fy = Mathf.Clamp((ey + 0.5f) / FlowBlock - 0.5f, 0f, fh - 1);
             int y0 = Mathf.Min((int)fy, Mathf.Max(fh - 2, 0)), y1 = Mathf.Min(y0 + 1, fh - 1);
             float ty = fy - y0;
             for (int x = 0; x < n; x++)
             {
                 int ex = x + mL + flowOx;
-                float fx = Mathf.Clamp((ex + 0.5f) * 0.5f - 0.5f, 0f, fw - 1);
+                float fx = Mathf.Clamp((ex + 0.5f) / FlowBlock - 0.5f, 0f, fw - 1);
                 int x0 = Mathf.Min((int)fx, Mathf.Max(fw - 2, 0)), x1 = Mathf.Min(x0 + 1, fw - 1);
                 float tx = fx - x0;
                 int i = y * n + x;
@@ -1330,7 +1339,7 @@ public class NoiseLab : MonoBehaviour
                 float vv = Mathf.Lerp(Mathf.Lerp(Cv(x0, y0), Cv(x1, y0), tx), Mathf.Lerp(Cv(x0, y1), Cv(x1, y1), tx), ty);
                 windU[i] = uu;
                 windV[i] = vv;
-                viewSolid[i] = flowSolid[(ey >> 1) * fw + (ex >> 1)];
+                viewSolid[i] = flowSolid[ey / FlowBlock * fw + ex / FlowBlock];
                 fastest = Mathf.Max(fastest, uu * uu + vv * vv);
             }
         }
@@ -1338,7 +1347,7 @@ public class NoiseLab : MonoBehaviour
     }
 
     string FlowSummary() =>
-        $"flow {flowW}×{flowH}, {flowIterations} passes, ω {FlowOmega(flowW, flowH):0.000}, {flowMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(flowBurstState)}); " +
+        $"flow {flowW}×{flowH}, {flowPasses} passes, ω {FlowOmega(flowW, flowH):0.000}, {flowMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(flowBurstState)}); " +
         $"divergence {flowDivBefore:0.0000} → {flowDivAfter:0.0000} (max {flowDivMax:0.000}); fastest {flowSpeedMax:0.00}× the background";
 
     // Burst check, flow part: plain C# against Burst, and Burst twice (the red-black passes
@@ -2080,7 +2089,7 @@ public class NoiseLab : MonoBehaviour
         windEvaporation = 0.05f;
         windModel = WindModel.Sweep; // v6: a code without wf= keeps the v3 sweep
         solidAbove = 0.5f;
-        flowIterations = 300;
+        flowIterations = 200;
         // v4: a code without v= opens one panel with the map.
         viewCount = 1;
         DefaultPanels.CopyTo(panelShow, 0);
@@ -3742,14 +3751,14 @@ struct ViewClimateJob : IJobFor
 // Outside the grid: open, pressure 0.
 // ---------------------------------------------------------------------------------
 
-// Wall cells: mean land rank of the 2 × 2 climate cells above solidAbove.
+// Wall cells: mean land rank of the block × block climate cells above solidAbove.
 [BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
 struct FlowMaskJob : IJobFor
 {
     [ReadOnly] public NativeArray<float> rank;
     [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<byte> solid;
     [NativeDisableParallelForRestriction] public NativeArray<int> probe;
-    public int w, h, fw, ox, oy; // ox, oy: the blocks start one cell before the grid (world parity)
+    public int w, h, fw, ox, oy, block; // ox, oy: cells the first block starts before the grid
     public float solidAbove;
 
     public void Execute(int fy)
@@ -3759,10 +3768,10 @@ struct FlowMaskJob : IJobFor
         {
             float sum = 0f;
             int count = 0;
-            for (int dy = 0; dy < 2; dy++)
-                for (int dx = 0; dx < 2; dx++)
+            for (int dy = 0; dy < block; dy++)
+                for (int dx = 0; dx < block; dx++)
                 {
-                    int x = 2 * fx + dx - ox, y = 2 * fy + dy - oy;
+                    int x = block * fx + dx - ox, y = block * fy + dy - oy;
                     if (x < 0 || y < 0 || x >= w || y >= h) continue;
                     sum += rank[y * w + x];
                     count++;
