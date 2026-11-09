@@ -889,6 +889,28 @@ public class NoiseLab : MonoBehaviour
         if (useBurst) ClimateBurst(); else ClimateManaged();
         climateMs = (float)watch.Elapsed.TotalMilliseconds;
         if (FlowOn) Flow(useBurst); // v6 (1a): timed on its own (flowMs)
+        ViewMeans();
+    }
+
+    // v6 UI: mean temperature and moisture of the land in the view (0–1, the values the
+    // biome table reads), shown next to the latitude.
+    float viewTemp, viewMoist;
+    int viewLand;
+
+    void ViewMeans()
+    {
+        double t = 0.0, m = 0.0;
+        int land = 0;
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values[i] < threshold) continue;
+            t += temp[i];
+            m += moist[i];
+            land++;
+        }
+        viewLand = land;
+        viewTemp = land > 0 ? (float)(t / land) : 0f;
+        viewMoist = land > 0 ? (float)(m / land) : 0f;
     }
 
     // The climate in plain C#, one thread (v3–v5 step 1). Kept as the Burst-off path and
@@ -2448,6 +2470,13 @@ public class NoiseLab : MonoBehaviour
     Vector2 lastPointer;
     float dragDistance; // a press that barely moves is a tap: it picks the panel
 
+    // v6 UI: one panel over the whole screen for a while (right click, or a double tap).
+    // -1 = the normal view. The other panels keep painting; only the layout changes.
+    int focusPanel = -1;
+    int lastTapPanel = -1;
+    float lastTapTime = -1f;
+    const float DoubleTapSeconds = 0.35f;
+
     const float PanelGap = 4f;
 
     void OnGUI()
@@ -2458,6 +2487,13 @@ public class NoiseLab : MonoBehaviour
         GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
         float width = Screen.width / scale, height = VirtualHeight;
         const float margin = 16f;
+        if (focusPanel >= viewCount) focusPanel = -1;
+        if (focusPanel >= 0)
+        {
+            DrawFocus(width, height, margin);
+            HandleDrag();
+            return;
+        }
         const float viewExtras = 8f + 70f + 4f + 60f + 8f; // histogram (70) and numbers (60)
 
         Rect controls;
@@ -2514,6 +2550,13 @@ public class NoiseLab : MonoBehaviour
         {
             case EventType.MouseDown:
                 if (!imageRect.Contains(e.mousePosition)) return;
+                if (e.button == 1) // right click: this panel over the whole screen, or back
+                {
+                    int k = PanelAt(e.mousePosition);
+                    if (k >= 0) ToggleFocus(k);
+                    e.Use();
+                    return;
+                }
                 dragging = true;
                 lastPointer = e.mousePosition;
                 dragDistance = 0f;
@@ -2534,14 +2577,78 @@ public class NoiseLab : MonoBehaviour
                 if (!dragging) return;
                 dragging = false;
                 if (dragDistance < 8f)
-                    for (int k = 0; k < viewCount; k++)
-                        if (panelRects[k].Contains(e.mousePosition)) selectedPanel = k;
+                {
+                    int k = PanelAt(e.mousePosition);
+                    if (k >= 0)
+                    {
+                        selectedPanel = k;
+                        // Two taps on the same panel: whole screen, or back (the touch screen's right click).
+                        if (k == lastTapPanel && Time.unscaledTime - lastTapTime < DoubleTapSeconds)
+                        {
+                            ToggleFocus(k);
+                            lastTapPanel = -1;
+                        }
+                        else
+                        {
+                            lastTapPanel = k;
+                            lastTapTime = Time.unscaledTime;
+                        }
+                    }
+                }
                 offset.x = Mathf.Round(offset.x * 1000f) / 1000f; // readable codes
                 offset.y = Mathf.Round(offset.y * 1000f) / 1000f;
                 dirty = true;
                 e.Use();
                 break;
         }
+    }
+
+    int PanelAt(Vector2 point)
+    {
+        for (int k = 0; k < viewCount; k++)
+            if ((focusPanel < 0 || k == focusPanel) && panelRects[k].Contains(point)) return k;
+        return -1;
+    }
+
+    void ToggleFocus(int k) => focusPanel = focusPanel >= 0 ? -1 : k;
+
+    // The focused panel as the largest square on the screen, with its name, the wind arrow and
+    // the latitude; no controls. Dragging still moves the map.
+    void DrawFocus(float width, float height, float margin)
+    {
+        float side = Mathf.Min(width, height) - 2f * margin;
+        var r = new Rect((width - side) * 0.5f, (height - side) * 0.5f, side, side);
+        imageRect = r;
+        panelSide = side;
+        for (int k = 0; k < viewCount; k++) panelRects[k] = k == focusPanel ? r : Rect.zero;
+        if (textures[focusPanel] != null) GUI.DrawTexture(r, textures[focusPanel]);
+        if (clouds && cloudTexture != null && Effective(focusPanel) == Show.Map) DrawClouds(r);
+        string name = $"{ShowNames[(int)Effective(focusPanel)]}  (right click or double tap: back)";
+        DrawRect(new Rect(r.x, r.y, 8.5f * name.Length + 8f, 22f), new Color(0f, 0f, 0f, 0.5f));
+        GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
+        if (colouring == Colouring.Biomes && wind) DrawWindArrow(new Vector2(r.xMax - 34f, r.y + 34f));
+        DrawLatitude(r.x, r.yMax);
+    }
+
+    // v6 UI: how far north or south the view is. The climate already cools with |world y|
+    // (equator at y = 0, poles at ±LatitudeSpan view widths; v3), so this is the latitude
+    // that sets the temperature, in degrees: bottom edge to top edge of the view.
+    static string LatitudeName(float yWorld)
+    {
+        float degrees = Mathf.Clamp01(Mathf.Abs(yWorld) / LatitudeSpan) * 90f;
+        int d = Mathf.RoundToInt(degrees);
+        return d == 0 ? "0°" : $"{d}°{(yWorld > 0f ? "N" : "S")}";
+    }
+
+    void DrawLatitude(float x, float bottom)
+    {
+        if (colouring != Colouring.Biomes) return;
+        string text = $"lat {LatitudeName(offset.y)} – {LatitudeName(offset.y + 1f)}" +
+                      (viewLand > 0 ? $"   land: temp {viewTemp:0.00}, moist {viewMoist:0.00}" : "   no land");
+        var box = new Rect(x, bottom - 22f, 8.5f * text.Length + 8f, 22f);
+        DrawRect(box, new Color(0f, 0f, 0f, 0.5f));
+        GUI.Label(new Rect(box.x + 4f, box.y + 1f, box.width, 22f),
+            new GUIContent(text, "Latitude of the bottom and top edges of the view (90° = 8 view widths from the equator; farther it stays 90°). Temperature drops away from the equator (Climate > Temperature > Latitude). Mean temperature and moisture of the land in the view, 0–1 as the biome table reads them: temperature below 0.25 is cold (tundra, snow), 0.25–0.5 cool (boreal forest, shrubland)."));
     }
 
     readonly Vector2[] pageScroll = new Vector2[6]; // one per Page
@@ -3119,6 +3226,90 @@ public class NoiseLab : MonoBehaviour
         }
         GUILayout.EndHorizontal();
         GUILayout.Label(codeStatus);
+        SavedCodes();
+    }
+
+    // v6 UI: codes saved on this device (PlayerPrefs: the editor and the S22 each keep their
+    // own list). One line per entry, "name<TAB>code"; codes never hold tabs or new lines.
+    const string SavedKey = "NoiseLab.savedCodes";
+    readonly System.Collections.Generic.List<(string name, string code)> saved = new();
+    bool savedRead;
+    string saveName = "";
+    int deleteArmed = -1; // the first press on Del arms it; the second deletes
+
+    void ReadSaved()
+    {
+        savedRead = true;
+        saved.Clear();
+        foreach (string line in PlayerPrefs.GetString(SavedKey, "").Split('\n'))
+        {
+            int tab = line.IndexOf('\t');
+            if (tab > 0) saved.Add((line.Substring(0, tab), line.Substring(tab + 1)));
+        }
+    }
+
+    void WriteSaved()
+    {
+        var lines = new string[saved.Count];
+        for (int i = 0; i < saved.Count; i++) lines[i] = saved[i].name + "\t" + saved[i].code;
+        PlayerPrefs.SetString(SavedKey, string.Join("\n", lines));
+        PlayerPrefs.Save();
+    }
+
+    void SavedCodes()
+    {
+        if (!savedRead) ReadSaved();
+        bool before = GUI.changed; // saving, naming and deleting do not resample; Load does
+        GUILayout.Space(8f);
+        GUILayout.Label("Saved maps (on this device)");
+        GUILayout.BeginHorizontal();
+        saveName = GUILayout.TextField(saveName, 40, GUILayout.Height(40f), GUILayout.ExpandWidth(true));
+        if (GUILayout.Button(new GUIContent("Save", "Save the current map under this name (empty: Map N). The same name replaces it."),
+                GUILayout.Width(90f), GUILayout.Height(40f)))
+        {
+            string name = saveName.Replace("\t", " ").Replace("\n", " ").Trim();
+            if (name.Length == 0) name = $"Map {saved.Count + 1}";
+            int at = saved.FindIndex(e => e.name == name);
+            if (at >= 0) saved[at] = (name, BuildCode()); else saved.Add((name, BuildCode()));
+            WriteSaved();
+            codeStatus = $"Saved \"{name}\".";
+            saveName = "";
+            deleteArmed = -1;
+            GUIUtility.keyboardControl = 0;
+        }
+        GUILayout.EndHorizontal();
+        GUI.changed = before;
+
+        for (int i = 0; i < saved.Count; i++)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"({i + 1}) {saved[i].name}", GUILayout.Height(40f), GUILayout.ExpandWidth(true));
+            if (GUILayout.Button(new GUIContent("Load", "Open this map (its whole code)."), GUILayout.Width(90f), GUILayout.Height(40f)))
+            {
+                string error = ApplyCode(saved[i].code);
+                codeStatus = error == null ? $"Loaded \"{saved[i].name}\"." : "Load: " + error;
+                deleteArmed = -1;
+                GUIUtility.keyboardControl = 0;
+                before = GUI.changed; // keep the resample
+            }
+            bool armed = deleteArmed == i;
+            if (GUILayout.Button(new GUIContent(armed ? "Sure?" : "Del", "Delete this entry (press twice)."), GUILayout.Width(70f), GUILayout.Height(40f)))
+            {
+                if (armed)
+                {
+                    codeStatus = $"Deleted \"{saved[i].name}\".";
+                    saved.RemoveAt(i);
+                    WriteSaved();
+                    deleteArmed = -1;
+                    GUILayout.EndHorizontal();
+                    GUI.changed = before;
+                    break;
+                }
+                deleteArmed = i;
+            }
+            GUILayout.EndHorizontal();
+            GUI.changed = before;
+        }
     }
 
     // Timing over the last PerfFrames frames, oldest on the left. Grey: frame time.
@@ -3322,6 +3513,7 @@ public class NoiseLab : MonoBehaviour
         }
         // The wind arrow goes in the top-right panel.
         if (colouring == Colouring.Biomes && wind) DrawWindArrow(new Vector2(left + gridWidth - 34f, top + 34f));
+        DrawLatitude(left, top + gridHeight); // bottom-left panel
 
         // Histogram strip under the panels. x axis: raw value from -1 (left) to +1 (right).
         var plot = new Rect(left, top + gridHeight + 8f, gridWidth, 70f);
