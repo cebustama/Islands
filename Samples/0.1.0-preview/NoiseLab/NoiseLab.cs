@@ -144,6 +144,13 @@ public class NoiseLab : MonoBehaviour
     [SerializeField, Range(0f, 0.05f)] float windDry = 0.01f;             // loss per cell over flat land
     [SerializeField, Range(0f, 0.2f)] float windEvaporation = 0.05f;      // gain per cell over the sea
 
+    // v6 (step 1a): wind model. Sweep = the v3 sweep in one direction. Flow = the same
+    // background wind, made to go around the high land (a pressure projection, see Flow).
+    public enum WindModel { Sweep, Flow }
+    [SerializeField] WindModel windModel = WindModel.Sweep;
+    [SerializeField, Range(0f, 1f)] float solidAbove = 0.5f;             // land rank above which the air goes around
+    [SerializeField, Range(10, 600)] int flowIterations = 300;           // red-black SOR passes (red + black)
+
     const float LatitudeSpan = 8f;   // view widths from the equator to a pole
     const float CoastUnits = 256f;   // coast distance unit: one cell of a 256 map
 
@@ -701,7 +708,7 @@ public class NoiseLab : MonoBehaviour
         }
         burstStatus = $"Burst check at {n}², {ActiveFieldCount()} field(s): managed {managedMs:0} ms, Burst {burstMs:0} ms " +
                       $"({(burstMs > 0 ? managedMs / burstMs : 0):0.0}×, {GridNoiseJob<Simplex2D<Simplex>>.StateName(state)}); " +
-                      $"values that differ {differ} of {total}, max |Δ| {worst:G3}\n" + ClimateCheck();
+                      $"values that differ {differ} of {total}, max |Δ| {worst:G3}\n" + ClimateCheck() + FlowCheck();
         dirty = true; // repaint with the path in use
         Debug.Log($"[NoiseLab] {burstStatus}");
     }
@@ -881,6 +888,7 @@ public class NoiseLab : MonoBehaviour
         var watch = System.Diagnostics.Stopwatch.StartNew();
         if (useBurst) ClimateBurst(); else ClimateManaged();
         climateMs = (float)watch.Elapsed.TotalMilliseconds;
+        if (FlowOn) Flow(useBurst); // v6 (1a): timed on its own (flowMs)
     }
 
     // The climate in plain C#, one thread (v3–v5 step 1). Kept as the Burst-off path and
@@ -1164,6 +1172,209 @@ public class NoiseLab : MonoBehaviour
                 extAir[i] = air;
             }
         }
+    }
+
+    // ---------------------------------------------------------------------------------
+    // v6 (step 1a): wind that goes around the high land. Land whose rank is above
+    // solidAbove is a wall: the air goes around it, and climbs what lies below (the
+    // orographic rain of v3). One pressure projection, no time steps (the "single
+    // projection" of the fluids design): the background wind on every face of a MAC grid,
+    // zero on the faces that touch a wall, then the pressure that removes the divergence
+    // this leaves (Poisson, red-black SOR, fixed passes, starting from 0, so the same map
+    // always gives the same wind), and the faces minus the pressure gradient.
+    // Grid: half the climate grid (one flow cell = 2 × 2 climate cells); the wind is
+    // smooth and the solve costs about 4× less. Outside the grid the pressure is 0 (open
+    // edges: the air leaves and enters freely). Walls are Neumann (Lague's 4-bit rule: sum
+    // only over the open neighbours and divide by how many there are).
+    // Why pressure and not a stream function ψ: with several islands, ψ needs one unknown
+    // constant per island; the pressure does not.
+    // 1a computes, shows and measures the field; the humidity still uses the sweep (1b).
+    // ---------------------------------------------------------------------------------
+
+    // SOR weight: the optimum for a grid this size, 2 / (1 + sin(π / N)). 1a used Lague's 1.7,
+    // which only reaches a few cells from each wall in 60 passes; on a 290×236 grid that left
+    // more divergence than before the solve. Measured offline (1a.2): with the optimum, 300
+    // passes leave ~1/4 of the starting divergence, 400 ~1/10. Too few passes with it is
+    // worse than 1.7, hence the higher default.
+    static float FlowOmega(int fw, int fh) => 2f / (1f + Mathf.Sin(Mathf.PI / Mathf.Max(2, Mathf.Max(fw, fh))));
+    int flowW, flowH;                       // flow grid
+    int flowOx, flowOy;                     // 1 = the 2×2 blocks start one climate cell before the grid (world parity)
+    float[] flowU, flowV, flowDiv;          // faces: u (flowW + 1) × flowH, v flowW × (flowH + 1); divergence before
+    byte[] flowSolid;
+    float[] windU, windV;                   // view cells, bilinear from the flow cell centres
+    byte[] viewSolid;
+    float flowMs, flowDivBefore, flowDivAfter, flowDivMax, flowSpeedMax;
+    int flowBurstState = -1, flowFluid;
+
+    bool FlowOn => colouring == Colouring.Biomes && wind && windModel == WindModel.Flow;
+
+    void Flow(bool burst)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        int w = extW, h = extH;
+        // The 2×2 blocks follow the world, not the grid: block pairs are (even, odd) world
+        // cells. Otherwise dragging by an odd number of cells regroups them and a wall can
+        // appear or vanish at a mountain's edge (1a edge test: wind Δ max 1.35).
+        int ox = flowOx = (Mathf.RoundToInt(offset.x * sampleN) - mL) & 1;
+        int oy = flowOy = (Mathf.RoundToInt(offset.y * sampleN) - mB) & 1;
+        int fw = flowW = (w + ox + 1) / 2, fh = flowH = (h + oy + 1) / 2;
+        int cells = fw * fh;
+        float a = windAngle * Mathf.Deg2Rad;
+
+        var rank = new NativeArray<float>(extRank, Allocator.TempJob);
+        var solid = new NativeArray<byte>(cells, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var div = new NativeArray<float>(cells, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var p = new NativeArray<float>(cells, Allocator.TempJob);   // starts at 0: no warm start
+        var u = new NativeArray<float>((fw + 1) * fh, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var v = new NativeArray<float>(fw * (fh + 1), Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var probe = new NativeArray<int>(1, Allocator.TempJob);
+        try
+        {
+            var mask = new FlowMaskJob { rank = rank, solid = solid, w = w, h = h, fw = fw, ox = ox, oy = oy, solidAbove = solidAbove, probe = probe };
+            var init = new FlowInitJob { solid = solid, u = u, v = v, div = div, fw = fw, fh = fh, bu = Mathf.Cos(a), bv = Mathf.Sin(a), probe = probe };
+            var sor = new FlowSorJob { solid = solid, div = div, p = p, fw = fw, fh = fh, omega = FlowOmega(fw, fh), probe = probe };
+            var apply = new FlowApplyJob { solid = solid, p = p, u = u, v = v, fw = fw, fh = fh, probe = probe };
+            if (burst)
+            {
+                var handle = mask.ScheduleParallel(fh, 8, default);
+                handle = init.ScheduleParallel(fh + 1, 8, handle);
+                for (int k = 0; k < flowIterations; k++)
+                {
+                    sor.parity = 0; handle = sor.ScheduleParallel(fh, 8, handle);
+                    sor.parity = 1; handle = sor.ScheduleParallel(fh, 8, handle);
+                }
+                apply.ScheduleParallel(fh + 1, 8, handle).Complete();
+                flowBurstState = probe[0] != 0 ? GridNoiseJob<Simplex2D<Simplex>>.Managed : GridNoiseJob<Simplex2D<Simplex>>.Compiled;
+            }
+            else
+            {
+                // Same Execute, plain C# on one thread, in the same order.
+                for (int y = 0; y < fh; y++) mask.Execute(y);
+                for (int y = 0; y <= fh; y++) init.Execute(y);
+                for (int k = 0; k < flowIterations; k++)
+                {
+                    sor.parity = 0; for (int y = 0; y < fh; y++) sor.Execute(y);
+                    sor.parity = 1; for (int y = 0; y < fh; y++) sor.Execute(y);
+                }
+                for (int y = 0; y <= fh; y++) apply.Execute(y);
+                flowBurstState = GridNoiseJob<Simplex2D<Simplex>>.Off;
+            }
+            flowSolid = flowSolid != null && flowSolid.Length == cells ? flowSolid : new byte[cells];
+            solid.CopyTo(flowSolid);
+            flowDiv = Ensure(flowDiv, cells);
+            div.CopyTo(flowDiv);
+            flowU = Ensure(flowU, u.Length);
+            u.CopyTo(flowU);
+            flowV = Ensure(flowV, v.Length);
+            v.CopyTo(flowV);
+        }
+        finally
+        {
+            rank.Dispose(); solid.Dispose(); div.Dispose(); p.Dispose(); u.Dispose(); v.Dispose(); probe.Dispose();
+        }
+        FlowStats();
+        FlowToView();
+        flowMs = (float)watch.Elapsed.TotalMilliseconds;
+    }
+
+    // Mean |divergence| over the open cells before and after the projection (1 = the
+    // background speed across one cell), and the largest one after.
+    void FlowStats()
+    {
+        int fw = flowW, fh = flowH;
+        double before = 0.0, after = 0.0;
+        float worst = 0f;
+        int fluid = 0;
+        for (int y = 0; y < fh; y++)
+            for (int x = 0; x < fw; x++)
+            {
+                int c = y * fw + x;
+                if (flowSolid[c] != 0) continue;
+                fluid++;
+                before += Mathf.Abs(flowDiv[c]);
+                float d = flowU[y * (fw + 1) + x + 1] - flowU[y * (fw + 1) + x] + flowV[(y + 1) * fw + x] - flowV[y * fw + x];
+                after += Mathf.Abs(d);
+                worst = Mathf.Max(worst, Mathf.Abs(d));
+            }
+        flowFluid = fluid;
+        flowDivBefore = fluid > 0 ? (float)(before / fluid) : 0f;
+        flowDivAfter = fluid > 0 ? (float)(after / fluid) : 0f;
+        flowDivMax = worst;
+    }
+
+    // The velocity at each view cell: bilinear between the flow cell centres (each the mean
+    // of its two faces per axis). The view cell (x, y) is climate cell (x + mL, y + mB).
+    void FlowToView()
+    {
+        int n = sampleN, fw = flowW, fh = flowH;
+        windU = Ensure(windU, n * n);
+        windV = Ensure(windV, n * n);
+        viewSolid = viewSolid != null && viewSolid.Length == n * n ? viewSolid : new byte[n * n];
+        float Cu(int cx, int cy) => 0.5f * (flowU[cy * (fw + 1) + cx] + flowU[cy * (fw + 1) + cx + 1]);
+        float Cv(int cx, int cy) => 0.5f * (flowV[cy * fw + cx] + flowV[(cy + 1) * fw + cx]);
+        float fastest = 0f;
+        for (int y = 0; y < n; y++)
+        {
+            int ey = y + mB + flowOy; // in block coordinates (a leading half block when flowOy = 1)
+            float fy = Mathf.Clamp((ey + 0.5f) * 0.5f - 0.5f, 0f, fh - 1);
+            int y0 = Mathf.Min((int)fy, Mathf.Max(fh - 2, 0)), y1 = Mathf.Min(y0 + 1, fh - 1);
+            float ty = fy - y0;
+            for (int x = 0; x < n; x++)
+            {
+                int ex = x + mL + flowOx;
+                float fx = Mathf.Clamp((ex + 0.5f) * 0.5f - 0.5f, 0f, fw - 1);
+                int x0 = Mathf.Min((int)fx, Mathf.Max(fw - 2, 0)), x1 = Mathf.Min(x0 + 1, fw - 1);
+                float tx = fx - x0;
+                int i = y * n + x;
+                float uu = Mathf.Lerp(Mathf.Lerp(Cu(x0, y0), Cu(x1, y0), tx), Mathf.Lerp(Cu(x0, y1), Cu(x1, y1), tx), ty);
+                float vv = Mathf.Lerp(Mathf.Lerp(Cv(x0, y0), Cv(x1, y0), tx), Mathf.Lerp(Cv(x0, y1), Cv(x1, y1), tx), ty);
+                windU[i] = uu;
+                windV[i] = vv;
+                viewSolid[i] = flowSolid[(ey >> 1) * fw + (ex >> 1)];
+                fastest = Mathf.Max(fastest, uu * uu + vv * vv);
+            }
+        }
+        flowSpeedMax = Mathf.Sqrt(fastest);
+    }
+
+    string FlowSummary() =>
+        $"flow {flowW}×{flowH}, {flowIterations} passes, ω {FlowOmega(flowW, flowH):0.000}, {flowMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(flowBurstState)}); " +
+        $"divergence {flowDivBefore:0.0000} → {flowDivAfter:0.0000} (max {flowDivMax:0.000}); fastest {flowSpeedMax:0.00}× the background";
+
+    // Burst check, flow part: plain C# against Burst, and Burst twice (the red-black passes
+    // run in parallel; each colour only reads the other, so two runs must be identical).
+    string FlowCheck()
+    {
+        if (!FlowOn) return "";
+        Flow(false);
+        var u0 = (float[])flowU.Clone();
+        var v0 = (float[])flowV.Clone();
+        float managedMs = flowMs;
+        Flow(true);
+        var u1 = (float[])flowU.Clone();
+        var v1 = (float[])flowV.Clone();
+        float burstMs = flowMs;
+        Flow(true);
+        float worst = 0f;
+        int differ = 0, repeat = 0;
+        for (int i = 0; i < u0.Length; i++)
+        {
+            float d = Mathf.Abs(u0[i] - u1[i]);
+            if (d > 0f) differ++;
+            worst = Mathf.Max(worst, d);
+            if (u1[i] != flowU[i]) repeat++;
+        }
+        for (int i = 0; i < v0.Length; i++)
+        {
+            float d = Mathf.Abs(v0[i] - v1[i]);
+            if (d > 0f) differ++;
+            worst = Mathf.Max(worst, d);
+            if (v1[i] != flowV[i]) repeat++;
+        }
+        string result = $"\nflow {flowW}×{flowH}, {flowIterations} passes: managed {managedMs:0.0} ms, Burst {burstMs:0.0} ms; " +
+                        $"faces that differ {differ} of {u0.Length + v0.Length}, max |Δ| {worst:G3}; Burst run twice: {repeat} differ";
+        if (!useBurst) Flow(false);
+        return result;
     }
 
     // ---------------------------------------------------------------------------------
@@ -1487,9 +1698,11 @@ public class NoiseLab : MonoBehaviour
     // ---------------------------------------------------------------------------------
 
     // What the image shows. Map: bands or biomes. The rest: one field on its own.
-    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir }
-    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air" };
-    static readonly string[] ShowCodes = { "map", "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind" };
+    // v6: WindFlow goes last; it is a panel layer only (the overlay list maps its entries to
+    // Show by index + 1 up to WindAir, and Contours after that).
+    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir, WindFlow }
+    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air", "Wind flow" };
+    static readonly string[] ShowCodes = { "map", "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind", "flow" };
 
     // v4: number of panels (1, 2 or 4) and the layer each one shows. A choice that is not
     // available (Temperature with Bands) is kept, and the panel shows the map meanwhile.
@@ -1507,6 +1720,7 @@ public class NoiseLab : MonoBehaviour
         Show.Temperature or Show.Moisture => colouring == Colouring.Biomes,
         Show.Continent or Show.Erosion or Show.Peaks => heightSource == HeightSource.Splines,
         Show.WindAir => colouring == Colouring.Biomes && wind,
+        Show.WindFlow => FlowOn,
         _ => true
     };
 
@@ -1575,6 +1789,7 @@ public class NoiseLab : MonoBehaviour
             else if (show == Show.Height) c = Overlays(c, i, n, true);
             pixels[i] = c;
         }
+        if (show == Show.WindFlow) FlowArrows(pixels, n);
         texture.SetPixels32(pixels);
         texture.Apply();
     }
@@ -1585,8 +1800,50 @@ public class NoiseLab : MonoBehaviour
         Show.Temperature => Ramp3(Cold, Mild, Hot, temp[i]),
         Show.Moisture => Color32.Lerp(Dry, Wet, moist[i]),
         Show.WindAir => Color32.Lerp(Dry, Wet, windAir[i]),
+        Show.WindFlow => FlowColour(i),
         _ => Gray(viewField[FCont + (s - Show.Continent)][i])
     };
+
+    // v6: speed of the wind. Dark blue = calm, light = the background speed, orange = up
+    // to twice as fast; walls in dark grey; the rest of the land a little greyer, so the
+    // coast shows.
+    static readonly Color32 Calm = Hex("1B2A4A"), Breeze = Hex("9CC3D5"), Gust = Hex("F2A541");
+    static readonly Color32 Wall = Hex("3C3C3C"), LandTint = Hex("8A8A8A");
+
+    Color32 FlowColour(int i)
+    {
+        if (viewSolid[i] != 0) return Wall;
+        float s = Mathf.Sqrt(windU[i] * windU[i] + windV[i] * windV[i]);
+        Color32 c = s < 1f ? Color32.Lerp(Calm, Breeze, s) : Color32.Lerp(Breeze, Gust, s - 1f);
+        return values[i] >= threshold ? Color32.Lerp(c, LandTint, 0.3f) : c;
+    }
+
+    // Arrows painted into the panel texture, one every n / 16 cells: a line from the cell
+    // along the wind, as long as half the spacing at the background speed, with a white tip.
+    void FlowArrows(Color32[] pixels, int n)
+    {
+        int spacing = Mathf.Max(4, n / 16);
+        var body = new Color32(255, 255, 255, 255);
+        var tail = new Color32(20, 20, 20, 255);
+        for (int cy = spacing / 2; cy < n; cy += spacing)
+            for (int cx = spacing / 2; cx < n; cx += spacing)
+            {
+                int i = cy * n + cx;
+                if (viewSolid[i] != 0) continue;
+                float u = windU[i], v = windV[i];
+                float s = Mathf.Sqrt(u * u + v * v);
+                if (s < 1e-3f) continue;
+                float len = 0.5f * spacing * Mathf.Min(s, 2f);
+                int steps = Mathf.Max(1, Mathf.CeilToInt(len));
+                for (int k = 0; k <= steps; k++)
+                {
+                    float t = len * k / steps;
+                    int x = Mathf.RoundToInt(cx + u / s * t), y = Mathf.RoundToInt(cy + v / s * t);
+                    if (x < 0 || y < 0 || x >= n || y >= n) break;
+                    pixels[y * n + x] = Color32.Lerp(tail, body, (float)k / steps);
+                }
+            }
+    }
 
     // ---------------------------------------------------------------------------------
     // v4: overlay layers. A list (up to MaxOverlays) of a layer, an on/off box and an
@@ -1745,6 +2002,7 @@ public class NoiseLab : MonoBehaviour
                                 F(tempNoiseAmplitude), F(coastalMoistureBonus), F(coastDecayRate), F(moistureNoiseAmplitude));
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
+        if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
         if (shade) code += $";sh={F(relief)}";
         if (HasContours()) code += $";ct={F(contourStep)}";
         if (overlays.Count > 0) code += ";ov=" + OverlayCode();
@@ -1820,6 +2078,9 @@ public class NoiseLab : MonoBehaviour
         windLift = 0.6f;
         windDry = 0.01f;
         windEvaporation = 0.05f;
+        windModel = WindModel.Sweep; // v6: a code without wf= keeps the v3 sweep
+        solidAbove = 0.5f;
+        flowIterations = 300;
         // v4: a code without v= opens one panel with the map.
         viewCount = 1;
         DefaultPanels.CopyTo(panelShow, 0);
@@ -1894,6 +2155,17 @@ public class NoiseLab : MonoBehaviour
                 case "c": ReadCurves(val); break;
                 case "cl": ReadClimate(val); break;
                 case "wd": ReadWind(val); break;
+                case "wf":
+                {
+                    string[] wf = val.Split(',');
+                    if (wf.Length == 2 && TryF(wf[0], out float sa) && TryF(wf[1], out float it))
+                    {
+                        windModel = WindModel.Flow;
+                        solidAbove = Mathf.Clamp01(sa);
+                        flowIterations = Mathf.Clamp(Mathf.RoundToInt(it), 10, 600);
+                    }
+                    break;
+                }
                 case "v": ReadView(val); break;
                 case "ov": ReadOverlays(val); sawOverlays = true; break;
                 case "cu": ReadClouds(val); break;
@@ -2012,6 +2284,12 @@ public class NoiseLab : MonoBehaviour
     static readonly string[] HeightLabels = { "One noise", "Splines" };
     static readonly string[] ColouringLabels = { "Bands", "Biomes" };
     static readonly string[] ClimateLabels = { "Temperature", "Moisture", "Wind", "Clouds" };
+    static readonly string[] WindModelLabels = { "Sweep", "Flow" };
+    static readonly string[] WindModelTips =
+    {
+        "v3: the wind blows straight over everything, in one direction.",
+        "v6: the same wind goes around the high land (Solid above). Show it with the Wind flow layer."
+    };
 
     // v4: tooltips, one per label above (same order). Hover a label (on the phone, hold the
     // finger on it) to read what it is and what it changes.
@@ -2727,6 +3005,19 @@ public class NoiseLab : MonoBehaviour
             windAngle = Mathf.Round(GUILayout.HorizontalSlider(windAngle, 0f, 360f, GUILayout.ExpandWidth(true)) / 15f) * 15f % 360f;
             GUILayout.Label(WindName(), GUILayout.Width(70f));
             GUILayout.EndHorizontal();
+            // v6 (1a): the model. The humidity still uses the sweep with Flow (step 1b).
+            GUILayout.BeginHorizontal(GUILayout.Height(30f));
+            GUILayout.Label(new GUIContent("Model", "How the wind meets the land. The sliders below act on the humidity the same way in both."), GUILayout.Width(110f));
+            windModel = (WindModel)GUILayout.Toolbar((int)windModel, Tipped(WindModelLabels, WindModelTips), GUILayout.Height(30f));
+            GUILayout.EndHorizontal();
+            if (windModel == WindModel.Flow)
+            {
+                solidAbove = R2(Slider("Solid above", solidAbove, 0f, 1f, "0.00",
+                    "Land higher than this is a wall: the air goes around it. Below it the air climbs, as with Sweep. Height rank: 0 = coast, 1 = highest land. 0 = all land is a wall; 1 = none."));
+                flowIterations = Mathf.RoundToInt(Slider("Passes", flowIterations, 10f, 600f, "0",
+                    "Solver passes (red + black). More = the air feels the walls from farther away and leaves less divergence, but costs more.") / 10f) * 10;
+                GUILayout.Label(FlowSummary());
+            }
             windStrength = R2(Slider("Weight", windStrength, 0f, 1f, "0.00", "How much the moisture carried by the wind adds to the land's moisture."));
             windLift = R2(Slider("Lift", windLift, 0f, 1f, "0.00", "Rain when the air climbs a slope. High = wet windward slopes and a dry rain shadow behind."));
             windDry = Mathf.Round(Slider("Dry", windDry, 0f, 0.05f, "0.000", "Moisture the air loses per cell over flat land.") * 1000f) / 1000f;
@@ -2889,6 +3180,7 @@ public class NoiseLab : MonoBehaviour
             GUILayout.Width(110f), GUILayout.Height(30f))) EdgeTest();
         GUILayout.EndHorizontal();
         if (edgeStatus.Length > 0) GUILayout.Label(edgeStatus);
+        if (FlowOn) GUILayout.Label(FlowSummary()); // v6 (1a)
 
         // v5 (B1): Burst on/off and the check.
         GUILayout.BeginHorizontal(GUILayout.Height(30f));
@@ -2924,7 +3216,7 @@ public class NoiseLab : MonoBehaviour
         climateMargin = keepMargin;
         offset = keepOffset;
         dirty = true;
-        edgeStatus = $"Edge test at {resolution}², wind {(wind ? WindName() : "off")}, land of the overlap:\n" +
+        edgeStatus = $"Edge test at {resolution}², wind {(wind ? WindName() + (FlowOn ? " (flow)" : "") : "off")}, land of the overlap:\n" +
                      $"  no margin: {off}\n  margin:    {on}";
         Debug.Log($"[NoiseLab] {edgeStatus}");
     }
@@ -2943,6 +3235,9 @@ public class NoiseLab : MonoBehaviour
         var m0 = (float[])moist.Clone();
         var b0 = new BiomeType[n * n];
         for (int i = 0; i < n * n; i++) b0[i] = BiomeAt(i);
+        bool flow = FlowOn;
+        var u0 = flow ? (float[])windU.Clone() : null;
+        var v0 = flow ? (float[])windV.Clone() : null;
 
         offset = start + new Vector2(sx, sy) / n;
         var watch = System.Diagnostics.Stopwatch.StartNew();
@@ -2951,15 +3246,24 @@ public class NoiseLab : MonoBehaviour
         float ms = (float)watch.Elapsed.TotalMilliseconds;
 
         // New cell (x, y) is old cell (x + sx, y + sy).
-        double sum = 0.0;
-        float worst = 0f;
-        int land = 0, changed = 0;
+        double sum = 0.0, flowSum = 0.0;
+        float worst = 0f, flowWorst = 0f;
+        int land = 0, changed = 0, cells = 0;
         for (int y = Mathf.Max(0, -sy); y < Mathf.Min(n, n - sy); y++)
             for (int x = Mathf.Max(0, -sx); x < Mathf.Min(n, n - sx); x++)
             {
                 int i = y * n + x;
-                if (values[i] < threshold) continue;
                 int j = (y + sy) * n + x + sx;
+                if (flow)
+                {
+                    // v6: how much the wind changes in the overlap (|Δ velocity|, 1 = background speed)
+                    float du = windU[i] - u0[j], dv = windV[i] - v0[j];
+                    float d2 = Mathf.Sqrt(du * du + dv * dv);
+                    flowSum += d2;
+                    flowWorst = Mathf.Max(flowWorst, d2);
+                    cells++;
+                }
+                if (values[i] < threshold) continue;
                 float d = Mathf.Abs(moist[i] - m0[j]);
                 sum += d;
                 worst = Mathf.Max(worst, d);
@@ -2968,7 +3272,8 @@ public class NoiseLab : MonoBehaviour
             }
         if (land == 0) return "no land in the overlap";
         return $"moisture Δ mean {sum / land:0.0000}, max {worst:0.000}; biome changed {100f * changed / land:0.00} % of {land} cells; " +
-               $"{ms:0} ms (grid {extW}×{extH})";
+               $"{ms:0} ms (grid {extW}×{extH})" +
+               (flow && cells > 0 ? $"; wind Δ mean {flowSum / cells:0.0000}, max {flowWorst:0.000}" : "");
     }
 
     static int IntSlider(string label, int value, int min, int max, string tip) =>
@@ -3426,5 +3731,130 @@ struct ViewClimateJob : IJobFor
                     + (wind ? windStrength * a : 0f);
             moist[i] = math.saturate(m);
         }
+    }
+}
+
+// ---------------------------------------------------------------------------------
+// v6 (step 1a): the flow around the high land, as four jobs (see NoiseLab.Flow). Each
+// writes only its own row; NoiseLab runs the same Execute in a plain loop with Burst off.
+// Flow grid: fw × fh cells; u faces (fw + 1) × fh (u[y·(fw+1) + i] sits between cells
+// i − 1 and i), v faces fw × (fh + 1) (v[r·fw + x] sits between rows r − 1 and r).
+// Outside the grid: open, pressure 0.
+// ---------------------------------------------------------------------------------
+
+// Wall cells: mean land rank of the 2 × 2 climate cells above solidAbove.
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct FlowMaskJob : IJobFor
+{
+    [ReadOnly] public NativeArray<float> rank;
+    [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<byte> solid;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int w, h, fw, ox, oy; // ox, oy: the blocks start one cell before the grid (world parity)
+    public float solidAbove;
+
+    public void Execute(int fy)
+    {
+        if (fy == 0) BurstProbe.Check(probe);
+        for (int fx = 0; fx < fw; fx++)
+        {
+            float sum = 0f;
+            int count = 0;
+            for (int dy = 0; dy < 2; dy++)
+                for (int dx = 0; dx < 2; dx++)
+                {
+                    int x = 2 * fx + dx - ox, y = 2 * fy + dy - oy;
+                    if (x < 0 || y < 0 || x >= w || y >= h) continue;
+                    sum += rank[y * w + x];
+                    count++;
+                }
+            solid[fy * fw + fx] = (byte)(sum / count > solidAbove ? 1 : 0);
+        }
+    }
+}
+
+// Background wind (bu, bv) on every face, 0 on the faces that touch a wall, and the
+// divergence this leaves in each open cell (computed from the walls alone, so no row
+// reads faces another row is writing). Index r = 0..fh: u row r (if r < fh), v row r.
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct FlowInitJob : IJobFor
+{
+    [ReadOnly] public NativeArray<byte> solid;
+    [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> u, v, div;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int fw, fh;
+    public float bu, bv;
+
+    bool Wall(int x, int y) => x >= 0 && y >= 0 && x < fw && y < fh && solid[y * fw + x] != 0;
+    float U(int i, int y) => Wall(i - 1, y) || Wall(i, y) ? 0f : bu;
+    float V(int x, int r) => Wall(x, r - 1) || Wall(x, r) ? 0f : bv;
+
+    public void Execute(int r)
+    {
+        if (r == 0) BurstProbe.Check(probe);
+        if (r < fh)
+        {
+            for (int i = 0; i <= fw; i++) u[r * (fw + 1) + i] = U(i, r);
+            for (int x = 0; x < fw; x++)
+                div[r * fw + x] = Wall(x, r) ? 0f : U(x + 1, r) - U(x, r) + V(x, r + 1) - V(x, r);
+        }
+        for (int x = 0; x < fw; x++) v[r * fw + x] = V(x, r);
+    }
+}
+
+// One colour of a red-black SOR pass: the cells with (x + y) % 2 == parity. Each reads
+// only cells of the other colour, so rows can run in parallel with no race and the
+// result does not depend on the order. Open neighbours count; outside the grid is open
+// with p = 0; walls are skipped (Neumann). p_new = (Σ p_open − div) / n_open.
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct FlowSorJob : IJobFor
+{
+    [ReadOnly] public NativeArray<byte> solid;
+    [ReadOnly] public NativeArray<float> div;
+    [NativeDisableParallelForRestriction] public NativeArray<float> p;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int fw, fh, parity;
+    public float omega;
+
+    public void Execute(int y)
+    {
+        if (y == 0) BurstProbe.Check(probe);
+        for (int x = (y + parity) & 1; x < fw; x += 2)
+        {
+            int c = y * fw + x;
+            if (solid[c] != 0) continue;
+            float sum = 0f;
+            int n = 0;
+            if (x == 0) n++; else if (solid[c - 1] == 0) { sum += p[c - 1]; n++; }
+            if (x == fw - 1) n++; else if (solid[c + 1] == 0) { sum += p[c + 1]; n++; }
+            if (y == 0) n++; else if (solid[c - fw] == 0) { sum += p[c - fw]; n++; }
+            if (y == fh - 1) n++; else if (solid[c + fw] == 0) { sum += p[c + fw]; n++; }
+            if (n == 0) continue;
+            float pNew = (sum - div[c]) / n;
+            p[c] += omega * (pNew - p[c]);
+        }
+    }
+}
+
+// Faces minus the pressure gradient (faces next to a wall stay 0). Index r as FlowInitJob.
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct FlowApplyJob : IJobFor
+{
+    [ReadOnly] public NativeArray<byte> solid;
+    [ReadOnly] public NativeArray<float> p;
+    [NativeDisableParallelForRestriction] public NativeArray<float> u, v;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int fw, fh;
+
+    bool Wall(int x, int y) => x >= 0 && y >= 0 && x < fw && y < fh && solid[y * fw + x] != 0;
+    float P(int x, int y) => x >= 0 && y >= 0 && x < fw && y < fh ? p[y * fw + x] : 0f;
+
+    public void Execute(int r)
+    {
+        if (r == 0) BurstProbe.Check(probe);
+        if (r < fh)
+            for (int i = 0; i <= fw; i++)
+                if (!Wall(i - 1, r) && !Wall(i, r)) u[r * (fw + 1) + i] -= P(i, r) - P(i - 1, r);
+        for (int x = 0; x < fw; x++)
+            if (!Wall(x, r - 1) && !Wall(x, r)) v[r * fw + x] -= P(x, r) - P(x, r - 1);
     }
 }
