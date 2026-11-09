@@ -99,4 +99,14 @@ build Android y las mediciones.
 - **1a hecha** (`4de55fc`, 1a + 1a.2): proyección de presión, capa *Wind flow*, Burst check y
   Edge test. Probada en el editor por Claudio.
 - **1a.3** (rejilla a 1/4, 200 pasadas, un cuarto al arrastrar): editor 31,5 ms, divergencia
-  0,107 → 0,017, Edge test viento Δ media 0,041, máx 0,64; Burst dos veces idéntico. Falta el S22.
+  0,107 → 0,017, Edge test viento Δ media 0,041, máx 0,64; Burst dos veces idéntico. S22: flujo
+  8,9 ms, divergencia 0,101 → 0,009, Edge test viento Δ media 0,135, máx 1,06.
+- **Paso de interfaz** (`30c06a0`): panel a pantalla completa, códigos guardados, latitud y
+  medias de la vista. Probado en el editor y el S22.
+- **1b hecha** (la humedad sigue al flujo por barrido rápido, 3 rondas; el flujo corre dentro
+  del clima). Probada por Claudio en el editor y el S22. S22: aire 62–102 ms (el flujo, 9–11 ms;
+  clima total ~125 ms), cambio máximo de la última ronda 0,22–0,29 (no converge del todo); Edge
+  test con margen: humedad Δ media 0,009, máx 0,18, biomas cambiados 3,5 % (sin margen 18,6 %);
+  Burst check: humedad 1,8e-7, aire 3e-7, caras del flujo 0 distintas.
+- **Siguiente propuesto (1b.2):** el aire en la rejilla del flujo (1/4) e interpolado, para el
+  coste; medir por qué no converge (cuántas celdas siguen cambiando).
