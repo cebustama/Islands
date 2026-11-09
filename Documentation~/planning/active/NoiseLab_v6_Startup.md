@@ -80,3 +80,15 @@ build Android y las mediciones.
 - `Documentation~/planning/active/Fluids_Module_Design.md`.
 - `Documentation~/research/fluidos-lague/tutorial.html`, `notas-tecnicas.md`.
 - `Documentation~/changelog-ssot.md`, `CURRENT_STATE.md` (al cerrar).
+
+## Decisiones (Claudio, 2026-11-09, al arrancar)
+- Orden: 1 (viento que rodea el relieve), 2 (corrientes marinas), luego 3–4 si sobra.
+- Resolución del fluido: la mitad de la rejilla del clima, interpolada a la vista; medir
+  también a resolución completa en el S22.
+- Método del paso 1: «proyección única» (presión, rojo-negro + SOR) y el barrido de la v3 (A)
+  como opción del menú para comparar. C (ψ × rampa) queda para después si hace falta.
+- Transporte de la humedad: barrido rápido (fast sweeping, Zhao 2005), en un hilo como `WindJob`.
+- Arranque: suite 415/415 por el puente (2026-11-09 09:49), git limpio en `6c49239`.
+- Tangente apuntada (Claudio: «para después»): dos capas de nubes (baja que sigue el viento
+  que rodea, alta que lo ignora) y la Alpujarra como prueba de relieve, en
+  `research/2026-11-09-alpujarra-nubes-y-relieve.md`.
