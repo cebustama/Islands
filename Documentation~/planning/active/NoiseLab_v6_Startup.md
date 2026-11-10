@@ -108,5 +108,17 @@ build Android y las mediciones.
   clima total ~125 ms), cambio máximo de la última ronda 0,22–0,29 (no converge del todo); Edge
   test con margen: humedad Δ media 0,009, máx 0,18, biomas cambiados 3,5 % (sin margen 18,6 %);
   Burst check: humedad 1,8e-7, aire 3e-7, caras del flujo 0 distintas.
-- **Siguiente propuesto (1b.2):** el aire en la rejilla del flujo (1/4) e interpolado, para el
-  coste; medir por qué no converge (cuántas celdas siguen cambiando).
+- **1b.2 hecha** (`aa7896d`): el aire en la rejilla del flujo con volúmenes finitos sobre las
+  caras, hasta que se asienta (1e-4, tope 64 rondas). S22 (export 2026-11-10 14:26): aire 29
+  rondas, 23,3 ms (antes 62–102), 0 celdas sin asentar; clima 53,5 ms (antes ~125); Edge test
+  con margen: biomas 0,30 % (antes 3,5 %); Burst check: 0 diferencias en flujo y aire.
+  Editor: C# frente a Burst difieren en el aire hasta 2,8e-4 (las caras ya difieren en el
+  editor). **Paso 1 cerrado.**
+- **Paso de interfaz 2:** Code → *Set as default* / *Clear default* (PlayerPrefs, por
+  dispositivo), *Copy results* en Perf y *Copy* en el resumen del viento; el export de Perf
+  lleva la línea del flujo. Probado en el editor y el S22.
+- **Idea de Claudio (2026-11-10), fuera de la v6:** una escena índice (menú principal) para
+  elegir entre labs, cada uno en su escena y su código; primer lab nuevo: placas tectónicas
+  con Voronoi y su movimiento, que guíen cordilleras y quebradas, para integrarlo después
+  como fase del mundo (enlaza con la fase K de `PCG_Roadmap.md` y `Stage_Tectonics2D` del
+  backlog de la playlist).

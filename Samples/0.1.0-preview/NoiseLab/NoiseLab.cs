@@ -210,6 +210,9 @@ public class NoiseLab : MonoBehaviour
     void Start()
     {
         Application.targetFrameRate = 60;
+        // v6 UI: this device's default map (Code > Set as default) over the scene's values.
+        string start = PlayerPrefs.GetString(DefaultKey, "");
+        if (start.Length > 0 && ApplyCode(start) != null) PlayerPrefs.DeleteKey(DefaultKey); // unreadable: forget it
         var cam = Camera.main;
         if (cam != null)
         {
@@ -311,6 +314,7 @@ public class NoiseLab : MonoBehaviour
         sb.AppendLine($"fields sampled per view: {ActiveFieldCount()} (height: {heightSource}, colour: {colouring})");
         sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes + ", " + GridNoiseJob<Simplex2D<Simplex>>.StateName(cloudBurstState) : "off")}");
         sb.AppendLine($"climate margin: {(climateMargin ? "on" : "off")} | cells L/R/B/T {mL}/{mR}/{mB}/{mT} at {sampleN} | climate grid {extW}x{extH} | last climate {F(R1(climateMs))} ms, {GridNoiseJob<Simplex2D<Simplex>>.StateName(climateBurstState)}");
+        if (FlowOn) sb.AppendLine($"flow: {FlowSummary()}");
         if (edgeStatus.Length > 0) sb.AppendLine($"edge test: {edgeStatus.Replace("\n", " | ")}");
         sb.AppendLine($"burst: {(useBurst ? "on" : "off")} | last sampling {GridNoiseJob<Simplex2D<Simplex>>.StateName(burstState)} | jobs workers {Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount}");
         if (burstStatus.Length > 0) sb.AppendLine($"burst check: {burstStatus}");
@@ -3222,7 +3226,7 @@ public class NoiseLab : MonoBehaviour
             windAngle = Mathf.Round(GUILayout.HorizontalSlider(windAngle, 0f, 360f, GUILayout.ExpandWidth(true)) / 15f) * 15f % 360f;
             GUILayout.Label(WindName(), GUILayout.Width(70f));
             GUILayout.EndHorizontal();
-            // v6 (1a): the model. The humidity still uses the sweep with Flow (step 1b).
+            // v6 (1a, 1b): the model. With Flow the humidity follows the flow too.
             GUILayout.BeginHorizontal(GUILayout.Height(30f));
             GUILayout.Label(new GUIContent("Model", "How the wind meets the land. The sliders below act on the humidity the same way in both."), GUILayout.Width(110f));
             windModel = (WindModel)GUILayout.Toolbar((int)windModel, Tipped(WindModelLabels, WindModelTips), GUILayout.Height(30f));
@@ -3234,6 +3238,8 @@ public class NoiseLab : MonoBehaviour
                 flowIterations = Mathf.RoundToInt(Slider("Passes", flowIterations, 10f, 600f, "0",
                     "Solver passes (red + black). More = the air feels the walls from farther away and leaves less divergence, but costs more.") / 10f) * 10;
                 GUILayout.Label(FlowSummary());
+                if (GUILayout.Button(new GUIContent("Copy", "Copy this summary as text."), GUILayout.Width(90f), GUILayout.Height(30f)))
+                    GUIUtility.systemCopyBuffer = FlowSummary();
             }
             windStrength = R2(Slider("Weight", windStrength, 0f, 1f, "0.00", "How much the moisture carried by the wind adds to the land's moisture."));
             windLift = R2(Slider("Lift", windLift, 0f, 1f, "0.00", "Rain when the air climbs a slope. High = wet windward slopes and a dry rain shadow behind."));
@@ -3326,6 +3332,26 @@ public class NoiseLab : MonoBehaviour
             GUIUtility.keyboardControl = 0;
         }
         GUILayout.EndHorizontal();
+
+        // v6 UI: the map the app opens with on this device (PlayerPrefs). Without one, the
+        // values of the NoiseLab component in the scene (the Inspector) are the default.
+        bool hasDefault = PlayerPrefs.HasKey(DefaultKey);
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button(new GUIContent("Set as default", "Open the app with the current map on this device (its whole code: noises, curves, climate, wind, panels)."), GUILayout.Height(40f)))
+        {
+            PlayerPrefs.SetString(DefaultKey, BuildCode());
+            PlayerPrefs.Save();
+            codeStatus = "This map is now the default on this device.";
+        }
+        GUI.enabled = hasDefault;
+        if (GUILayout.Button(new GUIContent("Clear default", "Open the app with the scene's values again."), GUILayout.Height(40f)))
+        {
+            PlayerPrefs.DeleteKey(DefaultKey);
+            PlayerPrefs.Save();
+            codeStatus = "Default cleared: the app opens with the scene's values.";
+        }
+        GUI.enabled = true;
+        GUILayout.EndHorizontal();
         GUILayout.Label(codeStatus);
         SavedCodes();
     }
@@ -3333,6 +3359,7 @@ public class NoiseLab : MonoBehaviour
     // v6 UI: codes saved on this device (PlayerPrefs: the editor and the S22 each keep their
     // own list). One line per entry, "name<TAB>code"; codes never hold tabs or new lines.
     const string SavedKey = "NoiseLab.savedCodes";
+    const string DefaultKey = "NoiseLab.defaultCode";
     readonly System.Collections.Generic.List<(string name, string code)> saved = new();
     bool savedRead;
     string saveName = "";
@@ -3495,6 +3522,18 @@ public class NoiseLab : MonoBehaviour
             GUILayout.Width(110f), GUILayout.Height(30f))) BurstCheck();
         GUILayout.EndHorizontal();
         if (burstStatus.Length > 0) GUILayout.Label(burstStatus);
+
+        // v6 UI: the labels above cannot be selected, so a button copies them.
+        if (GUILayout.Button(new GUIContent("Copy results", "Copy the edge test, the flow summary and the Burst check as text."), GUILayout.Height(30f)))
+        {
+            var sb = new System.Text.StringBuilder();
+            if (edgeStatus.Length > 0) sb.AppendLine(edgeStatus);
+            if (FlowOn) sb.AppendLine(FlowSummary());
+            if (burstStatus.Length > 0) sb.AppendLine(burstStatus);
+            sb.AppendLine("code: " + BuildCode());
+            GUIUtility.systemCopyBuffer = sb.ToString();
+            perfStatus = "Results copied.";
+        }
     }
 
     // ---------------------------------------------------------------------------------
