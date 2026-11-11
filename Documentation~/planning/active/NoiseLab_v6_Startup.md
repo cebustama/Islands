@@ -122,3 +122,21 @@ build Android y las mediciones.
   con Voronoi y su movimiento, que guíen cordilleras y quebradas, para integrarlo después
   como fase del mundo (enlaza con la fase K de `PCG_Roadmap.md` y `Stage_Tectonics2D` del
   backlog de la playlist).
+- **2a, primera prueba (2026-11-11):** con «West current» 0,1, ω 1,85 se disparó (residual
+  36,9; fastest 2398×). Reproducido fuera de Unity; arreglo: ω 1,7 y, si no se asienta,
+  reintento con ω 1,4 y el doble de pasadas, con el estado en el resumen. Probado por Claudio
+  en el editor: residual 0,0000, fastest 5,4×, ω 1,7 sin reintento; Burst check del océano
+  4e-5, Burst dos veces 0. Añadido *Zoom out ×4* (las corrientes en 4×4 vistas, a pantalla
+  completa). S22: funciona (77 y 68 ms la vista ×4). **2a cerrada.** Siguiente sesión:
+  continentes, arranque en `NoiseLab_v6_Continents_Startup.md`.
+- **Decisión de Claudio (2026-11-11):** la próxima sesión, **continentes** (antes de la 2b:
+  los giros y Humboldt necesitan cuencas). Pista: la frecuencia de los campos es entera ≥ 1
+  por vista; un continente de ~10 vistas pide C a ~0,1 por vista (frecuencias fraccionarias).
+- **Ideas de Claudio (2026-11-11), fuera de la v6:** (a) continentes: el ruido hace
+  archipiélagos, y los giros y Humboldt necesitan cuencas y un continente al este del océano;
+  va con el lab de placas. (b) Zoom (rueda / pellizcar). Continuo en NoiseLab = escala de la
+  ventana sobre el mismo mundo (no la frecuencia, que cambia el mundo); topa con PL-7 del
+  roadmap (el clima se mide en celdas: no es neutro al detalle). Discreto, con tres niveles
+  mundo → país → celda (roguelike o acción tipo Zelda): es la Phase W (hoy dos niveles,
+  mundo → local) con un nivel intermedio, y la cascada de escalas de
+  `research/2026-11-05-mundo-finito-o-infinito.md`.

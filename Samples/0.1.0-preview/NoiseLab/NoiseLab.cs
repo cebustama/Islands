@@ -150,6 +150,8 @@ public class NoiseLab : MonoBehaviour
     [SerializeField] WindModel windModel = WindModel.Sweep;
     [SerializeField, Range(0f, 1f)] float solidAbove = 0.5f;             // land rank above which the air goes around
     [SerializeField, Range(10, 600)] int flowIterations = 200;           // red-black SOR passes (red + black)
+    [SerializeField] bool ocean = false;                                 // v6 (2a): ocean currents
+    [SerializeField, Range(0.1f, 1f)] float oceanWidth = 0.25f;          // western current width, view widths
 
     const float LatitudeSpan = 8f;   // view widths from the equator to a pole
     const float CoastUnits = 256f;   // coast distance unit: one cell of a 256 map
@@ -315,6 +317,7 @@ public class NoiseLab : MonoBehaviour
         sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes + ", " + GridNoiseJob<Simplex2D<Simplex>>.StateName(cloudBurstState) : "off")}");
         sb.AppendLine($"climate margin: {(climateMargin ? "on" : "off")} | cells L/R/B/T {mL}/{mR}/{mB}/{mT} at {sampleN} | climate grid {extW}x{extH} | last climate {F(R1(climateMs))} ms, {GridNoiseJob<Simplex2D<Simplex>>.StateName(climateBurstState)}");
         if (FlowOn) sb.AppendLine($"flow: {FlowSummary()}");
+        if (colouring == Colouring.Biomes && ocean) sb.AppendLine($"ocean: {OceanSummary()}");
         if (edgeStatus.Length > 0) sb.AppendLine($"edge test: {edgeStatus.Replace("\n", " | ")}");
         sb.AppendLine($"burst: {(useBurst ? "on" : "off")} | last sampling {GridNoiseJob<Simplex2D<Simplex>>.StateName(burstState)} | jobs workers {Unity.Jobs.LowLevel.Unsafe.JobsUtility.JobWorkerCount}");
         if (burstStatus.Length > 0) sb.AppendLine($"burst check: {burstStatus}");
@@ -475,9 +478,7 @@ public class NoiseLab : MonoBehaviour
     void Calibrate()
     {
         if (cutsFrom != CutsFrom.World) return;
-        string key = heightSource == HeightSource.OneNoise
-            ? FieldKey(FHeight)
-            : $"S|{FieldKey(FCont)}|{FieldKey(FEros)}|{FieldKey(FPeaks)}|{CurvesCode()}";
+        string key = HeightKey();
         if (key == worldKey && worldSorted != null) return;
         worldKey = key;
 
@@ -499,6 +500,11 @@ public class NoiseLab : MonoBehaviour
         System.Array.Sort(worldSorted);
         calibrateMs = (float)watch.Elapsed.TotalMilliseconds;
     }
+
+    // Everything the height depends on (noises and curves), as text: same key, same heights.
+    string HeightKey() => heightSource == HeightSource.OneNoise
+        ? FieldKey(FHeight)
+        : $"S|{FieldKey(FCont)}|{FieldKey(FEros)}|{FieldKey(FPeaks)}|{CurvesCode()}";
 
     void CutGroup(float[] sorted, float[] shares, int start, int end, float top, int firstEdge)
     {
@@ -712,7 +718,7 @@ public class NoiseLab : MonoBehaviour
         }
         burstStatus = $"Burst check at {n}², {ActiveFieldCount()} field(s): managed {managedMs:0} ms, Burst {burstMs:0} ms " +
                       $"({(burstMs > 0 ? managedMs / burstMs : 0):0.0}×, {GridNoiseJob<Simplex2D<Simplex>>.StateName(state)}); " +
-                      $"values that differ {differ} of {total}, max |Δ| {worst:G3}\n" + ClimateCheck() + FlowCheck();
+                      $"values that differ {differ} of {total}, max |Δ| {worst:G3}\n" + ClimateCheck() + FlowCheck() + OceanCheck();
         dirty = true; // repaint with the path in use
         Debug.Log($"[NoiseLab] {burstStatus}");
     }
@@ -892,6 +898,7 @@ public class NoiseLab : MonoBehaviour
         var watch = System.Diagnostics.Stopwatch.StartNew();
         if (useBurst) ClimateBurst(); else ClimateManaged();
         climateMs = (float)watch.Elapsed.TotalMilliseconds; // v6 1b: includes the flow and its air
+        if (ocean) Ocean(); // v6 (2a): its own world grid, cached
         ViewMeans();
     }
 
@@ -1467,6 +1474,438 @@ public class NoiseLab : MonoBehaviour
         $"air {flowAirRounds} rounds (max {FlowAirMaxRounds}), {flowAirMs:0.0} ms; last round: largest change {flowAirMaxChange:0.00000}, " +
         $"mean {flowAirMeanChange:0.000000}, cells over 0.01: {flowAirUnsettled}";
 
+    // ---------------------------------------------------------------------------------
+    // v6 (2a): ocean currents, the wind-driven circulation of Stommel (1948).
+    // The planet's winds (easterly trades near the equator, westerlies at mid latitudes,
+    // polar easterlies) drag the sea surface. Where that drag turns (its curl), the water is
+    // forced north or south, and the planet's spin, which matters more toward the poles
+    // (beta = how fast the Coriolis parameter grows with latitude), balances it: the
+    // interior of every ocean drifts slowly toward the equator in the subtropics (Sverdrup).
+    // The water must come back, and it does along the WEST side of each basin, in a narrow
+    // fast current (Gulf Stream, Kuroshio, Brazil); the east side keeps the slow broad drift
+    // toward the equator (California, Canary, Humboldt). Friction (eps) sets the width of
+    // the western current; here it is a slider in view widths.
+    //   eps · ∇²psi + beta(y) · dpsi/dx = curl tau(y),   u = −dpsi/dy, v = dpsi/dx
+    // psi is the streamfunction: water flows along its contour lines, faster where they
+    // crowd. psi = 0 on land (no water crosses the coast) and outside the grid.
+    // - Scale: a gyre spans half an ocean, far more than the view (about 11° of latitude).
+    //   So the ocean has its own coarse grid, fixed to the world: regions of 16 × 16 view
+    //   widths (pole to pole in y), OceanPerView cells per view width, one every 8 views
+    //   in x, each overlapping its neighbours by half. A point is the blend of the two
+    //   regions that hold it, weighted by how far it is from their edges (their walls fall
+    //   where their weight is 0). Nothing depends on the view: dragging never changes the
+    //   currents. A region is computed once and cached (the last 4).
+    // - Land: each cell is sea if at least half of its 2 × 2 height samples are below the
+    //   sea level. Islands smaller than a cell disappear for the ocean.
+    // - Solver: Gauss–Seidel by lines with over-relaxation. Rows in two colours (even, odd)
+    //   in parallel; each row is swept east to west, the direction the beta term carries
+    //   information (the Sverdrup interior is integrated from the east coast), so most of
+    //   the basin is right after one pass. beta·dpsi/dx is one-sided (upwind, east): the
+    //   scheme stays stable however thin the western current. Measured offline (2a,
+    //   rectangular and noise coasts, 128², west current 0.1–1): ω 1.85 blew up with a
+    //   narrow current; ω 1.7 converged in all; a region that does not is solved again.
+    // - Units: lengths in view widths; wind drag tau0 = 1/6 so the interior (Sverdrup)
+    //   speed is about 1. Speeds are reported as multiples of it.
+    // Known limit (2a): every land mass has psi = 0. Between two land masses no net water
+    // passes (the island rule of Godfrey 1989 would let it); to measure before fixing.
+    // ---------------------------------------------------------------------------------
+
+    const int OceanPerView = 8;
+    const float OceanStride = 8f;                  // view widths between region centres
+    const int OceanN = 16 * OceanPerView;          // cells per side of a region
+    const int OceanPasses = 200;
+    static readonly float[] OceanOmegas = { 1.7f, 1.4f }; // second try: safe, twice the passes
+    const float OceanTolerance = 0.01f;
+    const float OceanTau = 1f / 6f;
+    const int OceanCacheSize = 4;
+
+    class OceanRegion
+    {
+        public int index;
+        public string key;
+        public float[] u, v;
+        public float ms, residual, omega, fastest, seaShare;
+        public int state;
+    }
+
+    readonly System.Collections.Generic.List<OceanRegion> oceanRegions = new();
+    float[] currentU, currentV;  // view cells
+    float oceanMs, oceanLastRegionMs;
+    string oceanRegionsUsed = "";
+
+    string OceanKey(int index) => $"{HeightKey()}|{F(threshold)}|{F(oceanWidth)}|{index}";
+
+    OceanRegion GetOceanRegion(int index)
+    {
+        string key = OceanKey(index);
+        foreach (var r in oceanRegions)
+            if (r.key == key) return r;
+        var region = ComputeOceanRegion(index, useBurst);
+        oceanLastRegionMs = region.ms;
+        oceanRegions.Insert(0, region);
+        if (oceanRegions.Count > OceanCacheSize) oceanRegions.RemoveAt(oceanRegions.Count - 1);
+        return region;
+    }
+
+    static float OceanLatitude(float y) => 0.5f * Mathf.PI * Mathf.Min(Mathf.Abs(y) / LatitudeSpan, 1f);
+    static float OceanWindX(float y) => -OceanTau * Mathf.Sin(6f * OceanLatitude(y)); // trades, westerlies, polar easterlies
+
+    OceanRegion ComputeOceanRegion(int index, bool burst)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        int n = OceanN, cells = n * n;
+        float h = 1f / OceanPerView;
+        float x0 = OceanStride * index - 8f, y0 = -LatitudeSpan;
+
+        // Land and sea: 2 × 2 height samples per cell, the same noises and curves as the view.
+        int sn = 2 * n;
+        float step = 0.5f * h;
+        var src = new float[FieldCount][];
+        int keepState = burstState;
+        foreach (int k in HeightFields())
+        {
+            src[k] = new float[sn * sn];
+            SampleInto(src[k], GetField(k), FieldSeed(k), sn, x0 + 0.5f * step, y0 + 0.5f * step, step);
+        }
+        burstState = keepState; // the "last sampling" label is about the view
+        var heights = new float[sn * sn];
+        CombineHeight(heights, src);
+        var sea = new byte[cells];
+        int seaCount = 0;
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                int below = 0;
+                for (int dy = 0; dy < 2; dy++)
+                    for (int dx = 0; dx < 2; dx++)
+                        if (heights[(2 * y + dy) * sn + 2 * x + dx] < threshold) below++;
+                if (below >= 2) { sea[y * n + x] = 1; seaCount++; }
+            }
+
+        // Per row: the drag's curl (centred difference of the zonal wind) and beta.
+        var force = new float[n];
+        var beta = new float[n];
+        for (int y = 0; y < n; y++)
+        {
+            float yc = y0 + (y + 0.5f) * h;
+            force[y] = -(OceanWindX(yc + 0.5f * h) - OceanWindX(yc - 0.5f * h)) / h;
+            beta[y] = Mathf.Cos(OceanLatitude(yc)) * Mathf.PI / (2f * LatitudeSpan);
+        }
+        float eps = oceanWidth * Mathf.PI / (2f * LatitudeSpan); // western current width × beta at the equator
+
+        var nSea = new NativeArray<byte>(sea, Allocator.TempJob);
+        var nForce = new NativeArray<float>(force, Allocator.TempJob);
+        var nBeta = new NativeArray<float>(beta, Allocator.TempJob);
+        var nPsi = new NativeArray<float>(cells, Allocator.TempJob);
+        var probe = new NativeArray<int>(1, Allocator.TempJob);
+        var psi = new float[cells];
+        int state = GridNoiseJob<Simplex2D<Simplex>>.Off;
+        float residual = 0f, omegaUsed = 0f;
+        try
+        {
+            // 2a fix: over-relaxation can blow up on this non-symmetric equation (ω 1.85 did,
+            // with a narrow west current and an irregular coast). ω 1.7 converged in every
+            // offline case; if a region still does not settle, it is solved again with a
+            // safe ω and twice the passes. Deterministic: same inputs, same attempts.
+            foreach (float omega in OceanOmegas)
+            {
+                int passes = omega == OceanOmegas[0] ? OceanPasses : 2 * OceanPasses;
+                for (int i = 0; i < cells; i++) nPsi[i] = 0f;
+                var sor = new OceanSorJob { sea = nSea, force = nForce, beta = nBeta, psi = nPsi, probe = probe, n = n, eps = eps, h = h, omega = omega };
+                int rows = (n + 1) / 2;
+                if (burst)
+                {
+                    JobHandle handle = default;
+                    for (int p = 0; p < passes; p++)
+                    {
+                        sor.parity = 0; handle = sor.ScheduleParallel(rows, 4, handle);
+                        sor.parity = 1; handle = sor.ScheduleParallel(rows, 4, handle);
+                    }
+                    handle.Complete();
+                    state = probe[0] != 0 ? GridNoiseJob<Simplex2D<Simplex>>.Managed : GridNoiseJob<Simplex2D<Simplex>>.Compiled;
+                }
+                else
+                {
+                    for (int p = 0; p < passes; p++)
+                    {
+                        sor.parity = 0; for (int r = 0; r < rows; r++) sor.Execute(r);
+                        sor.parity = 1; for (int r = 0; r < rows; r++) sor.Execute(r);
+                    }
+                }
+                nPsi.CopyTo(psi);
+                residual = OceanResidual(psi, sea, force, beta, n, eps, h);
+                omegaUsed = omega;
+                if (residual < OceanTolerance) break;
+            }
+        }
+        finally
+        {
+            nSea.Dispose(); nForce.Dispose(); nBeta.Dispose(); nPsi.Dispose(); probe.Dispose();
+        }
+
+        // Velocities at the cell centres (centred differences; land and outside: psi = 0)
+        // and the fastest water.
+        float P(int x, int y) => x < 0 || y < 0 || x >= n || y >= n ? 0f : psi[y * n + x];
+        var u = new float[cells];
+        var v = new float[cells];
+        float fastest = 0f;
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                int i = y * n + x;
+                if (sea[i] == 0) continue;
+                u[i] = -(P(x, y + 1) - P(x, y - 1)) / (2f * h);
+                v[i] = (P(x + 1, y) - P(x - 1, y)) / (2f * h);
+                fastest = Mathf.Max(fastest, u[i] * u[i] + v[i] * v[i]);
+            }
+
+        return new OceanRegion
+        {
+            index = index, key = OceanKey(index), u = u, v = v, state = state,
+            ms = (float)watch.Elapsed.TotalMilliseconds,
+            residual = residual, omega = omegaUsed,
+            fastest = Mathf.Sqrt(fastest),
+            seaShare = (float)seaCount / cells
+        };
+    }
+
+    // Mean |error of the equation| over the sea, relative to the mean |wind curl|.
+    static float OceanResidual(float[] psi, byte[] sea, float[] force, float[] beta, int n, float eps, float h)
+    {
+        float P(int x, int y) => x < 0 || y < 0 || x >= n || y >= n ? 0f : psi[y * n + x];
+        double res = 0.0, scale = 0.0;
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                if (sea[y * n + x] == 0) continue;
+                float c = P(x, y), e = P(x + 1, y), w = P(x - 1, y), no = P(x, y + 1), so = P(x, y - 1);
+                res += Mathf.Abs(eps * (e + w + no + so - 4f * c) / (h * h) + beta[y] * (e - c) / h - force[y]);
+                scale += Mathf.Abs(force[y]);
+            }
+        return scale > 0.0 ? (float)(res / scale) : 0f;
+    }
+
+    // Bilinear between the region's cell centres at world point (x, y), in view widths.
+    static void SampleRegion(OceanRegion r, float x, float y, out float u, out float v)
+    {
+        int n = OceanN;
+        float gx = Mathf.Clamp((x - (OceanStride * r.index - 8f)) * OceanPerView - 0.5f, 0f, n - 1);
+        float gy = Mathf.Clamp((y + LatitudeSpan) * OceanPerView - 0.5f, 0f, n - 1);
+        int x0 = Mathf.Min((int)gx, n - 2), y0 = Mathf.Min((int)gy, n - 2);
+        float tx = gx - x0, ty = gy - y0;
+        int i = y0 * n + x0;
+        u = Mathf.Lerp(Mathf.Lerp(r.u[i], r.u[i + 1], tx), Mathf.Lerp(r.u[i + n], r.u[i + n + 1], tx), ty);
+        v = Mathf.Lerp(Mathf.Lerp(r.v[i], r.v[i + 1], tx), Mathf.Lerp(r.v[i + n], r.v[i + n + 1], tx), ty);
+    }
+
+    // The currents at every view cell: the two regions around each column, blended.
+    void Ocean()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        int n = sampleN;
+        currentU = Ensure(currentU, n * n);
+        currentV = Ensure(currentV, n * n);
+        int first = Mathf.FloorToInt(offset.x / OceanStride), last = Mathf.FloorToInt((offset.x + 1f) / OceanStride) + 1;
+        var regions = new OceanRegion[last - first + 1];
+        for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
+        oceanRegionsUsed = first == last - 1 ? $"{first}, {last}" : $"{first} to {last}";
+        for (int x = 0; x < n; x++)
+        {
+            float wx = offset.x + (x + 0.5f) / n;
+            float t = wx / OceanStride;
+            int k0 = Mathf.FloorToInt(t);
+            float b = t - k0; // weight of region k0 + 1
+            var r0 = regions[k0 - first];
+            var r1 = regions[k0 + 1 - first];
+            for (int y = 0; y < n; y++)
+            {
+                float wy = offset.y + (y + 0.5f) / n;
+                SampleRegion(r0, wx, wy, out float u0, out float v0);
+                SampleRegion(r1, wx, wy, out float u1, out float v1);
+                currentU[y * n + x] = Mathf.Lerp(u0, u1, b);
+                currentV[y * n + x] = Mathf.Lerp(v0, v1, b);
+            }
+        }
+        oceanMs = (float)watch.Elapsed.TotalMilliseconds;
+    }
+
+    string OceanSummary()
+    {
+        var r = oceanRegions.Count > 0 ? oceanRegions[0] : null;
+        if (r == null) return "ocean: not computed yet";
+        return $"ocean regions {oceanRegionsUsed} (16×16 view widths each, {OceanN}×{OceanN} cells, {OceanPasses} passes); " +
+               $"last new region {r.ms:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.state)}), sea {100f * r.seaShare:0}%, " +
+               $"ω {r.omega}{(r.omega != OceanOmegas[0] ? " (retried)" : "")}, residual {r.residual:0.0000}{(r.residual < OceanTolerance ? "" : " NOT CONVERGED")}, fastest {r.fastest:0.0}× the interior speed; view {oceanMs:0.0} ms";
+    }
+
+    void OceanControls()
+    {
+        GUILayout.BeginHorizontal(GUILayout.Height(30f));
+        ocean = GUILayout.Toggle(ocean, new GUIContent(" Currents",
+            "Ocean currents from the planet's winds (Stommel 1948), on a coarse grid fixed to the world. Show them with the Currents layer."),
+            GUILayout.Width(110f));
+        GUILayout.EndHorizontal();
+        GUI.enabled = ocean;
+        oceanWidth = R2(Slider("West current", oceanWidth, 0.1f, 1f, "0.00",
+            "Width of the fast current on the west side of each ocean, in view widths (friction). Narrow = faster and closer to the coast. Below 0.25 it is thinner than two ocean cells."));
+        GUI.enabled = true;
+        if (ocean)
+        {
+            GUILayout.Label(OceanSummary());
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button(new GUIContent("Copy", "Copy this summary as text."), GUILayout.Width(90f), GUILayout.Height(30f)))
+                GUIUtility.systemCopyBuffer = OceanSummary();
+            if (GUILayout.Button(new GUIContent($"Zoom out ×{BigScale}", $"The currents from {BigScale} times higher up: {BigScale}×{BigScale} view widths around the view, full screen."), GUILayout.Width(140f), GUILayout.Height(30f)))
+                MakeBigPicture();
+            GUILayout.EndHorizontal();
+        }
+    }
+
+    // v6 (2a): the currents from four times higher up: 4 × 4 view widths centred on the view,
+    // land in grey, the view outlined. The ocean grid is fixed to the world and coarse, so
+    // this costs only the heights of the bigger square (the regions are cached). Nothing
+    // else (climate, biomes) is computed for it.
+    const int BigScale = 4, BigN = 512;
+    Texture2D bigPicture;
+    Vector2 bigOrigin;
+    float bigMs;
+
+    void MakeBigPicture()
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        int n = BigN, cells = n * n;
+        float step = (float)BigScale / n;
+        bigOrigin = offset - 0.5f * (BigScale - 1) * Vector2.one;
+        var src = new float[FieldCount][];
+        int keepState = burstState;
+        foreach (int k in HeightFields())
+        {
+            src[k] = new float[cells];
+            SampleInto(src[k], GetField(k), FieldSeed(k), n, bigOrigin.x + 0.5f * step, bigOrigin.y + 0.5f * step, step);
+        }
+        burstState = keepState;
+        var heights = new float[cells];
+        CombineHeight(heights, src);
+
+        int first = Mathf.FloorToInt(bigOrigin.x / OceanStride);
+        int last = Mathf.FloorToInt((bigOrigin.x + BigScale) / OceanStride) + 1;
+        var regions = new OceanRegion[last - first + 1];
+        for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
+        var u = new float[cells];
+        var v = new float[cells];
+        var pixels = new Color32[cells];
+        for (int x = 0; x < n; x++)
+        {
+            float wx = bigOrigin.x + (x + 0.5f) * step;
+            float t = wx / OceanStride;
+            int k0 = Mathf.FloorToInt(t);
+            float b = t - k0;
+            for (int y = 0; y < n; y++)
+            {
+                float wy = bigOrigin.y + (y + 0.5f) * step;
+                SampleRegion(regions[k0 - first], wx, wy, out float u0, out float v0);
+                SampleRegion(regions[k0 + 1 - first], wx, wy, out float u1, out float v1);
+                int i = y * n + x;
+                u[i] = Mathf.Lerp(u0, u1, b);
+                v[i] = Mathf.Lerp(v0, v1, b);
+                pixels[i] = CurrentColour(heights[i], u[i], v[i]);
+            }
+        }
+        CurrentArrows(pixels, n, n / 32, heights, u, v);
+        if (bigPicture == null)
+            bigPicture = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+        bigPicture.SetPixels32(pixels);
+        bigPicture.Apply();
+        bigMs = (float)watch.Elapsed.TotalMilliseconds;
+    }
+
+    // Full screen until a click, a tap or Escape.
+    void DrawBigPicture(float width, float height, float margin)
+    {
+        float side = Mathf.Min(width, height) - 2f * margin;
+        var r = new Rect((width - side) * 0.5f, (height - side) * 0.5f, side, side);
+        GUI.DrawTexture(r, bigPicture);
+        // the view: the middle quarter
+        float a = side * 0.5f * (BigScale - 1) / BigScale, w = side / BigScale;
+        var view = new Rect(r.x + a, r.y + a, w, w);
+        var line = new Color(1f, 1f, 1f, 0.9f);
+        DrawRect(new Rect(view.x, view.y, view.width, 2f), line);
+        DrawRect(new Rect(view.x, view.yMax - 2f, view.width, 2f), line);
+        DrawRect(new Rect(view.x, view.y, 2f, view.height), line);
+        DrawRect(new Rect(view.xMax - 2f, view.y, 2f, view.height), line);
+        string name = $"Currents ×{BigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + BigScale)}, " +
+                      $"the view outlined; {bigMs:0} ms  (click, tap or Esc: back)";
+        DrawRect(new Rect(r.x, r.y, 8.5f * name.Length + 8f, 22f), new Color(0f, 0f, 0f, 0.5f));
+        GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
+        Event e = Event.current;
+        if (e.type == EventType.MouseUp || (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape))
+        {
+            Destroy(bigPicture);
+            bigPicture = null;
+            e.Use();
+        }
+    }
+
+    // Burst check, ocean part: the view's first region in plain C# and with Burst.
+    string OceanCheck()
+    {
+        if (!(colouring == Colouring.Biomes && ocean)) return "";
+        int index = Mathf.FloorToInt(offset.x / OceanStride);
+        var a = ComputeOceanRegion(index, false);
+        var b = ComputeOceanRegion(index, true);
+        var c = ComputeOceanRegion(index, true);
+        float worst = 0f;
+        int differ = 0, repeat = 0;
+        for (int i = 0; i < a.u.Length; i++)
+        {
+            float d = Mathf.Max(Mathf.Abs(a.u[i] - b.u[i]), Mathf.Abs(a.v[i] - b.v[i]));
+            if (d > 0f) differ++;
+            worst = Mathf.Max(worst, d);
+            if (b.u[i] != c.u[i] || b.v[i] != c.v[i]) repeat++;
+        }
+        return $"\nocean region {index}: managed {a.ms:0.0} ms, Burst {b.ms:0.0} ms; cells that differ {differ} of {a.u.Length}, " +
+               $"max |Δ| {worst:G3} (fastest {a.fastest:0.0}); Burst run twice: {repeat} differ";
+    }
+
+    // Speed of the current: dark = still, light = the interior (Sverdrup) speed, orange =
+    // four times it and more (the western currents); land in grey.
+    Color32 CurrentColour(int i) => CurrentColour(values[i], currentU[i], currentV[i]);
+
+    Color32 CurrentColour(float height, float u, float v)
+    {
+        if (height >= threshold) return Color32.Lerp(Wall, LandTint, 0.35f);
+        float s = Mathf.Sqrt(u * u + v * v);
+        return s < 1f ? Color32.Lerp(Calm, Breeze, s) : Color32.Lerp(Breeze, Gust, (s - 1f) / 3f);
+    }
+
+    void CurrentArrows(Color32[] pixels, int n) => CurrentArrows(pixels, n, n / 16, values, currentU, currentV);
+
+    // Arrows over the sea, as for the wind; length grows with the square root of the speed.
+    void CurrentArrows(Color32[] pixels, int n, int every, float[] heights, float[] currentU, float[] currentV)
+    {
+        int spacing = Mathf.Max(4, every);
+        var body = new Color32(255, 255, 255, 255);
+        var tail = new Color32(20, 20, 20, 255);
+        for (int cy = spacing / 2; cy < n; cy += spacing)
+            for (int cx = spacing / 2; cx < n; cx += spacing)
+            {
+                int i = cy * n + cx;
+                if (heights[i] >= threshold) continue;
+                float u = currentU[i], v = currentV[i];
+                float s = Mathf.Sqrt(u * u + v * v);
+                if (s < 1e-3f) continue;
+                float len = 0.5f * spacing * Mathf.Clamp(0.5f * Mathf.Sqrt(s), 0.25f, 1f);
+                int steps = Mathf.Max(1, Mathf.CeilToInt(len));
+                for (int k = 0; k <= steps; k++)
+                {
+                    float t = len * k / steps;
+                    int x = Mathf.RoundToInt(cx + u / s * t), y = Mathf.RoundToInt(cy + v / s * t);
+                    if (x < 0 || y < 0 || x >= n || y >= n) break;
+                    pixels[y * n + x] = Color32.Lerp(tail, body, (float)k / steps);
+                }
+            }
+    }
+
     // Burst check, flow part: plain C# against Burst, and Burst twice (the red-black passes
     // run in parallel; each colour only reads the other, so two runs must be identical).
     string FlowCheck()
@@ -1836,9 +2275,9 @@ public class NoiseLab : MonoBehaviour
     // What the image shows. Map: bands or biomes. The rest: one field on its own.
     // v6: WindFlow goes last; it is a panel layer only (the overlay list maps its entries to
     // Show by index + 1 up to WindAir, and Contours after that).
-    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir, WindFlow }
-    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air", "Wind flow" };
-    static readonly string[] ShowCodes = { "map", "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind", "flow" };
+    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir, WindFlow, Currents }
+    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air", "Wind flow", "Currents" };
+    static readonly string[] ShowCodes = { "map", "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind", "flow", "currents" };
 
     // v4: number of panels (1, 2 or 4) and the layer each one shows. A choice that is not
     // available (Temperature with Bands) is kept, and the panel shows the map meanwhile.
@@ -1857,6 +2296,7 @@ public class NoiseLab : MonoBehaviour
         Show.Continent or Show.Erosion or Show.Peaks => heightSource == HeightSource.Splines,
         Show.WindAir => colouring == Colouring.Biomes && wind,
         Show.WindFlow => FlowOn,
+        Show.Currents => colouring == Colouring.Biomes && ocean,
         _ => true
     };
 
@@ -1926,6 +2366,7 @@ public class NoiseLab : MonoBehaviour
             pixels[i] = c;
         }
         if (show == Show.WindFlow) FlowArrows(pixels, n);
+        if (show == Show.Currents) CurrentArrows(pixels, n);
         texture.SetPixels32(pixels);
         texture.Apply();
     }
@@ -1937,6 +2378,7 @@ public class NoiseLab : MonoBehaviour
         Show.Moisture => Color32.Lerp(Dry, Wet, moist[i]),
         Show.WindAir => Color32.Lerp(Dry, Wet, windAir[i]),
         Show.WindFlow => FlowColour(i),
+        Show.Currents => CurrentColour(i),
         _ => Gray(viewField[FCont + (s - Show.Continent)][i])
     };
 
@@ -2139,6 +2581,7 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
+        if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)}"; // v6 (2a): currents
         if (shade) code += $";sh={F(relief)}";
         if (HasContours()) code += $";ct={F(contourStep)}";
         if (overlays.Count > 0) code += ";ov=" + OverlayCode();
@@ -2217,6 +2660,8 @@ public class NoiseLab : MonoBehaviour
         windModel = WindModel.Sweep; // v6: a code without wf= keeps the v3 sweep
         solidAbove = 0.5f;
         flowIterations = 200;
+        ocean = false; // v6 (2a): a code without oc= has no currents
+        oceanWidth = 0.25f;
         // v4: a code without v= opens one panel with the map.
         viewCount = 1;
         DefaultPanels.CopyTo(panelShow, 0);
@@ -2291,6 +2736,9 @@ public class NoiseLab : MonoBehaviour
                 case "c": ReadCurves(val); break;
                 case "cl": ReadClimate(val); break;
                 case "wd": ReadWind(val); break;
+                case "oc":
+                    if (TryF(val, out float ow)) { ocean = true; oceanWidth = Mathf.Clamp(ow, 0.1f, 1f); }
+                    break;
                 case "wf":
                 {
                     string[] wf = val.Split(',');
@@ -2419,7 +2867,7 @@ public class NoiseLab : MonoBehaviour
     static readonly string[] WaterLabels = { "Raw threshold", "% water" };
     static readonly string[] HeightLabels = { "One noise", "Splines" };
     static readonly string[] ColouringLabels = { "Bands", "Biomes" };
-    static readonly string[] ClimateLabels = { "Temperature", "Moisture", "Wind", "Clouds" };
+    static readonly string[] ClimateLabels = { "Temperature", "Moisture", "Wind", "Clouds", "Ocean" };
     static readonly string[] WindModelLabels = { "Sweep", "Flow" };
     static readonly string[] WindModelTips =
     {
@@ -2484,6 +2932,7 @@ public class NoiseLab : MonoBehaviour
         "What makes a place wet or dry.",
         "Air that carries moisture from the sea, rains on the slopes it climbs and leaves a rain shadow behind.",
         "Animated clouds over the map. They never change the terrain.",
+        "Ocean currents driven by the planet's winds: gyres, fast western currents, slow cold eastern ones. Show them with the Currents layer.",
     };
     static readonly string[] FieldTips =
     {
@@ -2592,6 +3041,11 @@ public class NoiseLab : MonoBehaviour
         GUI.matrix = Matrix4x4.Scale(new Vector3(scale, scale, 1f));
         float width = Screen.width / scale, height = VirtualHeight;
         const float margin = 16f;
+        if (bigPicture != null)
+        {
+            DrawBigPicture(width, height, margin);
+            return;
+        }
         if (focusPanel >= viewCount) focusPanel = -1;
         if (focusPanel >= 0)
         {
@@ -3196,7 +3650,9 @@ public class NoiseLab : MonoBehaviour
         }
 
         Row(3);
-        climateTab = GUILayout.Toolbar(climateTab, Tipped(ClimateLabels, ClimateTips), GUILayout.Height(30f));
+        // v6 (2a): five tabs no longer fit in one row (each button is as wide as "Temperature"),
+        // so they wrap into two rows of three.
+        climateTab = GUILayout.SelectionGrid(climateTab, Tipped(ClimateLabels, ClimateTips), 3, GUILayout.Height(62f));
         Row(2);
         if (climateTab == 0)
         {
@@ -3215,6 +3671,11 @@ public class NoiseLab : MonoBehaviour
         else if (climateTab == 3)
         {
             CloudControls();
+            return;
+        }
+        else if (climateTab == 4)
+        {
+            OceanControls();
             return;
         }
         else
@@ -3529,6 +3990,7 @@ public class NoiseLab : MonoBehaviour
             var sb = new System.Text.StringBuilder();
             if (edgeStatus.Length > 0) sb.AppendLine(edgeStatus);
             if (FlowOn) sb.AppendLine(FlowSummary());
+            if (colouring == Colouring.Biomes && ocean) sb.AppendLine(OceanSummary());
             if (burstStatus.Length > 0) sb.AppendLine(burstStatus);
             sb.AppendLine("code: " + BuildCode());
             GUIUtility.systemCopyBuffer = sb.ToString();
@@ -4226,6 +4688,39 @@ struct FlowAirJob : IJob
         float a = w4.x * (x > 0 ? air[c - 1] : 1f) + w4.y * (x < fw - 1 ? air[c + 1] : 1f)
                 + w4.z * (y > 0 ? air[c - fw] : 1f) + w4.w * (y < fh - 1 ? air[c + fw] : 1f);
         air[c] = (a + (1f - a) * gain[c]) * keep[c];
+    }
+}
+
+// v6 (2a): one colour of rows of the Stommel solve (see NoiseLab.ComputeOceanRegion). Row
+// y = 2r + parity, swept east to west; rows of one colour only read the other colour above
+// and below, so they run in parallel and the result does not depend on the threads.
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct OceanSorJob : IJobFor
+{
+    [ReadOnly] public NativeArray<byte> sea;
+    [ReadOnly] public NativeArray<float> force, beta;
+    [NativeDisableParallelForRestriction] public NativeArray<float> psi;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int n, parity;
+    public float eps, h, omega;
+
+    public void Execute(int r)
+    {
+        if (r == 0) BurstProbe.Check(probe);
+        int y = 2 * r + parity;
+        if (y >= n) return;
+        float b = beta[y], f = force[y];
+        float k = eps / (h * h);
+        float diag = 4f * k + b / h;
+        for (int x = n - 1; x >= 0; x--)
+        {
+            int i = y * n + x;
+            if (sea[i] == 0) continue; // land stays 0
+            float e = x < n - 1 ? psi[i + 1] : 0f, w = x > 0 ? psi[i - 1] : 0f;
+            float no = y < n - 1 ? psi[i + n] : 0f, so = y > 0 ? psi[i - n] : 0f;
+            float target = (k * (e + w + no + so) + b * e / h - f) / diag;
+            psi[i] += omega * (target - psi[i]);
+        }
     }
 }
 

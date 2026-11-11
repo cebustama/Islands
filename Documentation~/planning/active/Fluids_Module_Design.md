@@ -115,3 +115,30 @@ comparar. Claudio pide incluir las **corrientes marinas** (uso 2) en la v6.
 - Zhao, «A fast sweeping method for Eikonal equations», *Math. Comp.* 74 (2005).
 - Milne-Thomson, *Theoretical Hydrodynamics* (óvalo de Rankine, calle de Kármán).
 - NASA SVS, *Perpetual Ocean* (2012, ECCO2).
+
+## Añadido el 2026-11-10 (paso 2 de NoiseLab v6: corrientes marinas)
+
+Decisión de Claudio: **modelo B (Stommel 1948) con rejilla gruesa propia**, lo más correcto y
+escalable posible. Propuesta, no autoridad; manda el código.
+
+- **Ecuación:** ε∇²ψ + β(y)·∂ψ/∂x = rot τ(y); u = −∂ψ/∂y, v = ∂ψ/∂x; ψ = 0 en tierra.
+  Viento zonal τx = −τ0·sin(6·lat): alisios (0–30°, calma en el ecuador), oestes (30–60°),
+  polares (60–90°). β = cos(lat), por el giro del planeta. ε fija el ancho de la corriente
+  del oeste (deslizador, en anchos de vista).
+- **Escala (cascada de escalas, `research/2026-11-05-mundo-finito-o-infinito.md`):** regiones
+  fijas al mundo de 16 × 16 anchos de vista (de polo a polo en y), 8 celdas por ancho de vista
+  (128²), una cada 8 vistas en x, solapadas a la mitad y mezcladas con pesos en triángulo
+  (sus paredes caen donde pesan 0). Nada depende de la vista; caché de 4 regiones.
+- **Solucionador:** Gauss–Seidel por líneas, dos colores de filas en paralelo, cada fila de
+  este a oeste (la dirección en que β lleva la información), término β a contracorriente
+  (estable con cualquier ancho). Prueba offline (`stommel.py`, cuenca rectangular 128²):
+  ω 1,85 llega a la solución exacta en 100 pasadas; giro subtropical horario en el norte,
+  antihorario en el sur, corriente del oeste ~7× el interior, corriente lenta hacia el
+  ecuador en la costa este.
+- **Límite conocido:** ψ = 0 en toda tierra: entre dos masas de tierra no pasa agua neta.
+  La regla de la isla (Godfrey 1989) lo resolvería; medir antes de arreglar.
+- **Subpasos:** 2a corrientes y capa *Currents*; 2b temperatura del mar (latitud + transporte
+  por la corriente con el esquema de la 1b.2 + afloramiento costero por el viento hacia el
+  ecuador de los alisios); 2c el clima lee la temperatura del mar (costa fría: más fresca y
+  seca; evaporación según la temperatura).
+- **Web:** candidato a página de Islands Lab (ψ, giros, Atacama y Humboldt).
