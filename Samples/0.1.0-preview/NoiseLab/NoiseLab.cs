@@ -35,7 +35,9 @@ public class NoiseLab : MonoBehaviour
     // and codes keep their values.
     [SerializeField] NoiseType type = NoiseType.SimplexPerlinOnSimplex;
     [SerializeField] int seed = 0;
-    [SerializeField, Range(1, 32)] int frequency = 8;
+    // v6 (continents): float. Integers sample exactly as before; below 1 (down to 0.05) the
+    // shapes span several views. See SampleInto.
+    [SerializeField, Range(MinFrequency, MaxFrequency)] float frequency = 8;
     [SerializeField, Range(1, 6)] int octaves = 1;
     [SerializeField, Range(2, 4)] int lacunarity = 2;
     [SerializeField, Range(0f, 1f)] float gain = 0.5f;
@@ -73,12 +75,12 @@ public class NoiseLab : MonoBehaviour
     public struct NoiseField
     {
         public NoiseType type;
-        [Range(1, 32)] public int frequency;
+        [Range(MinFrequency, MaxFrequency)] public float frequency;
         [Range(1, 6)] public int octaves;
         [Range(2, 4)] public int lacunarity;
         [Range(0f, 1f)] public float gain;
 
-        public NoiseField(NoiseType type, int frequency, int octaves, int lacunarity, float gain)
+        public NoiseField(NoiseType type, float frequency, int octaves, int lacunarity, float gain)
         {
             this.type = type;
             this.frequency = frequency;
@@ -87,6 +89,15 @@ public class NoiseLab : MonoBehaviour
             this.gain = gain;
         }
     }
+
+    const float MinFrequency = 0.05f, MaxFrequency = 32f;
+
+    // Below 1: hundredths (0.05 … 1); from 1 up: integers, as before.
+    static float SnapFrequency(float f) =>
+        f >= 1f ? Mathf.Clamp(Mathf.Round(f), 1f, MaxFrequency)
+                : Mathf.Clamp(Mathf.Round(f * 100f) / 100f, MinFrequency, 1f);
+
+    static bool IsWholeFrequency(float f) => f >= 1f && f == Mathf.Round(f);
 
     const int FieldCount = 6;
     const int FHeight = 0, FCont = 1, FEros = 2, FPeaks = 3, FTemp = 4, FMoist = 5;
@@ -312,7 +323,7 @@ public class NoiseLab : MonoBehaviour
         sb.AppendLine($"unity: {Application.unityVersion} | {Application.platform} | {backend} | " +
                       $"{(Application.isEditor ? "editor" : Debug.isDebugBuild ? "development build" : "release build")}");
         sb.AppendLine($"screen: {Screen.width}x{Screen.height} | target fps {Application.targetFrameRate}");
-        sb.AppendLine($"resolution: {resolution} | drag resolution: {dragResolution} | world reference: {WorldSamples}x{WorldSamples}, last {F(R1(calibrateMs))} ms");
+        sb.AppendLine($"resolution: {resolution} | drag resolution: {dragResolution} | world reference: {WorldSamples}x{WorldSamples} over {F(R1(worldSpan))} views, last {F(R1(calibrateMs))} ms");
         sb.AppendLine($"fields sampled per view: {ActiveFieldCount()} (height: {heightSource}, colour: {colouring})");
         sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes + ", " + GridNoiseJob<Simplex2D<Simplex>>.StateName(cloudBurstState) : "off")}");
         sb.AppendLine($"climate margin: {(climateMargin ? "on" : "off")} | cells L/R/B/T {mL}/{mR}/{mB}/{mT} at {sampleN} | climate grid {extW}x{extH} | last climate {F(R1(climateMs))} ms, {GridNoiseJob<Simplex2D<Simplex>>.StateName(climateBurstState)}");
@@ -470,6 +481,19 @@ public class NoiseLab : MonoBehaviour
         CutGroup(source, landShares, below, count, source[count - 1] + 1e-6f, WaterBands);
     }
 
+    // v6 (continents): the world reference spans 16 views, or about four wavelengths of the
+    // lowest height frequency when that is larger (C at 0.1 → 40 views), with the same 128²
+    // samples, so the water percentage is measured over several continents and not over two.
+    // With whole frequencies it stays at 16 (same cuts as before).
+    float worldSpan = WorldSpan;
+
+    float WorldSpanFor(int[] fields)
+    {
+        float min = MaxFrequency;
+        foreach (int k in fields) min = Mathf.Min(min, GetField(k).frequency);
+        return Mathf.Max(WorldSpan, 4f / min);
+    }
+
     float[] CutSource => cutsFrom == CutsFrom.World ? worldSorted : sorted;
 
     // The world reference: same noise(s), same settings, sampled on a fixed grid that
@@ -483,11 +507,12 @@ public class NoiseLab : MonoBehaviour
         worldKey = key;
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        const float step = WorldSpan / WorldSamples;
-        const float origin = -0.5f * WorldSpan + 0.5f * step;
+        float span = worldSpan = WorldSpanFor(HeightFields());
+        float step = span / WorldSamples;
+        float origin = -0.5f * span + 0.5f * step;
         foreach (int k in HeightFields())
         {
-            string fk = FieldKey(k);
+            string fk = $"{FieldKey(k)}|{F(span)}";
             if (worldFieldKey[k] == fk && worldField[k] != null) continue;
             worldField[k] = Ensure(worldField[k], WorldSamples * WorldSamples);
             SampleInto(worldField[k], GetField(k), FieldSeed(k), WorldSamples, origin, origin, step);
@@ -604,7 +629,7 @@ public class NoiseLab : MonoBehaviour
     string FieldKey(int k)
     {
         var f = GetField(k);
-        return $"{f.type}|{FieldSeed(k)}|{f.frequency}|{f.octaves}|{f.lacunarity}|{F(f.gain)}";
+        return $"{f.type}|{FieldSeed(k)}|{F(f.frequency)}|{f.octaves}|{f.lacunarity}|{F(f.gain)}";
     }
 
     static readonly int[] OneNoiseFields = { FHeight };
@@ -829,7 +854,20 @@ public class NoiseLab : MonoBehaviour
     {
         var settings = Settings.Default;
         settings.seed = fieldSeed;
-        settings.frequency = field.frequency;
+        // v6 (continents): the library's frequency is an integer >= 1 and only multiplies the
+        // coordinates (Lattice and Simplex: positions *= frequency, no tiling). A whole frequency
+        // goes through unchanged, so existing codes give the same bits. A fractional one samples
+        // at frequency 1 with the coordinates scaled by f instead, which is the same noise
+        // stretched 1/f times. Runtime/ stays untouched.
+        if (IsWholeFrequency(field.frequency))
+            settings.frequency = (int)field.frequency;
+        else
+        {
+            settings.frequency = 1;
+            originX *= field.frequency;
+            originZ *= field.frequency;
+            step *= field.frequency;
+        }
         settings.octaves = field.octaves;
         settings.lacunarity = field.lacunarity;
         settings.persistence = field.gain;
@@ -2568,7 +2606,7 @@ public class NoiseLab : MonoBehaviour
     string BuildCode()
     {
         string code =
-            $"NL1;t={TypeCodes[(int)type]};s={seed};f={frequency};o={octaves};l={lacunarity};" +
+            $"NL1;t={TypeCodes[(int)type]};s={seed};f={F(frequency)};o={octaves};l={lacunarity};" +
             $"g={F(gain)};w={(waterMode == WaterMode.Percentage ? "%" + F(waterPercent) : "r" + F(rawThreshold))};" +
             $"x={F(offset.x)};y={F(offset.y)};pal={paletteId};b={Join(waterShares)}/{Join(landShares)};" +
             $"q={(cutsFrom == CutsFrom.World ? "w" : "v")}";
@@ -2616,7 +2654,7 @@ public class NoiseLab : MonoBehaviour
     string FieldCode(int k)
     {
         var f = GetField(k);
-        return $"{TypeCodes[(int)f.type]},{f.frequency},{f.octaves},{f.lacunarity},{F(f.gain)}";
+        return $"{TypeCodes[(int)f.type]},{F(f.frequency)},{f.octaves},{f.lacunarity},{F(f.gain)}";
     }
 
     string CurvesCode()
@@ -2697,7 +2735,7 @@ public class NoiseLab : MonoBehaviour
                     if (t >= 0) type = (NoiseType)t;
                     break;
                 case "s": if (int.TryParse(val, NumberStyles.Integer, Inv, out int s)) seed = s; break;
-                case "f": if (int.TryParse(val, NumberStyles.Integer, Inv, out int f)) frequency = Mathf.Clamp(f, 1, 32); break;
+                case "f": if (TryF(val, out float f)) frequency = SnapFrequency(f); break;
                 case "o": if (int.TryParse(val, NumberStyles.Integer, Inv, out int o)) octaves = Mathf.Clamp(o, 1, 6); break;
                 case "l": if (int.TryParse(val, NumberStyles.Integer, Inv, out int l)) lacunarity = Mathf.Clamp(l, 2, 4); break;
                 case "g": if (TryF(val, out float g)) gain = Mathf.Clamp01(g); break;
@@ -2789,11 +2827,11 @@ public class NoiseLab : MonoBehaviour
         if (p.Length != 5) return;
         int t = System.Array.IndexOf(TypeCodes, p[0]);
         if (t < 0 ||
-            !int.TryParse(p[1], NumberStyles.Integer, Inv, out int f) ||
+            !TryF(p[1], out float f) ||
             !int.TryParse(p[2], NumberStyles.Integer, Inv, out int o) ||
             !int.TryParse(p[3], NumberStyles.Integer, Inv, out int l) ||
             !TryF(p[4], out float g)) return;
-        SetField(k, new NoiseField((NoiseType)t, Mathf.Clamp(f, 1, 32), Mathf.Clamp(o, 1, 6), Mathf.Clamp(l, 2, 4), Mathf.Clamp01(g)));
+        SetField(k, new NoiseField((NoiseType)t, SnapFrequency(f), Mathf.Clamp(o, 1, 6), Mathf.Clamp(l, 2, 4), Mathf.Clamp01(g)));
     }
 
     // All three curves or none: each needs at least two points with x ascending.
@@ -3319,7 +3357,7 @@ public class NoiseLab : MonoBehaviour
         if (GUILayout.Button("Random", GUILayout.Height(30f))) seed = UnityEngine.Random.Range(0, 100000); // UI only; the noise itself stays seeded
         GUILayout.EndHorizontal();
 
-        field.frequency = IntSlider("Frequency", field.frequency, 1, 32, "Features per view width. Higher = smaller, more numerous shapes.");
+        field.frequency = FrequencySlider(field.frequency);
         field.octaves = IntSlider("Octaves", field.octaves, 1, 6, "Layers of noise added together, each finer than the last. More = more detail.");
         field.lacunarity = IntSlider("Lacunarity", field.lacunarity, 2, 4, "How much finer each octave is than the previous one (its frequency is multiplied by this).");
         field.gain = Mathf.Round(Slider("Gain", field.gain, 0f, 1f, "0.00", "How strong each octave is compared with the previous one. Low = smooth, high = rough.") * 100f) / 100f;
@@ -4076,6 +4114,22 @@ public class NoiseLab : MonoBehaviour
         return $"moisture Δ mean {sum / land:0.0000}, max {worst:0.000}; biome changed {100f * changed / land:0.00} % of {land} cells; " +
                $"{ms:0} ms (grid {extW}×{extH})" +
                (flow && cells > 0 ? $"; wind Δ mean {flowSum / cells:0.0000}, max {flowWorst:0.000}" : "");
+    }
+
+    // v6 (continents): logarithmic, so 0.05 … 1 gets as much room as 1 … 32.
+    static float FrequencySlider(float value)
+    {
+        const string tip = "Features per view width. Higher = smaller, more numerous shapes. " +
+                           "Below 1 a shape spans several views (0.1 ≈ continents of several views).";
+        float lo = Mathf.Log(MinFrequency), hi = Mathf.Log(MaxFrequency);
+        GUILayout.BeginHorizontal(GUILayout.Height(30f));
+        GUILayout.Label(new GUIContent("Frequency", tip), GUILayout.Width(110f));
+        float t = GUILayout.HorizontalSlider(Mathf.Log(Mathf.Max(value, MinFrequency)), lo, hi, GUILayout.ExpandWidth(true));
+        float f = SnapFrequency(Mathf.Exp(t));
+        if (Mathf.Abs(t - Mathf.Log(Mathf.Max(value, MinFrequency))) < 1e-4f) f = value; // untouched: keep it
+        GUILayout.Label(new GUIContent(f.ToString(f < 1f ? "0.00" : "0", Inv), tip), GUILayout.Width(50f));
+        GUILayout.EndHorizontal();
+        return f;
     }
 
     static int IntSlider(string label, int value, int min, int max, string tip) =>
