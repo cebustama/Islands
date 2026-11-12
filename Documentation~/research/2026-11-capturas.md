@@ -2,6 +2,21 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-12 · Supermountains: collision, erosion and what the sediment feeds
+- **Type and origin:** video, Mr. Science, «When Earth Had Supermountains» (25:33, ~Oct 2026), https://youtu.be/DUUFOGhMhVQ. Anonymous pop-science channel: cite the papers, not the video.
+- **What Claudio said:** (sent the link with `/capturar`) «Guarda en todo lo que propones»
+- **What it is:** two "supermountains" known only from zircons. **Transgondwanan** (~650–500 Ma, >8,000 km, up to ~1,000 km wide, stood >100 Myr) from the assembly of Gondwana; **Nuna** (~2.0–1.8 Ga), first supercontinent. Evidence: (1) U-Pb ages of detrital zircons in sandstones on five continents share one double fingerprint → one source (Squire et al. 2006, min. 3:43–7:54); (2) **lutetium-poor zircons** = grew next to garnet, stable only 40–50 km down in doubled crust → proxy for thick crust under big ranges; two spikes in the global database, almost nothing between 1.8 and 0.8 Ga (the "boring billion") (Zhu et al. 2022, min. 19:32–21:17, 23:39). Claim: erosion of a bare (pre-plant) range in the tropics delivered P, Fe and Ca to the sea → plankton → buried carbon → O₂ rise; Ca made skeletons easy (*Cloudina*, min. 13:00) → Cambrian explosion. Correlation only; the video says so (min. 17:08) and lists rivals (snowball Earth thaw, predators, developmental genes).
+- **Facts worth keeping as rules:** "super" means length and lifetime, not height: crustal roots flow beyond ~9–10 km of relief (isostasy, min. 9:12). Erosion rate grows steeply with height and slope, and with rain (the monsoon side of the Himalaya erodes much faster than the Tibet side, min. 11:22). Without vegetation, slopes erode like a freshly cleared hillside (min. 11:46). The Himalaya sheds ~1 Gt/yr; given ~100 Myr of tectonic quiet, it becomes low hills (min. 1:40).
+- 💡 **Possible use here (plates lab, after v6):**
+  - **Range age as a parameter:** height and width rise while two plates converge and decay once convergence stops; a range's shape tells its age (sharp and narrow = young; low and wide = old). Cheap to fake per collision belt without simulating erosion.
+  - **Sediment goes somewhere:** what the range loses becomes plains, deltas and shelf downstream (rain side first). Ties to the `FillDepth`/Priority-Flood lakes and to the canyon rule below (depth from relief).
+  - **Height cap from isostasy:** clamp relief (~9 km equivalent); long collisions grow in length and width instead of height.
+  - **Erosion rate modulated by moisture** (rain side vs. rain-shadow side), using the wind and humidity already in NoiseLab v6.
+  - **Web explainer seed:** "the zircon as a clock and a depth gauge", see the web captures file.
+- **Connects with:** web Islands Lab (`../../../web/claudiobustamante-site/Documentation~/research/2026-11-capturas.md`), videojuego-colonizacion, Trentren against Caicai (`../../../videojuego-colonizacion/historia/2026-11-capturas.md`), cuaderno-injusticia, climate sheet (`../../../cuaderno-injusticia/notas/2026-11-capturas.md`). Interest: emergence (rock → chemistry → life → rock).
+- **Sources to check:** Squire, Campbell, Allen & Wilson (2006), *EPSL* 250, «Did the Transgondwanan Supermountain trigger the explosive radiation of animals on Earth?»; Zhu, Campbell, Allen & Burnham (2022), *EPSL* 580 (supermountains, oxygen and evolution); Raymo & Ruddiman (1992), *Nature* 359 (uplift and Cenozoic cooling).
+- **Status:** seed, for the plates lab (after v6).
+
 ## 2026-11-04 · NASA ocean currents map («ríos invisibles», @desde_la_ciencia)
 - **Type and origin:** link, Instagram https://www.instagram.com/p/DfSOVIoHCDW/ (@desde_la_ciencia; read via the embed page; date, full carousel and source not visible without login).
 - **What it is:** animated NASA map of surface ocean currents and eddies (Gulf Stream; heat, rain and nutrient transport). Probably *Perpetual Ocean* (NASA Scientific Visualization Studio, 2012, ECCO2 model, 2005–2007), not confirmed. A model, not direct measurement.

@@ -140,3 +140,6 @@ build Android y las mediciones.
   mundo → país → celda (roguelike o acción tipo Zelda): es la Phase W (hoy dos niveles,
   mundo → local) con un nivel intermedio, y la cascada de escalas de
   `research/2026-11-05-mundo-finito-o-infinito.md`.
+- **Para el lab de placas (captura 2026-11-12):** edad de la cordillera como parámetro, tope de
+  altura por isostasia, erosión según la lluvia y destino del sedimento; en
+  `research/2026-11-capturas.md` («Supermountains»).
