@@ -1793,8 +1793,10 @@ public class NoiseLab : MonoBehaviour
             GUILayout.BeginHorizontal();
             if (GUILayout.Button(new GUIContent("Copy", "Copy this summary as text."), GUILayout.Width(90f), GUILayout.Height(30f)))
                 GUIUtility.systemCopyBuffer = OceanSummary();
-            if (GUILayout.Button(new GUIContent($"Zoom out ×{BigScale}", $"The currents from {BigScale} times higher up: {BigScale}×{BigScale} view widths around the view, full screen."), GUILayout.Width(140f), GUILayout.Height(30f)))
-                MakeBigPicture();
+            if (GUILayout.Button(new GUIContent("Zoom out ×4", "The currents from 4 times higher up: 4×4 view widths around the view, full screen."), GUILayout.Width(140f), GUILayout.Height(30f)))
+                MakeBigPicture(4);
+            if (GUILayout.Button(new GUIContent("World ×16", "The whole latitude range, pole to pole: 16×16 view widths, centred on the view's longitude, full screen. The first time it may solve a few more ocean regions."), GUILayout.Width(140f), GUILayout.Height(30f)))
+                MakeBigPicture(WorldScale);
             GUILayout.EndHorizontal();
         }
     }
@@ -1803,17 +1805,21 @@ public class NoiseLab : MonoBehaviour
     // land in grey, the view outlined. The ocean grid is fixed to the world and coarse, so
     // this costs only the heights of the bigger square (the regions are cached). Nothing
     // else (climate, biomes) is computed for it.
-    const int BigScale = 4, BigN = 512;
+    // Continents step: a second size, the whole latitude range (pole to pole = 16 views).
+    const int BigN = 512, WorldScale = 16;
+    int bigScale = 4;
     Texture2D bigPicture;
     Vector2 bigOrigin;
     float bigMs;
 
-    void MakeBigPicture()
+    void MakeBigPicture(int scale)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
+        bigScale = scale;
         int n = BigN, cells = n * n;
-        float step = (float)BigScale / n;
-        bigOrigin = offset - 0.5f * (BigScale - 1) * Vector2.one;
+        float step = (float)bigScale / n;
+        bigOrigin = offset - 0.5f * (bigScale - 1) * Vector2.one;
+        if (bigScale == WorldScale) bigOrigin.y = -LatitudeSpan; // pole to pole
         var src = new float[FieldCount][];
         int keepState = burstState;
         foreach (int k in HeightFields())
@@ -1826,7 +1832,7 @@ public class NoiseLab : MonoBehaviour
         CombineHeight(heights, src);
 
         int first = Mathf.FloorToInt(bigOrigin.x / OceanStride);
-        int last = Mathf.FloorToInt((bigOrigin.x + BigScale) / OceanStride) + 1;
+        int last = Mathf.FloorToInt((bigOrigin.x + bigScale) / OceanStride) + 1;
         var regions = new OceanRegion[last - first + 1];
         for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
         var u = new float[cells];
@@ -1863,15 +1869,16 @@ public class NoiseLab : MonoBehaviour
         float side = Mathf.Min(width, height) - 2f * margin;
         var r = new Rect((width - side) * 0.5f, (height - side) * 0.5f, side, side);
         GUI.DrawTexture(r, bigPicture);
-        // the view: the middle quarter
-        float a = side * 0.5f * (BigScale - 1) / BigScale, w = side / BigScale;
-        var view = new Rect(r.x + a, r.y + a, w, w);
+        // the view, where it is inside the picture (texture rows go up, screen rows down)
+        float w = side / bigScale;
+        var view = new Rect(r.x + (offset.x - bigOrigin.x) * w,
+                            r.yMax - (offset.y - bigOrigin.y + 1f) * w, w, w);
         var line = new Color(1f, 1f, 1f, 0.9f);
         DrawRect(new Rect(view.x, view.y, view.width, 2f), line);
         DrawRect(new Rect(view.x, view.yMax - 2f, view.width, 2f), line);
         DrawRect(new Rect(view.x, view.y, 2f, view.height), line);
         DrawRect(new Rect(view.xMax - 2f, view.y, 2f, view.height), line);
-        string name = $"Currents ×{BigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + BigScale)}, " +
+        string name = $"Currents ×{bigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + bigScale)}, " +
                       $"the view outlined; {bigMs:0} ms  (click, tap or Esc: back)";
         DrawRect(new Rect(r.x, r.y, 8.5f * name.Length + 8f, 22f), new Color(0f, 0f, 0f, 0.5f));
         GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
