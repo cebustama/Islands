@@ -2,6 +2,10 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-13 · Twenty procedural games → eleven proposals
+- **Main entry:** [`2026-11-13-pcg-games-proposals.md`](2026-11-13-pcg-games-proposals.md); page https://claude.ai/artifact/HLxMj8NRPTE7omTNjjswuA.
+- **Status:** seed (proposals, nothing applied).
+
 ## 2026-11-13 · One-colour tiles for the world → cell zoom (salt_pilgrim)
 - **Main entry:** [`mundo-islas/ideas/2026-11-capturas.md`](../../../mundo-islas/ideas/2026-11-capturas.md); images in `referencias-visuales/nuevas/2026-11-13-salt-pilgrim-tiles/`. Claudio wants to try this style for a first version of the cell zoom.
 - 💡 **Relevant here:** monochrome glyph tiles tinted at stamp time. One `TileBase` per glyph plus a tint from biome or culture would let `TilemapAdapter2D` / Phase Q2 selection multiply variants without new sprites (Unity `Tilemap.SetColor` per cell, with the tile's colour flags unlocked). Not checked against the adapter code.
