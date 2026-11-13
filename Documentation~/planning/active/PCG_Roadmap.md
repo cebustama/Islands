@@ -1676,3 +1676,10 @@ TemperateRainforest in the single or double digits of cells. Surfaced by W-aux.d
 verification. Belongs to `Stage_Biome2D` and its temperature/moisture bands, not to
 vegetation — recalibrating vegetation densities for those biomes would change nothing.  
 **Status:** Idea only, no design. Not scheduled.
+
+### PL-12 — Proposals from 20 procedural games (cross-phase)
+**Date:** 2026-11-13  
+**Idea:** Eleven research proposals drawn from classic procedural games (Civilization, Dwarf Fortress, Minecraft 1.18, The Sentinel, Spelunky, RimWorld, Caves of Qud…), cross-checked against the current state: continents by accretion/plates (NoiseLab v6), one seed per layer and per coordinate (W / zoom), a bad-world rejection rubric (unblocks Phase P), erosion with temporary rivers and an «age» (before L), biome by nearest box in climate space (`Stage_Biome2D`), peak/pit flattening for terraces (PL-5), path-first local cells (mundo-islas), per-people name phonotactics, plus three items for mundo-islas (history, narrator) and Islands Lab chapters. Two touch matrix §9 exclusions (midpoint displacement, 5D biome query) and need Claudio's decision. Also flags a doc error: the matrix marks Poisson disk DONE in runtime, but it only exists in the web.  
+**Source:** `Documentation~/research/2026-11-13-pcg-games-proposals.md`; page https://claude.ai/artifact/HLxMj8NRPTE7omTNjjswuA.  
+**Status:** Research only. To be triaged into phases at the next planning pass; nothing applied.
+

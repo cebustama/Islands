@@ -37,6 +37,12 @@ Decisión de Claudio (2026-11-11): continentes en la próxima sesión.
 4. Comprobar: cuencas cerradas en 20°–40° → giro con corriente rápida en la costa oeste;
    Burst check; S22.
 
+## Insumo nuevo (2026-11-13)
+Dos modelos de continentes para comparar con el campo C de baja frecuencia, de la propuesta 1 de `Documentation~/research/2026-11-13-pcg-games-proposals.md` (PL-12 del roadmap):
+- **Acreción (Civilization 1):** paseos aleatorios de 1–64 pasos pintan «trozos»; donde cae tierra sobre tierra, sube; se para con una cuota de tierra. Algoritmo y constantes en `banco-ideas-juego/juegos-procedurales/investigacion/pcg-11-15.md` (ficha 12); demo en la página https://claude.ai/artifact/HLxMj8NRPTE7omTNjjswuA.
+- **Placas (The Seven Cities of Gold, Dwarf Fortress):** cordilleras donde las placas chocan; enlaza con la fase K.
+Opcional en esta sesión: decidir con Claudio si se mide alguno junto al campo C, o se deja para después de los continentes por ruido.
+
 ## Decisiones abiertas
 - Tamaño típico de un continente y de un océano, en vistas (la latitud mide ±8 vistas; una
   región del océano, 16).
