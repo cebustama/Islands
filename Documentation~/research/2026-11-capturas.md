@@ -2,6 +2,11 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-13 · One-colour tiles for the world → cell zoom (salt_pilgrim)
+- **Main entry:** [`mundo-islas/ideas/2026-11-capturas.md`](../../../mundo-islas/ideas/2026-11-capturas.md); images in `referencias-visuales/nuevas/2026-11-13-salt-pilgrim-tiles/`. Claudio wants to try this style for a first version of the cell zoom.
+- 💡 **Relevant here:** monochrome glyph tiles tinted at stamp time. One `TileBase` per glyph plus a tint from biome or culture would let `TilemapAdapter2D` / Phase Q2 selection multiply variants without new sprites (Unity `Tilemap.SetColor` per cell, with the tile's colour flags unlocked). Not checked against the adapter code.
+- **Status:** seed.
+
 ## 2026-11-12 · «Oil paint» by @blendi (painterly three.js), stability rules
 - **Main entry in the web captures:** [`web/.../research/2026-11-capturas.md`](../../../web/claudiobustamante-site/Documentation~/research/2026-11-capturas.md) (https://patch.gg/blendi/oil-paint, MIT/CC0).
 - 💡 **Relevant here:** every ground stroke belongs to one ground cell for good; LOD where one in four grows to stand for its neighbours and shrinks back in place when nearer, so nothing is ever swapped; draw order never depends on the camera. These are worth reading (`src/oilpaint/ground.js`) for chunked vegetation and the world → country → cell zoom. Not yet compared with Islands code.
