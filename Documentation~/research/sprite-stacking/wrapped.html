@@ -1,0 +1,596 @@
+<title>Sprite stacking</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una columna de lectura (~70ch) con "mesas de trabajo" anchas para cada demo: lienzo pixelado a la izquierda, perillas a la derecha; se apilan en el móvil. */
+:root {
+  --bg: #eef2f1;
+  --surface: #ffffff;
+  --ink: #15262b;
+  --muted: #5a6d72;
+  --line: #d3dddc;
+  --sea: #1f6f8b;
+  --sand: #c9a35c;
+  --accent: #d0573a;
+  --code-bg: #e3eae9;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1a1d; --surface: #16252a; --ink: #e4ecea; --muted: #93a6a8; --line: #2a3d42;
+    --sea: #5fb3cf; --sand: #dcb873; --accent: #ef8466; --code-bg: #1c2e33; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1a1d; --surface: #16252a; --ink: #e4ecea; --muted: #93a6a8; --line: #2a3d42;
+  --sea: #5fb3cf; --sand: #dcb873; --accent: #ef8466; --code-bg: #1c2e33; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font: 16px/1.6 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 64px;
+}
+main { max-width: 1040px; margin: 0 auto; display: grid; gap: 56px; }
+.read { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; line-height: 1.1; margin: 0; }
+h1 { font-size: clamp(2.6rem, 7vw, 4.4rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: clamp(1.6rem, 3.4vw, 2.2rem); font-weight: 700; }
+h3 { font-size: 1.15rem; font-weight: 500; }
+p { margin: 0; }
+.stack { display: grid; gap: 14px; }
+.eyebrow { font: 500 0.78rem/1 var(--f-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.15rem; color: var(--muted); }
+a { color: var(--sea); }
+code, .mono { font-family: var(--f-mono); font-size: 0.92em; }
+.bench {
+  display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px;
+}
+@media (max-width: 760px) { .bench { grid-template-columns: minmax(0, 1fr); } }
+.screen { display: grid; gap: 10px; min-width: 0; }
+canvas.px {
+  width: 100%; max-width: 100%; aspect-ratio: 1; image-rendering: pixelated; image-rendering: crisp-edges;
+  border-radius: 8px; display: block; background: #0d2b36; touch-action: none; cursor: grab;
+}
+canvas.strip { width: 100%; image-rendering: pixelated; border-radius: 6px; background: #0d2b36; display: block; }
+.knobs { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.knob { display: grid; gap: 4px; }
+.knob label { display: flex; justify-content: space-between; gap: 8px; font-size: 0.9rem; font-weight: 500; }
+.knob output { font: 0.85rem var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.knob small { color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+input:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button {
+  font: 500 0.88rem var(--f-body); padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: transparent; color: var(--ink);
+}
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.caption { font-size: 0.85rem; color: var(--muted); }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 640px) { .trio { grid-template-columns: minmax(0, 1fr); } }
+.trio figure { margin: 0; display: grid; gap: 8px; }
+.trio canvas { cursor: default; }
+.trio figcaption { font-size: 0.9rem; }
+.trio figcaption b { font-family: var(--f-display); font-weight: 700; color: var(--accent); margin-right: 6px; }
+pre {
+  margin: 0; background: var(--code-bg); border-radius: 10px; padding: 16px; overflow-x: auto;
+  font: 0.86rem/1.55 var(--f-mono);
+}
+.cmt { color: var(--muted); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 0.92rem; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 0.78rem var(--f-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+tr.hl td { background: color-mix(in srgb, var(--sand) 16%, transparent); }
+ul.limits { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.card { border-top: 3px solid var(--sea); padding-top: 10px; display: grid; gap: 6px; align-content: start; }
+.card .yr { font: 0.8rem var(--f-mono); color: var(--muted); }
+.card p { font-size: 0.92rem; }
+.uses { display: grid; gap: 12px; }
+.use { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.use:last-child { border-bottom: 0; }
+@media (max-width: 560px) { .use { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
+.use b { font-family: var(--f-display); }
+.tag { font: 0.75rem var(--f-mono); color: var(--muted); }
+footer { font-size: 0.85rem; color: var(--muted); display: grid; gap: 6px; }
+footer ol { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+</style>
+
+<main>
+  <header class="stack read">
+    <span class="eyebrow">Captura del 15-nov-2026 · para Islands</span>
+    <h1>Sprite stacking</h1>
+    <p class="lede">Un objeto 3D hecho de rebanadas 2D. Se dibuja cada rebanada un píxel más arriba que la anterior, todas giradas al mismo ángulo, y el ojo ve volumen. No hay polígonos, ni cámara 3D, ni GPU. Es la técnica del <a href="https://remix.ui8.ai/fly">caza sobre islas</a> que mandaste.</p>
+  </header>
+
+  <!-- DEMO 1: objeto -->
+  <section class="bench" aria-label="Demo de un objeto apilado">
+    <div class="screen">
+      <canvas id="obj" class="px" width="128" height="128" aria-label="Objeto dibujado con sprite stacking; arrastra para girarlo"></canvas>
+      <p class="caption">Arrastra para girar. Abajo, las mismas rebanadas una al lado de otra: es todo lo que hay guardado.</p>
+      <canvas id="strip" class="strip" width="320" height="40" aria-label="Rebanadas del modelo, de abajo arriba"></canvas>
+    </div>
+    <div class="knobs">
+      <div class="knob">
+        <span class="eyebrow">Modelo</span>
+        <div class="seg" id="modelSeg">
+          <button type="button" data-m="araucaria" aria-pressed="true">Araucaria</button>
+          <button type="button" data-m="dalca" aria-pressed="false">Canoa con vela</button>
+          <button type="button" data-m="casa" aria-pressed="false">Palafito</button>
+        </div>
+      </div>
+      <div class="knob">
+        <label for="sp">Separación entre rebanadas <output id="spO">1 px</output></label>
+        <input id="sp" type="range" min="0" max="5" step="0.25" value="1">
+        <small>Con 1 px parece sólido. Con 0, solo ves la de arriba (un sprite plano). Por encima de 1 aparecen huecos y se ve el truco.</small>
+      </div>
+      <div class="knob">
+        <label for="tl">Inclinación de la cámara <output id="tlO">0,6</output></label>
+        <input id="tl" type="range" min="0.3" max="1" step="0.05" value="0.6">
+        <small>Achatar cada rebanada en vertical simula mirar desde más bajo. Con 1 es una vista cenital pura.</small>
+      </div>
+      <div class="knob">
+        <label for="hl">Resaltar rebanada <output id="hlO">ninguna</output></label>
+        <input id="hl" type="range" min="-1" max="39" step="1" value="-1">
+        <small>Pinta de color una sola capa en la vista y en la tira.</small>
+      </div>
+      <div class="knob">
+        <label for="spin" style="justify-content:flex-start;gap:8px"><input id="spin" type="checkbox" checked> Girar solo</label>
+      </div>
+    </div>
+  </section>
+
+  <!-- PASOS -->
+  <section class="stack">
+    <div class="read stack">
+      <span class="eyebrow">La idea en tres imágenes</span>
+      <h2>Rebanar, apilar, girar</h2>
+    </div>
+    <div class="trio">
+      <figure><canvas id="t1" class="px" width="96" height="96" aria-label="Rebanadas separadas"></canvas>
+        <figcaption><b>1</b>Se corta el modelo en capas horizontales, como un escáner o una impresora 3D. Cada capa es un sprite normal.</figcaption></figure>
+      <figure><canvas id="t2" class="px" width="96" height="96" aria-label="Rebanadas apiladas"></canvas>
+        <figcaption><b>2</b>Se dibujan de abajo arriba, cada una 1 px más alta. Los bordes de las de abajo asoman y forman los lados.</figcaption></figure>
+      <figure><canvas id="t3" class="px" width="96" height="96" aria-label="Rebanadas giradas"></canvas>
+        <figcaption><b>3</b>Para girar el objeto se gira cada sprite el mismo ángulo. El desplazamiento vertical no cambia, así que la ilusión aguanta.</figcaption></figure>
+    </div>
+  </section>
+
+  <!-- ALGORITMO -->
+  <section class="stack read">
+    <span class="eyebrow">El algoritmo entero</span>
+    <h2>Siete líneas</h2>
+    <p>No hace falta nada más que una función que dibuje un sprite rotado. Por eso cabe en un demo pequeño y funciona en cualquier motor 2D.</p>
+<pre><code><span class="cmt">// rebanadas[0] es la base, rebanadas[n-1] la tapa</span>
+for (let z = 0; z &lt; rebanadas.length; z++) {
+  ctx.setTransform(1, 0, 0, inclinacion,   <span class="cmt">// achata para "mirar desde abajo"</span>
+                   x, y - z * separacion);  <span class="cmt">// cada capa, más arriba</span>
+  ctx.rotate(angulo);                       <span class="cmt">// todas al mismo ángulo</span>
+  ctx.drawImage(rebanadas[z], -ancho / 2, -fondo / 2);
+}</code></pre>
+    <p>Con varios objetos en escena hay que ordenar: se dibujan primero los que están más lejos (más arriba en pantalla). Muchos juegos lo hacen capa por capa para todos los objetos a la vez.</p>
+  </section>
+
+  <!-- DEMO 2: terreno -->
+  <section class="stack">
+    <div class="read stack">
+      <span class="eyebrow">Lo que hace el demo del caza</span>
+      <h2>Un terreno es una pila de una columna por píxel</h2>
+      <p>En el demo, las islas también son pilas: cada píxel de suelo tiene una altura y un material, sacados de ruido de valor por octavas y cuantizados en terrazas. Aquí, lo mismo con el agua por cuantil, como en NoiseLab. Cada píxel de pantalla busca, de la capa más alta a la más baja, la primera columna que llega a esa altura. Si la toca justo en su cima es suelo; si no, es ladera, más oscura. Así salen solas las curvas de nivel.</p>
+    </div>
+    <div class="bench">
+      <div class="screen">
+        <canvas id="ter" class="px" width="180" height="180" aria-label="Terreno de islas dibujado como columnas apiladas; arrastra para girarlo"></canvas>
+        <p class="caption">Arrastra para girar. Mapa de 128 × 128 celdas, imagen de 180 × 180 px ampliada sin suavizar.</p>
+      </div>
+      <div class="knobs">
+        <div class="knob">
+          <label for="wq">Agua (cuantil) <output id="wqO">55 %</output></label>
+          <input id="wq" type="range" min="20" max="85" step="1" value="55">
+          <small>Qué parte del mapa queda bajo el mar, sea cual sea la semilla.</small>
+        </div>
+        <div class="knob">
+          <label for="lv">Terrazas <output id="lvO">10</output></label>
+          <input id="lv" type="range" min="3" max="16" step="1" value="10">
+          <small>Niveles de altura. El caza usa 8 de hierba, 4 de roca y uno de nieve.</small>
+        </div>
+        <div class="knob">
+          <label for="kz">Píxeles por terraza <output id="kzO">2</output></label>
+          <input id="kz" type="range" min="1" max="4" step="1" value="2">
+        </div>
+        <div class="knob">
+          <label for="ct">Cortar la pila a la altura <output id="ctO">todo</output></label>
+          <input id="ct" type="range" min="0" max="64" step="1" value="64">
+          <small>Baja el corte para ver cómo la imagen se construye capa por capa.</small>
+        </div>
+        <div class="knob">
+          <label for="tp">Inclinación <output id="tpO">0,7</output></label>
+          <input id="tp" type="range" min="0.4" max="1" step="0.05" value="0.7">
+        </div>
+        <div class="knob">
+          <button type="button" id="seed" class="seg" style="all:unset;cursor:pointer;font:500 0.88rem var(--f-body);padding:6px 12px;border:1px solid var(--line);border-radius:999px;width:max-content">Otra semilla</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LIMITES -->
+  <section class="stack read">
+    <span class="eyebrow">Lo que no hace</span>
+    <h2>Límites y trucos</h2>
+    <ul class="limits">
+      <li><b>Un solo eje de giro.</b> Gira sobre la vertical y la inclinación de cámara es fija o casi. No puedes ver un objeto desde abajo ni ponerlo de lado.</li>
+      <li><b>Huecos al separar.</b> Si la separación pasa de 1 px, o la inclinación es baja, se ven las rendijas. Se tapa dibujando cada capa dos veces o con capas más gruesas.</li>
+      <li><b>El coste crece con la altura.</b> Un objeto de 40 capas son 40 dibujos. Con cientos de objetos hay que agrupar o pasar a la GPU.</li>
+      <li><b>Animar es difícil.</b> Mover un brazo obliga a cambiar muchas capas a la vez. En <i>Wee Boats</i> la capa de arriba se guarda como sprite normal para animarla.</li>
+      <li><b>La vista de persecución del caza es otra cosa.</b> Mirar desde detrás del avión, con horizonte, se parece más a Voxel Space (columnas por distancia) que a apilar capas. El demo reparte la misma cámara entre las dos vistas.</li>
+    </ul>
+  </section>
+
+  <!-- COMPARACION -->
+  <section class="stack">
+    <div class="read stack">
+      <span class="eyebrow">Dónde encaja</span>
+      <h2>Cuatro formas de dar relieve sin un motor 3D completo</h2>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Técnica</th><th>Qué guarda</th><th>Cómo dibuja</th><th>Cámara</th><th>Ejemplo</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td><b>Sprite stacking</b></td><td>Capas 2D (o vóxeles)</td><td>Un sprite rotado por capa, de abajo arriba</td><td>Giro en vertical, inclinación fija</td><td><i>Wee Boats</i>, el caza de UI8</td></tr>
+          <tr><td><b>Voxel Space</b></td><td>Mapa de altura y de color</td><td>Columnas verticales por distancia, de cerca a lejos</td><td>Libre en horizontal, cabeceo limitado</td><td><i>Comanche</i> (NovaLogic, 1992)</td></tr>
+          <tr><td><b>Raymarching de SDF</b></td><td>Una función de distancia</td><td>Un rayo por píxel en un shader</td><td>Libre</td><td>Demos de Shadertoy</td></tr>
+          <tr><td><b>Polígonos</b></td><td>Mallas de triángulos</td><td>Rasterizado en la GPU</td><td>Libre</td><td>Casi todo el 3D actual</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- EJEMPLOS -->
+  <section class="stack">
+    <div class="read stack">
+      <span class="eyebrow">Ejemplos</span>
+      <h2>Quién la usa</h2>
+    </div>
+    <div class="cards">
+      <article class="card"><span class="yr">2019 · herramienta</span><h3><a href="https://rezoner.itch.io/spritestack">SpriteStack</a></h3><p>Editor de vóxeles de Rezoner pensado para esta técnica: modelas en 3D y exporta las rebanadas. Tiene versión gratis en el navegador y otra de pago en Steam.</p></article>
+      <article class="card"><span class="yr">2023–2025 · juego</span><h3><a href="https://jamespoole.itch.io/wee-boats/devlog/685630/using-sprite-stacking-for-pseudo-3d-in-wee-boats">Wee Boats</a></h3><p>Barcos apilados de James Poole, arte de Brendan Hewson. Su devlog cuenta cómo gira cada rebanada en cada tick y cómo resolvieron la animación.</p></article>
+      <article class="card"><span class="yr">2018 · juego</span><h3>NIUM</h3><p>Citado por Chequered Ink como ejemplo de juego pseudo-3D con sprites apilados. No encontré una fuente del propio desarrollador.</p></article>
+      <article class="card"><span class="yr">2026 · demo</span><h3><a href="https://remix.ui8.ai/fly">Fighter jet scene</a></h3><p>El de tu captura, hecho con Forge (UI8). Avión, islas y nubes apilados en un búfer de 320 × 320; el código no lleva firma de autor.</p></article>
+    </div>
+  </section>
+
+  <!-- USOS -->
+  <section class="stack read">
+    <span class="eyebrow">Para tus proyectos</span>
+    <h2>Dónde podría entrar</h2>
+    <div class="uses">
+      <div class="use"><b>NoiseLab</b><p>Una capa «Relieve apilado» sobre lo que ya hay (bandas por cuantil, curvas de nivel, nubes). Es software puro y por columnas, así que se puede pasar a Burst como el muestreo de la v5. <span class="tag">probable</span></p></div>
+      <div class="use"><b>Islands Lab</b><p>Una parte «De mapa de altura a mundo apilado», con el corte por capas de este wrapped como la pieza interactiva. <span class="tag">probable</span></p></div>
+      <div class="use"><b>Flora Lab</b><p>La araucaria y la palma ya salen de un generador. Exportar sus rebanadas daría árboles que giran en el bosque de araucarias sin cambiar el estilo pixel. <span class="tag">especulativa</span></p></div>
+      <div class="use"><b>mundo-islas</b><p>Otra opción de estilo para el zoom a la casilla: casas y palafitos apilados, con el material de cada capa diciendo la cultura. <span class="tag">especulativa</span></p></div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="eyebrow">Fuentes</span>
+    <ol>
+      <li>UI8, post en Threads (@ui8net) y demo «Fighter jet scene», leídos el 15-nov-2026; la técnica sale de los comentarios de su <code>lib/scene.ts</code>.</li>
+      <li>James Poole, «<a href="https://jamespoole.itch.io/wee-boats/devlog/685630/using-sprite-stacking-for-pseudo-3d-in-wee-boats">Using Sprite Stacking for Pseudo 3D in Wee Boats</a>», itch.io, 20-feb-2024.</li>
+      <li>Rezoner, <a href="https://rezoner.itch.io/spritestack">SpriteStack</a>; reseña en <a href="https://80.lv/articles/spritestack-voxel-editor-animator-renderer/">80.lv</a>.</li>
+      <li>Creative Bloq, «<a href="https://www.creativebloq.com/3d/video-game-design/this-technique-for-making-2d-pixel-art-look-3d-is-blowing-peoples-minds">This technique for making 2D pixel art look 3D…</a>».</li>
+      <li>s-macke, <a href="https://github.com/s-macke/VoxelSpace">VoxelSpace</a> (el algoritmo de <i>Comanche</i> explicado).</li>
+    </ol>
+    <p>Los modelos y el terreno de esta página se generan en tu navegador con el mismo método; no hay imágenes guardadas.</p>
+  </footer>
+</main>
+
+<script>
+(() => {
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $ = id => document.getElementById(id);
+
+/* ---------- utilidades ---------- */
+function hash(x, y, z, s) {
+  let h = (x * 374761393 + y * 668265263 + z * 2147483647 + s * 1442695041) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+const shade = (c, f) => [c[0] * f, c[1] * f, c[2] * f];
+
+/* ---------- modelos de vóxeles: f(x,y,z) -> [r,g,b] | null ---------- */
+const MODELS = {
+  araucaria: { W: 33, D: 33, H: 40, f(x, y, z) {
+    const dx = x - 16, dy = y - 16, r = Math.hypot(dx, dy);
+    if (r <= 1.3 && z < 37) return [112, 74, 48];
+    if (z < 14) return null;
+    const t = (z - 14) / 25;                       // 0..1 dentro de la copa
+    const R = 3 + 13 * Math.sin(Math.PI * Math.min(1, t * 1.15)) * (1 - t * 0.35);
+    if (r > R) return null;
+    const tier = (z - 14) % 4;                     // verticilos cada 4 capas
+    const top = z >= 36;
+    if (!top && tier > 1) return r < 2.6 ? [46, 92, 52] : null;
+    const a = Math.atan2(dy, dx) + z * 0.21;
+    const arm = Math.abs(((a / (Math.PI / 3)) % 1 + 1) % 1 - 0.5);  // 6 brazos
+    if (!top && r > 3 && arm < 0.5 - (0.18 + r / R * 0.2)) return null;
+    const n = hash(x, y, z, 7);
+    const edge = r > R - 1.6;
+    return edge ? [70 + n * 30, 140 + n * 30, 66] : [40 + n * 20, 104 + n * 26, 52];
+  }},
+  dalca: { W: 38, D: 16, H: 24, f(x, y, z) {
+    const dx = x - 19, dy = y - 8;
+    const L = 17;
+    if (z <= 4 && Math.abs(dx) <= L) {
+      const len = Math.sqrt(Math.max(0, 1 - (dx / L) ** 2));
+      const w = (1.8 + z * 1.1) * len;
+      const ad = Math.abs(dy);
+      if (ad <= w && (z === 0 || ad >= w - 1.4)) {
+        if (z === 4) return [196, 70, 52];
+        const n = hash(x, y, z, 3);
+        return [118 + n * 24, 78 + n * 14, 46];
+      }
+      if (ad <= w && Math.abs(Math.abs(dx) - L * 0.92) < 1 && z > 0) return [96, 62, 38];
+      if (z === 1 && ad < w - 1 && (dx + 40) % 7 === 0) return [140, 98, 60];   // bancos
+    }
+    if (dx === 3 && dy === 0 && z <= 22) return [92, 60, 38];               // mástil
+    if (dy === 0 && z >= 6 && z <= 21 && dx >= 4 && dx - 4 <= (21 - z) * 0.85) {
+      return (z % 5 === 0) ? [214, 202, 170] : [236, 226, 196];             // vela
+    }
+    if (dx === -10 && Math.abs(dy) <= 1 && z >= 5 && z <= 8) return z === 8 ? [60, 48, 40] : [178, 64, 50]; // remero
+    return null;
+  }},
+  casa: { W: 30, D: 30, H: 30, f(x, y, z) {
+    const dx = x - 15, dy = y - 15;
+    if (z <= 7) {                                      // pilotes
+      if ((Math.abs(dx) === 9 || dx === 0) && (Math.abs(dy) === 9 || dy === 0) && !(dx === 0 && dy === 0)) return [86, 66, 50];
+      return null;
+    }
+    if (z === 8 && Math.abs(dx) <= 12 && Math.abs(dy) <= 11) return hash(x, y, 1, 2) < 0.15 ? [120, 90, 60] : [150, 112, 72]; // plataforma
+    if (z >= 9 && z <= 17 && Math.abs(dx) <= 9 && Math.abs(dy) <= 8) {
+      const wall = Math.abs(dx) === 9 || Math.abs(dy) === 8;
+      if (!wall) return null;
+      if (dy === 8 && Math.abs(dx) <= 2 && z <= 14) return [54, 40, 32];   // puerta
+      if (Math.abs(dx) === 9 && Math.abs(dy) <= 2 && z >= 12 && z <= 14) return [240, 200, 110]; // ventana
+      const tej = (Math.floor((z + (dx + dy & 1)) / 2)) % 2;              // tejuelas de alerce
+      return tej ? [176, 130, 82] : [160, 116, 72];
+    }
+    if (z >= 18 && z <= 27) {                          // techo a dos aguas
+      const k = z - 18, half = 10 - k * 1.05;
+      if (Math.abs(dy) <= half && Math.abs(dx) <= 11) {
+        const surf = Math.abs(dy) > half - 1.5 || Math.abs(dx) === 11;
+        if (!surf) return null;
+        return Math.abs(dx) === 11 ? [168, 120, 74] : (k % 2 ? [92, 88, 96] : [110, 104, 112]);
+      }
+    }
+    if (z >= 22 && z <= 29 && dx === 5 && dy === -3) return [200, 196, 190]; // humo / chimenea
+    return null;
+  }}
+};
+
+function buildSlices(m) {
+  const slices = [];
+  for (let z = 0; z < m.H; z++) {
+    const c = document.createElement('canvas'); c.width = m.W; c.height = m.D;
+    const g = c.getContext('2d'); const img = g.createImageData(m.W, m.D); let any = false;
+    const f = 0.62 + 0.38 * (z / (m.H - 1));          // capas bajas, un poco más oscuras
+    for (let y = 0; y < m.D; y++) for (let x = 0; x < m.W; x++) {
+      const col = m.f(x, y, z); if (!col) continue; any = true;
+      const i = (y * m.W + x) * 4, s = shade(col, f);
+      img.data[i] = s[0]; img.data[i + 1] = s[1]; img.data[i + 2] = s[2]; img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0); slices.push({ c, any, img });
+  }
+  return slices;
+}
+const tintCache = new Map();
+function tinted(sl) {
+  if (tintCache.has(sl)) return tintCache.get(sl);
+  const c = document.createElement('canvas'); c.width = sl.c.width; c.height = sl.c.height;
+  const g = c.getContext('2d'); const img = g.createImageData(c.width, c.height);
+  for (let i = 0; i < img.data.length; i += 4) if (sl.img.data[i + 3]) { img.data[i] = 239; img.data[i + 1] = 110; img.data[i + 2] = 70; img.data[i + 3] = 255; }
+  g.putImageData(img, 0, 0); tintCache.set(sl, c); return c;
+}
+
+function drawSea(g, w, h) {
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.fillStyle = '#0d2b36'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#123847';
+  for (let y = 3; y < h; y += 6) for (let x = (y * 7) % 11; x < w; x += 11) g.fillRect(x, y, 3, 1);
+}
+function drawStack(g, slices, cx, cy, ang, sp, pitch, hl, W, D) {
+  g.imageSmoothingEnabled = false;
+  // sombra
+  g.setTransform(1, 0, 0, pitch, cx, cy); g.rotate(ang);
+  g.globalAlpha = 0.28; g.fillStyle = '#000';
+  g.beginPath(); g.ellipse(0, 0, W * 0.42, D * 0.42, 0, 0, Math.PI * 2); g.fill(); g.globalAlpha = 1;
+  for (let z = 0; z < slices.length; z++) {
+    const s = slices[z]; if (!s.any) continue;
+    g.setTransform(1, 0, 0, pitch, Math.round(cx), Math.round(cy - z * sp));
+    g.rotate(ang);
+    g.drawImage(z === hl ? tinted(s) : s.c, -W / 2, -D / 2);
+  }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/* ---------- demo 1 ---------- */
+const obj = $('obj'), og = obj.getContext('2d'), strip = $('strip'), sg = strip.getContext('2d');
+let model = 'araucaria', slices = {}, ang = 0.6, spin = !reduce;
+$('spin').checked = spin;
+for (const k in MODELS) slices[k] = buildSlices(MODELS[k]);
+const fmt = v => String(v).replace('.', ',');
+
+function drawStrip() {
+  const m = MODELS[model], sl = slices[model], hl = +$('hl').value;
+  const cols = 10, rows = Math.ceil(m.H / cols), cw = m.W + 4, ch = m.D + 4;
+  strip.width = cols * cw; strip.height = rows * ch;
+  sg.imageSmoothingEnabled = false;
+  sg.fillStyle = '#0d2b36'; sg.fillRect(0, 0, strip.width, strip.height);
+  sl.forEach((s, z) => {
+    const x = (z % cols) * cw + 2, y = (rows - 1 - Math.floor(z / cols)) * ch + 2;
+    sg.fillStyle = z === hl ? '#5a2a1f' : '#123847'; sg.fillRect(x - 1, y - 1, m.W + 2, m.D + 2);
+    sg.drawImage(z === hl ? tinted(s) : s.c, x, y);
+  });
+  strip.style.aspectRatio = strip.width + ' / ' + strip.height;
+}
+function drawObj() {
+  const m = MODELS[model], sp = +$('sp').value, pitch = +$('tl').value, hl = +$('hl').value;
+  drawSea(og, obj.width, obj.height);
+  drawStack(og, slices[model], obj.width / 2, obj.height / 2 + m.H * sp * 0.5 + 6, ang, sp, pitch, hl, m.W, m.D);
+}
+function syncObj() {
+  const m = MODELS[model]; const hlI = $('hl'); hlI.max = m.H - 1; if (+hlI.value > m.H - 1) hlI.value = -1;
+  $('spO').textContent = fmt(+$('sp').value) + ' px';
+  $('tlO').textContent = fmt(+$('tl').value);
+  $('hlO').textContent = +hlI.value < 0 ? 'ninguna' : (+hlI.value + 1) + ' de ' + m.H;
+  drawStrip(); drawObj();
+}
+['sp', 'tl', 'hl'].forEach(id => $(id).addEventListener('input', syncObj));
+$('spin').addEventListener('change', e => { spin = e.target.checked; });
+$('modelSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  model = b.dataset.m;
+  [...$('modelSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b));
+  syncObj();
+});
+function dragRotate(cv, get, set, after) {
+  let px = null;
+  cv.addEventListener('pointerdown', e => { px = e.clientX; cv.setPointerCapture(e.pointerId); cv.style.cursor = 'grabbing'; });
+  cv.addEventListener('pointermove', e => { if (px === null) return; set(get() + (e.clientX - px) * 0.012); px = e.clientX; after(); });
+  const up = () => { px = null; cv.style.cursor = 'grab'; };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+}
+let draggingObj = false;
+obj.addEventListener('pointerdown', () => draggingObj = true); obj.addEventListener('pointerup', () => draggingObj = false);
+dragRotate(obj, () => ang, v => ang = v, drawObj);
+
+/* ---------- trío ---------- */
+// panel 1: una de cada tres capas, para que la separación se lea
+(function trio() {
+  const m = MODELS.araucaria, sl = slices.araucaria;
+  const every = sl.map((s, i) => (i % 3 === 0 ? s : { any: false }));
+  const c1 = $('t1'), g1 = c1.getContext('2d'); drawSea(g1, 96, 96);
+  drawStack(g1, every, 48, 82, 0.35, 1.75, 0.5, -1, m.W, m.D);
+  const c2 = $('t2'), g2 = c2.getContext('2d'); drawSea(g2, 96, 96);
+  drawStack(g2, sl, 48, 74, 0.35, 1, 0.5, -1, m.W, m.D);
+  const c3 = $('t3'), g3 = c3.getContext('2d'); drawSea(g3, 96, 96);
+  drawStack(g3, sl, 48, 74, 1.25, 1, 0.5, -1, m.W, m.D);
+})();
+
+/* ---------- demo 2: terreno ---------- */
+const N = 128, ter = $('ter'), tg = ter.getContext('2d'), S = ter.width;
+let seed = 11, tAng = 0.5, field = null, sorted = null;
+const H = new Uint8Array(N * N), TOP = new Uint8Array(N * N * 3), SIDE = new Uint8Array(N * N * 3);
+const timg = tg.createImageData(S, S);
+
+function makeField() {
+  field = new Float32Array(N * N);
+  let amp = 1, tot = 0;
+  for (let o = 0; o < 5; o++) {
+    const P = 4 << o;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const gx = x / N * P, gy = y / N * P, ix = Math.floor(gx), iy = Math.floor(gy);
+      let fx = gx - ix, fy = gy - iy; fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+      const a = hash(ix % P, iy % P, o, seed), b = hash((ix + 1) % P, iy % P, o, seed);
+      const c = hash(ix % P, (iy + 1) % P, o, seed), d = hash((ix + 1) % P, (iy + 1) % P, o, seed);
+      field[y * N + x] += amp * ((a + (b - a) * fx) * (1 - fy) + (c + (d - c) * fx) * fy);
+    }
+    tot += amp; amp *= 0.5;
+  }
+  // borde que baja al mar para que se lea como archipiélago
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const dx = x / N * 2 - 1, dy = y / N * 2 - 1, r = Math.min(1, Math.hypot(dx, dy));
+    field[y * N + x] = field[y * N + x] / tot - 0.35 * r * r * r;
+  }
+  sorted = Float32Array.from(field).sort();
+}
+const PAL = {
+  sand: [222, 196, 132], g1: [104, 170, 76], g2: [88, 152, 66], rock: [128, 120, 112], rock2: [112, 104, 98],
+  snow: [238, 242, 244], deep: [22, 74, 112], mid: [34, 104, 146], shallow: [70, 150, 176]
+};
+function classify() {
+  const L = +$('lv').value, k = +$('kz').value, q = +$('wq').value / 100;
+  const wl = sorted[Math.floor(q * (N * N - 1))], mx = sorted[N * N - 1];
+  const lo = sorted[0];
+  for (let i = 0; i < N * N; i++) {
+    const v = field[i]; let top, h;
+    if (v <= wl) {
+      const d = (wl - v) / (wl - lo + 1e-6);
+      top = d < 0.08 ? PAL.shallow : d < 0.35 ? PAL.mid : PAL.deep; h = 0;
+      const n = hash(i % N, (i / N) | 0, 9, 1) < 0.04 ? 1.15 : 1;      // espuma
+      top = shade(top, n);
+    } else {
+      const t = (v - wl) / (mx - wl + 1e-6), l = Math.min(L - 1, Math.floor(t * L)), fr = l / L;
+      top = fr < 0.12 ? PAL.sand : fr < 0.62 ? (l % 2 ? PAL.g1 : PAL.g2) : fr < 0.86 ? (l % 2 ? PAL.rock : PAL.rock2) : PAL.snow;
+      h = (l + 1) * k;
+    }
+    H[i] = h;
+    const side = shade(top, 0.62);
+    TOP[i * 3] = top[0]; TOP[i * 3 + 1] = top[1]; TOP[i * 3 + 2] = top[2];
+    SIDE[i * 3] = side[0]; SIDE[i * 3 + 1] = side[1]; SIDE[i * 3 + 2] = side[2];
+  }
+  const maxZ = L * k; const ct = $('ct'); ct.max = maxZ; if (+ct.value > maxZ || ct.dataset.full !== '0') ct.value = maxZ;
+}
+function drawTer() {
+  const L = +$('lv').value, k = +$('kz').value, pitch = +$('tp').value, maxZ = L * k;
+  const cut = +$('ct').value, d = timg.data, ca = Math.cos(tAng), sa = Math.sin(tAng), sc = 0.78;
+  const cx = S / 2, cy = S / 2 + maxZ * 0.35;
+  for (let sy = 0; sy < S; sy++) for (let sx = 0; sx < S; sx++) {
+    const o = (sy * S + sx) * 4, gx = sx - cx; let r = 13, g = 43, b = 54;
+    for (let z = Math.min(cut, maxZ); z >= 0; z--) {
+      const gy = (sy - cy + z) / pitch;
+      const u = Math.floor((gx * ca + gy * sa) * sc + N / 2), v = Math.floor((-gx * sa + gy * ca) * sc + N / 2);
+      if (u < 0 || v < 0 || u >= N || v >= N) continue;
+      const i = v * N + u, hh = Math.min(H[i], cut);
+      if (hh >= z) {
+        const src = hh === z ? TOP : SIDE;
+        r = src[i * 3]; g = src[i * 3 + 1]; b = src[i * 3 + 2];
+        if (hh === z && H[i] > cut) { r = 240; g = 112; b = 74; }   // cara del corte
+        break;
+      }
+    }
+    d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
+  }
+  tg.putImageData(timg, 0, 0);
+}
+function syncTer(reclass) {
+  $('wqO').textContent = $('wq').value + ' %';
+  $('lvO').textContent = $('lv').value;
+  $('kzO').textContent = $('kz').value;
+  $('tpO').textContent = fmt(+$('tp').value);
+  if (reclass) classify();
+  const ct = $('ct');
+  $('ctO').textContent = +ct.value >= +ct.max ? 'todo' : ct.value + ' px';
+  drawTer();
+}
+$('ct').dataset.full = '1';
+$('ct').addEventListener('input', e => { e.target.dataset.full = +e.target.value >= +e.target.max ? '1' : '0'; syncTer(false); });
+['wq', 'lv', 'kz'].forEach(id => $(id).addEventListener('input', () => syncTer(true)));
+$('tp').addEventListener('input', () => syncTer(false));
+$('seed').addEventListener('click', () => { seed = (seed * 7 + 13) % 997; makeField(); syncTer(true); });
+let draggingTer = false;
+ter.addEventListener('pointerdown', () => draggingTer = true); ter.addEventListener('pointerup', () => draggingTer = false);
+dragRotate(ter, () => tAng, v => tAng = v, drawTer);
+
+makeField(); classify(); syncObj(); syncTer(false);
+
+/* ---------- animación ---------- */
+let last = 0, visObj = true, visTer = true;
+const io = new IntersectionObserver(es => es.forEach(e => { if (e.target === obj) visObj = e.isIntersecting; else visTer = e.isIntersecting; }));
+io.observe(obj); io.observe(ter);
+function loop(t) {
+  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  if (spin && !draggingObj && visObj) { ang += dt * 0.6; drawObj(); }
+  if (spin && !draggingTer && visTer) { tAng += dt * 0.15; drawTer(); }
+  requestAnimationFrame(loop);
+}
+if (!reduce) requestAnimationFrame(loop);
+})();
+</script>

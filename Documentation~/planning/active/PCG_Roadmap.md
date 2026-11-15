@@ -1683,3 +1683,9 @@ vegetation — recalibrating vegetation densities for those biomes would change 
 **Source:** `Documentation~/research/2026-11-13-pcg-games-proposals.md`; page https://claude.ai/artifact/HLxMj8NRPTE7omTNjjswuA.  
 **Status:** Research only. To be triaged into phases at the next planning pass; nothing applied.
 
+### PL-13 — Many views of the same map: catalogue and demos (NoiseLab, after v6)
+**Date:** 2026-11-15  
+**Idea (Claudio):** draw the same NoiseLab map in many styles (wireframe, RollerCoaster Tycoon-style sloped isometric tiles, Minecraft blocks, Valheim-style smooth mesh, etc.) to catalogue and demonstrate each technique. First candidate: stacked relief (sprite stacking) as a Burst job per screen pixel, no mesh. Sample/adapter side only; no `Runtime/` change.  
+**Source:** `Documentation~/planning/exploration/NoiseLab_Views_Catalog.md`; wrapped https://claude.ai/artifact/9gQ8nFyHVwjpktdgMHb6wU.  
+**Status:** Exploration only. Four decisions open (where it lives, where it is demoed, order, S22 budget).
+

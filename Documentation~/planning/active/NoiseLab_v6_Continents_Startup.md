@@ -53,7 +53,7 @@ Opcional en esta sesión: decidir con Claudio si se mide alguno junto al campo C
 ## Fuera de alcance
 2b y 2c (siguientes); la regla de la isla (Godfrey) salvo que se vea el problema; lab de placas
 y escena índice (después de la v6); zoom continuo y los tres niveles mundo → país → celda
-(Phase W / mundo-islas); cambios en `Runtime/`.
+(Phase W / mundo-islas); cambios en `Runtime/`; catálogo de vistas del mapa (`../exploration/NoiseLab_Views_Catalog.md`, PL-13).
 
 ## No rehacer
 v1–v5, el paso 1 (1a–1b.2), los pasos de interfaz, la 2a y su arreglo, *Zoom out ×4*.

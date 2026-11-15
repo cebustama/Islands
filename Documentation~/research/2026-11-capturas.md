@@ -2,6 +2,14 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-15 · Sprite stacking: the UI8 fighter over islands
+- **Type and origin:** link (Threads, @ui8net: https://www.threads.com/share/_o1S491-u/ → https://remix.ui8.ai/fly, a «Fighter jet scene» made with UI8's Forge). Claude read the demo's source in Chrome.
+- **What it is:** a software renderer into a 320×320 buffer scaled ×3. The jet, the islands and the clouds are all *stacks*: horizontal slices drawn 1 px apart and rotated to any angle; the ground has a height and a material per pixel (tileable value noise by octaves, quantised into 8 grass, 4 rock and one snow terrace). Clouds are clusters of puffs with a rank, so the cover slider adds or removes whole clouds. Bayer dithering, distance haze, and one camera that slides between an overhead view and a chase view. «32 KB of code» does not match the ~160 KB of TypeScript sources (at most a compressed figure); no author credited.
+- **Wrapped:** https://claude.ai/artifact/9gQ8nFyHVwjpktdgMHb6wU (source `sprite-stacking/wrapped.html`): object stacks, the 7-line algorithm, a stacked terrain with water by quantile and a height cut, limits, comparison with Voxel Space / raymarching / polygons, examples (SpriteStack, *Wee Boats*).
+- 💡 **Use here:** stacked relief as a Burst view of the NoiseLab map → first entry of the views catalogue (`../planning/exploration/NoiseLab_Views_Catalog.md`, PL-13). Claudio: «Me gustan mucho las propuestas».
+- **Connects with:** web Flora/Fauna Lab (stacked view of the araucaria, palm and pudú; startup in `web/claudiobustamante-site/Documentation~/planning/active/Flora_Fauna_Stack_View_Startup.md`), mundo-islas (cell-zoom style, speculative).
+- **Status:** seed → planned (exploration).
+
 ## 2026-11-13 · Twenty procedural games → eleven proposals
 - **Main entry:** [`2026-11-13-pcg-games-proposals.md`](2026-11-13-pcg-games-proposals.md); page https://claude.ai/artifact/HLxMj8NRPTE7omTNjjswuA.
 - **Status:** seed (proposals, nothing applied).
