@@ -146,3 +146,19 @@ escalable posible. Propuesta, no autoridad; manda el código.
 ## Añadido el 2026-11-17 (módulo de hidrología)
 
 - La lluvia y la temperatura que deja este módulo (2c) alimentan la hidrología: H1 pondera el caudal con `lluvia − evaporación(temperatura)`. Por eso la hidrología va después de la v6. Diseño en [`Hydrology_Module_Design.md`](Hydrology_Module_Design.md) (PL-14).
+
+## Añadido el 2026-11-17 (2b hecha: temperatura del mar)
+
+Manda el código (`SeaBaseTemp`, `SeaHeat`, `SeaHeatJob` en `NoiseLab.cs`); resumen en
+`NoiseLab_v6_Startup.md` («2b cerrada»).
+
+- **Cambio frente al diseño:** el afloramiento no lee el viento a lo largo de la costa. El
+  viento del modelo B es solo zonal (τx), así que en una costa norte–sur nunca va paralelo a
+  ella. La regla lee su huella: tierra al este y corriente hacia el ecuador → tira hacia el
+  agua profunda (10 °C). Si algún día el viento tiene componente meridiana (alisios que se
+  curvan hacia el ecuador al este de cada océano), la regla de Ekman podría sustituirla.
+- **El transporte no es el de la 1b.2 tal cual:** pierde por tiempo, no por distancia (relajación
+  `h / memoria`), y los flujos de cara salen de ψ en las esquinas, sin divergencia.
+- **Para la 2c:** la temperatura vive en la rejilla de las regiones (156 km por celda); la
+  costa que aflora mide una celda. El clima la muestreará con `SampleRegionField`, igual que
+  la capa *Sea temp*.

@@ -76,9 +76,9 @@ cambian.
 | ID | Pieza | Dónde en NoiseLab | Motor hoy | Tipo | Destino propuesto | Validado | Bloqueada por |
 |---|---|---|---|---|---|---|---|
 | O1 | Corrientes marinas (Stommel: función de corriente ψ con β y viento por latitud; rejilla gruesa fija al mundo) | `Ocean`, `ComputeOceanRegion`, `OceanSorJob`, `OceanResidual`, `SampleRegion` | No existe | A | Stage nueva de escala de mundo (fase W); campos `CurrentPsi`, `CurrentU`, `CurrentV` | v6 paso 2a (2026-11-11), editor + S22 | MD-1, MD-2 |
-| O2 | Temperatura del mar: base por latitud, transportada por las corrientes (volúmenes finitos upwind + relajación, memoria del calor) | `SeaBaseTemp`, `SeaHeat`, `SeaHeatJob` | No existe | A | La misma stage que O1; campo `SeaTemperature` | 2b pasos 1–2 (2026-11-17, `b3688c8`, `a507225`) | O1 |
-| O3 | Afloramiento costero (costas oeste frías: Humboldt, Benguela, California, Canarias) | `upwelling` (2b paso 3) | No existe | A | La misma stage que O1 | **En curso** (2b paso 3) | O2 |
-| O4 | El clima lee el mar (2c): la temperatura del mar modera la costa y una costa fría seca el aire | Sin hacer | `coastModerationStrength` de M.1 (solo distancia) | S | `Stage_Biome2D` M.1/M.2 | Sin hacer | O2, C5 |
+| O2 | Temperatura del mar: base por latitud, transportada por las corrientes (volúmenes finitos upwind + relajación, memoria del calor) | `SeaBaseTemp`, `SeaHeat`, `SeaHeatJob` | No existe | A | La misma stage que O1; campo `SeaTemperature` | 2b pasos 1–2 (2026-11-17, `b3688c8`, `a507225`), editor + S22 | O1 |
+| O3 | Afloramiento costero (costas oeste frías: Humboldt, Benguela, California, Canarias) | `upwelling`, `SeaDeepTemp` en `SeaHeat` (2b paso 3; lee la corriente hacia el ecuador, no el viento) | No existe | A | La misma stage que O1 | 2b paso 3 (2026-11-17, `c4a54fa`), editor + S22 | O2 |
+| O4 | El clima lee el mar (2c): la temperatura del mar modera la costa y una costa fría seca el aire | Sin hacer | `coastModerationStrength` de M.1 (solo distancia) | S | `Stage_Biome2D` M.1/M.2 | **Siguiente** (2c, `NoiseLab_v6_2c_Startup.md`) | O2, C5 |
 
 ### Adaptadores y herramientas
 

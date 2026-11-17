@@ -160,4 +160,29 @@ build Android y las mediciones.
   curva que sube y baja (S22: punto `-0.11:0.52`) cae en un tramo plano y se deshace en
   puntitos. Sin hacer: la máscara extra (no hizo falta) y comparar acreción o placas (insumo
   del 2026-11-13; queda para el lab de placas). Límite: un océano más ancho que una región
-  (16 vistas) se calcula como si midiera 16. Siguiente: **2b**, `NoiseLab_v6_2b_Startup.md`.
+  (16 vistas) se calcula como si midiera 16. Siguiente: **2b**, `archive/NoiseLab_v6_2b_Startup.md` (cerrado).
+- **2b cerrada (2026-11-17)** (`b3688c8`, `a507225`, `c4a54fa`; sin push; arranque en
+  `archive/NoiseLab_v6_2b_Startup.md`). Decisiones de Claudio: temperatura **por región**
+  (como ψ, con su propia clave: mover sus perillas no resuelve las corrientes), olvido **por
+  tiempo** (*Heat memory*, el agua rápida lleva el calor más lejos) y afloramiento leído de la
+  corriente. (1) Base por latitud: −2 + 30·cos²(lat) °C; capa *Sea temp* y color *Sea temp* en
+  ×4/×16 con isotermas. (2) Transporte: volúmenes finitos upwind con los flujos de cara sacados
+  de ψ en las esquinas (lo que entra sale) más relajación `h / memoria` hacia la base; barrido
+  rápido hasta 0,005 °C (`SeaHeatJob`). (3) Afloramiento: celda de mar con tierra real al este
+  y agua hacia el ecuador → tira hacia 10 °C (`up = 2·Upwelling·velocidad`); el viento del
+  planeta es solo zonal, así que la regla de libro (viento a lo largo de la costa) no podía
+  dispararse. Interfaz: perillas *West current*, *Heat memory*, *Upwelling* y semilla
+  (− + Random) **dentro de la vista ×4/×16** (petición de Claudio), color *Temp anomaly*
+  (T − T0). Códigos: `oc=ancho,memoria,afloramiento` (los de la 2a siguen valiendo).
+  Medido: suite 415/415 (16:32:52); Burst check «sea temp» 0 diferencias al repetir, C# frente
+  a Burst máx. 9,5e-6 °C, 6 rondas, 7–8 ms por región en el editor (S22 3,7 ms, export
+  2026-11-17); con la semilla 88775 la costa que aflora queda a −5,7 °C de media con 0,5 y
+  −6,5 °C con 1 (Humboldt real: −5 a −8). Probado por Claudio en el editor y el S22 (varias
+  semillas). **Lecciones:** el aspecto depende de memoria frente al tiempo de una vuelta al
+  giro: con memoria larga y corriente rápida el giro se homogeneiza y todos los grados se
+  amontonan en las fronteras entre giros, que son rectas (las pone el viento); West current
+  < 0,25 es más fina que dos celdas (reintento ω 1,4) y no se recomienda. **Límites:** istmos
+  más finos que una celda no existen para el océano; sin mezcla entre giros (frentes
+  nítidos); el afloramiento más frío (−12 a −13 °C) cae en celdas tropicales; con West current
+  1 el residual de las corrientes queda en 0,0099 (al borde de la tolerancia; 2a, sin tocar).
+  Siguiente: **2c**, `NoiseLab_v6_2c_Startup.md`.
