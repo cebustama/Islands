@@ -2,6 +2,20 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-17 · The Pebas System: a Miocene mega-wetland as a test case for H1
+- **Type and origin:** link (Instagram, @egm_bizarros, 2026-10-02: https://www.instagram.com/p/Dd-DAEKsoTN/), a map of western Amazonia ~14 Ma labelled «Pebas system», Northern and Central Andes, Guyana Craton, Purus Arch, East Venezuela Basin and «Atlantic-Proto Caribbean». Read in Chrome (caption and comments).
+- **What Claudio said:** «Me interesa sobretodo para el motor de Islands PCG y NoiseLab».
+- **What it is:** in the middle Miocene the Llanos basin and western Amazonia held the Pebas System, a huge shallow lake/wetland system with episodic outlets to the Caribbean. The post cites Wesselingh, F. (2008), *Molluscan Radiations and Landscape Evolution in Miocene Amazonia* (Annales Universitatis Turkuensis, AII 232). The author adds in a comment that the ancestors of the Amazon river dolphin came in from the sea and adapted to fresh water as Pebas was cut off.
+- **Checked vs. claimed:** the source (Wesselingh 2008) and the Pebas System are real. Not checked: dates and extent (disputed in the literature), and when the Amazon began draining east (~10 Ma vs. much later, debated). The dolphin story is a hypothesis. The map paints the wetland over present-day relief: it is not a palaeogeographic reconstruction (several commenters notice).
+- 💡 **Use here (engine + NoiseLab):**
+  1. **H1 test case at continental scale:** a rising range (Andes) + a subsiding foreland basin beside it + a cross-arch (Purus) that blocks drainage east = a mega-wetland instead of a river. With H1's lakes-from-fill-depth and the rain − evaporation balance (`../planning/active/Hydrology_Module_Design.md` §4), a NoiseLab recipe with that shape should produce a large lake/wetland; if it doesn't, the drainage model is missing something. Measurable: % of land draining to an interior basin vs. to the sea.
+  2. **Outlet switching:** the same basin drains north (Caribbean) or east (Atlantic) depending on which divide is lower. A knob on a low divide (or on uplift) flips the outlet: a cheap way to test that Priority-Flood picks the right spill point, and a good explainer for the web.
+  3. **Time as a layer:** with the H2 age field and the planned plates lab, a world could carry a geological age (inland sea → wetland → river) and not only a river age. Fossils/marine shells inland as a derived layer for mundo-islas (the comment about shells and coral in the Médanos de Coro, Venezuela).
+  4. **Wetland as a first-class biome:** Pebas was a mosaic of shallow lakes and swamps, not open water. Supports the Q2 `Wetland` feature and a «shallow water» band distinct from lakes in NoiseLab.
+- **Further reading:** Hoorn, C. et al. (2010) «Amazonia Through Time: Andean Uplift, Climate Change, Landscape Evolution, and Biodiversity», *Science* 330: 927–931 (synthesis); Wesselingh (2008); the Urumaco fossil beds (Falcón, Venezuela; Carrillo-Briceño).
+- **Connects with:** videojuego-colonizacion (a people who remember a sea where the forest is; `../../../videojuego-colonizacion/historia/2026-11-capturas.md`), web Fauna Lab (speculative).
+- **Status:** seed (after the v6, with H1).
+
 ## 2026-11-17 · Fisk's meander maps → meanders, deltas and water processes
 - **Type and origin:** images (three Instagram screenshots, @publicdomainrev) of Harold Fisk's 1944 «Ancient Courses» maps of the Mississippi (plate 22). Copies in `referencias-visuales/nuevas/2026-11-17-fisk-meandros/`.
 - **What Claudio said:** «Me encantaría simular este proceso para Islands».

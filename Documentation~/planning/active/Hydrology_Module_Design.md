@@ -124,6 +124,7 @@ Consecuencia: H1 y H2 son mapas de mundo; H3 necesita el zoom de tres niveles (m
 
 - **Módulo de fluidos (`Fluids_Module_Design.md`):** H1 lee la humedad y la temperatura que deja la 2c (evaporación según la temperatura). Por eso va después de la v6.
 - **2b, Humboldt:** costa fría y seca → ríos que no llegan al mar y cuencas endorreicas (el Loa, que sí llega, es el caso que hay que poder reproducir).
+- **Caso de prueba a escala de continente, el Sistema Pebas** (captura del 2026-11-17, `../../research/2026-11-capturas.md`): cordillera que sube + cuenca hundida a su lado + un arco que corta el desagüe = megahumedal en vez de río. H1 debería poder producirlo, y una divisoria baja debería decidir si desagua al norte o al este.
 - **PL-3 (salares):** las cuencas endorreicas de H1 son su sitio natural.
 - **PL-7 (zoom continuo) y los tres niveles:** H3 los necesita para verse en el mapa.
 - **PL-12, propuesta 4:** es H2. **Propuesta 2** (semilla por capa y coordenada): semillas de tramo y desembocadura.
