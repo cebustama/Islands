@@ -2,6 +2,14 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-17 · Fisk's meander maps → meanders, deltas and water processes
+- **Type and origin:** images (three Instagram screenshots, @publicdomainrev) of Harold Fisk's 1944 «Ancient Courses» maps of the Mississippi (plate 22). Copies in `referencias-visuales/nuevas/2026-11-17-fisk-meandros/`.
+- **What Claudio said:** «Me encantaría simular este proceso para Islands».
+- **Main entry:** [`2026-11-17-meanders-deltas-hydrology.md`](2026-11-17-meanders-deltas-hydrology.md): Fisk's report read (16,000 borings; 20 stages of ~100 years dated by analogy with migration since 1765; he reconstructed courses by projecting curvature), the migrating-centerline model (Howard & Knutson; meanderpy and Paris 2023 code read), DeltaRCM for deltas, FastScape for valleys, and the visualizer proposal. Report text in [`fisk-1944/`](fisk-1944/).
+- 💡 **Use here:** web lab first (JS), then NoiseLab (C#/Burst): centerline rasterized to `Rivers` / `Lakes` / wetland; FastScape before Phase L. Scale must be decided first (a meander does not show at 256²).
+- **Connects with:** web Islands Lab (startup `../../../web/claudiobustamante-site/Documentation~/planning/active/Meanders_Lab_Startup.md`), cuaderno-injusticia (the 1927 flood and the levees; queue in `cuaderno-injusticia/notas/2026-11-capturas.md`).
+- **Status:** seed → web lab startup written (after the v6, behind the ALWTTT demo).
+
 ## 2026-11-15 · Sprite stacking: the UI8 fighter over islands
 - **Type and origin:** link (Threads, @ui8net: https://www.threads.com/share/_o1S491-u/ → https://remix.ui8.ai/fly, a «Fighter jet scene» made with UI8's Forge). Claude read the demo's source in Chrome.
 - **What it is:** a software renderer into a 320×320 buffer scaled ×3. The jet, the islands and the clouds are all *stacks*: horizontal slices drawn 1 px apart and rotated to any angle; the ground has a height and a material per pixel (tileable value noise by octaves, quantised into 8 grass, 4 rock and one snow terrace). Clouds are clusters of puffs with a rank, so the cover slider adds or removes whole clouds. Bayer dithering, distance haze, and one camera that slides between an overhead view and a chase view. «32 KB of code» does not match the ~160 KB of TypeScript sources (at most a compressed figure); no author credited.
