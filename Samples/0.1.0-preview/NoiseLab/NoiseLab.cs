@@ -262,6 +262,13 @@ public class NoiseLab : MonoBehaviour
             paintedMs = paintMs;
         }
 
+        // 2b: a slider inside the ×4 / ×16 picture moved: redraw it (once per frame at most).
+        if (bigPicture != null && bigDirty)
+        {
+            bigDirty = false;
+            MakeBigPicture(bigScale);
+        }
+
         // v4: the clouds move every frame; the terrain is not touched.
         if (clouds)
         {
@@ -1562,12 +1569,26 @@ public class NoiseLab : MonoBehaviour
         public int index;
         public string key;
         public float[] u, v, psi; // psi: the stream function (continents step: the Gyres colouring)
+        public float[] temp;      // 2b: sea surface temperature, °C (land cells too, so the bilinear blend is smooth at the coast)
         public float ms, residual, omega, fastest, seaShare;
         public int state;
     }
 
     readonly System.Collections.Generic.List<OceanRegion> oceanRegions = new();
     float[] currentU, currentV;  // view cells
+    float[] seaTemp;             // 2b: view cells, °C
+
+    // v6 (2b), step 1: sea surface temperature by latitude only. 28 °C at the equator,
+    // −2 °C (sea water freezes) at the poles, cos² in between: about 20 °C at 30°, 13 °C
+    // at 45°, 5 °C at 60°, close to the zonal means of the real oceans. Steps 2 and 3 move
+    // it with the currents and cool the upwelling coasts; this is what they relax toward.
+    const float SeaWarmest = 28f, SeaColdest = -2f;
+
+    static float SeaBaseTemp(float y)
+    {
+        float c = Mathf.Cos(OceanLatitude(y));
+        return SeaColdest + (SeaWarmest - SeaColdest) * c * c;
+    }
     float oceanMs, oceanLastRegionMs;
     string oceanRegionsUsed = "";
 
@@ -1697,9 +1718,17 @@ public class NoiseLab : MonoBehaviour
                 fastest = Mathf.Max(fastest, u[i] * u[i] + v[i] * v[i]);
             }
 
+        // 2b, step 1: the base temperature of each row (latitude only).
+        var temp = new float[cells];
+        for (int y = 0; y < n; y++)
+        {
+            float t = SeaBaseTemp(y0 + (y + 0.5f) * h);
+            for (int x = 0; x < n; x++) temp[y * n + x] = t;
+        }
+
         return new OceanRegion
         {
-            index = index, key = OceanKey(index), u = u, v = v, psi = psi, state = state,
+            index = index, key = OceanKey(index), u = u, v = v, psi = psi, temp = temp, state = state,
             ms = (float)watch.Elapsed.TotalMilliseconds,
             residual = residual, omega = omegaUsed,
             fastest = Mathf.Sqrt(fastest),
@@ -1736,7 +1765,10 @@ public class NoiseLab : MonoBehaviour
         v = Mathf.Lerp(Mathf.Lerp(r.v[i], r.v[i + 1], tx), Mathf.Lerp(r.v[i + n], r.v[i + n + 1], tx), ty);
     }
 
-    static float SampleRegionPsi(OceanRegion r, float x, float y)
+    static float SampleRegionPsi(OceanRegion r, float x, float y) => SampleRegionField(r, r.psi, x, y);
+
+    // 2b: any per-cell field of a region (psi, temperature), bilinear as SampleRegion.
+    static float SampleRegionField(OceanRegion r, float[] f, float x, float y)
     {
         int n = OceanN;
         float gx = Mathf.Clamp((x - (OceanStride * r.index - 8f)) * OceanPerView - 0.5f, 0f, n - 1);
@@ -1744,7 +1776,7 @@ public class NoiseLab : MonoBehaviour
         int x0 = Mathf.Min((int)gx, n - 2), y0 = Mathf.Min((int)gy, n - 2);
         float tx = gx - x0, ty = gy - y0;
         int i = y0 * n + x0;
-        return Mathf.Lerp(Mathf.Lerp(r.psi[i], r.psi[i + 1], tx), Mathf.Lerp(r.psi[i + n], r.psi[i + n + 1], tx), ty);
+        return Mathf.Lerp(Mathf.Lerp(f[i], f[i + 1], tx), Mathf.Lerp(f[i + n], f[i + n + 1], tx), ty);
     }
 
     // The currents at every view cell: the two regions around each column, blended.
@@ -1754,6 +1786,7 @@ public class NoiseLab : MonoBehaviour
         int n = sampleN;
         currentU = Ensure(currentU, n * n);
         currentV = Ensure(currentV, n * n);
+        seaTemp = Ensure(seaTemp, n * n);
         int first = Mathf.FloorToInt(offset.x / OceanStride), last = Mathf.FloorToInt((offset.x + 1f) / OceanStride) + 1;
         var regions = new OceanRegion[last - first + 1];
         for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
@@ -1773,6 +1806,7 @@ public class NoiseLab : MonoBehaviour
                 SampleRegion(r1, wx, wy, out float u1, out float v1);
                 currentU[y * n + x] = Mathf.Lerp(u0, u1, b);
                 currentV[y * n + x] = Mathf.Lerp(v0, v1, b);
+                seaTemp[y * n + x] = Mathf.Lerp(SampleRegionField(r0, r0.temp, wx, wy), SampleRegionField(r1, r1.temp, wx, wy), b);
             }
         }
         oceanMs = (float)watch.Elapsed.TotalMilliseconds;
@@ -1795,8 +1829,7 @@ public class NoiseLab : MonoBehaviour
             GUILayout.Width(110f));
         GUILayout.EndHorizontal();
         GUI.enabled = ocean;
-        oceanWidth = R2(Slider("West current", oceanWidth, 0.1f, 1f, "0.00",
-            "Width of the fast current on the west side of each ocean, in view widths (friction). Narrow = faster and closer to the coast. Below 0.25 it is thinner than two ocean cells."));
+        OceanSliders();
         GUI.enabled = true;
         if (ocean)
         {
@@ -1810,13 +1843,30 @@ public class NoiseLab : MonoBehaviour
                 MakeBigPicture(WorldScale);
             GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal(); // its own row: three buttons do not fit on a narrow panel
-            if (GUILayout.Button(new GUIContent(bigGyres ? "Colour: Gyres" : "Colour: Speed",
-                    "How the ×4 and ×16 pictures paint the sea. Speed: dark = still, orange = four times the interior speed and more. " +
-                    "Gyres: red turns one way, blue the other, lines follow the water (stream function); each gyre is a closed loop."),
-                    GUILayout.Width(140f), GUILayout.Height(30f)))
-                bigGyres = !bigGyres;
+            BigColourButton();
             GUILayout.EndHorizontal();
         }
+    }
+
+    // 2b: the ocean's sliders, shared by the Climate page and the ×4 / ×16 pictures (there
+    // they redraw the picture as they move). Every slider that changes the big picture
+    // goes here.
+    void OceanSliders()
+    {
+        oceanWidth = R2(Slider("West current", oceanWidth, 0.1f, 1f, "0.00",
+            "Width of the fast current on the west side of each ocean, in view widths (friction). Narrow = faster and closer to the coast. Below 0.25 it is thinner than two ocean cells."));
+    }
+
+    static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp" };
+
+    void BigColourButton()
+    {
+        if (GUILayout.Button(new GUIContent($"Colour: {BigColourNames[(int)bigColour]}",
+                "How the ×4 and ×16 pictures paint the sea (tap to change). Speed: dark = still, orange = four times the interior speed and more. " +
+                "Gyres: red turns one way, blue the other, lines follow the water (stream function); each gyre is a closed loop. " +
+                "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms)."),
+                GUILayout.Width(160f), GUILayout.Height(30f)))
+            bigColour = (BigColour)(((int)bigColour + 1) % BigColourNames.Length);
     }
 
     // v6 (2a): the currents from four times higher up: 4 × 4 view widths centred on the view,
@@ -1826,10 +1876,18 @@ public class NoiseLab : MonoBehaviour
     // Continents step: a second size, the whole latitude range (pole to pole = 16 views).
     const int BigN = 512, WorldScale = 16;
     int bigScale = 4;
-    bool bigGyres;   // continents step: paint the stream function instead of the speed
+    // continents step: paint the stream function instead of the speed; 2b: or the sea temperature
+    enum BigColour { Speed, Gyres, SeaTemp }
+    BigColour bigColour;
     Texture2D bigPicture;
     Vector2 bigOrigin;
     float bigMs;
+    // 2b: the sliders inside the big picture redraw it as they move. The heights of the
+    // picture do not depend on them, so they are kept (by height settings, place and size);
+    // the view behind is recomputed once, when the picture closes.
+    float[] bigHeights;
+    string bigHeightsKey;
+    bool bigDirty, viewStale;
 
     void MakeBigPicture(int scale)
     {
@@ -1839,16 +1897,22 @@ public class NoiseLab : MonoBehaviour
         float step = (float)bigScale / n;
         bigOrigin = offset - 0.5f * (bigScale - 1) * Vector2.one;
         if (bigScale == WorldScale) bigOrigin.y = -LatitudeSpan; // pole to pole
-        var src = new float[FieldCount][];
-        int keepState = burstState;
-        foreach (int k in HeightFields())
+        string heightsKey = $"{HeightKey()}|{F(bigOrigin.x)}|{F(bigOrigin.y)}|{bigScale}";
+        if (bigHeights == null || bigHeightsKey != heightsKey)
         {
-            src[k] = new float[cells];
-            SampleInto(src[k], GetField(k), FieldSeed(k), n, bigOrigin.x + 0.5f * step, bigOrigin.y + 0.5f * step, step);
+            var src = new float[FieldCount][];
+            int keepState = burstState;
+            foreach (int k in HeightFields())
+            {
+                src[k] = new float[cells];
+                SampleInto(src[k], GetField(k), FieldSeed(k), n, bigOrigin.x + 0.5f * step, bigOrigin.y + 0.5f * step, step);
+            }
+            burstState = keepState;
+            bigHeights = new float[cells];
+            CombineHeight(bigHeights, src);
+            bigHeightsKey = heightsKey;
         }
-        burstState = keepState;
-        var heights = new float[cells];
-        CombineHeight(heights, src);
+        var heights = bigHeights;
 
         int first = Mathf.FloorToInt(bigOrigin.x / OceanStride);
         int last = Mathf.FloorToInt((bigOrigin.x + bigScale) / OceanStride) + 1;
@@ -1856,7 +1920,7 @@ public class NoiseLab : MonoBehaviour
         for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
         var u = new float[cells];
         var v = new float[cells];
-        var psi = bigGyres ? new float[cells] : null;
+        var field = bigColour != BigColour.Speed ? new float[cells] : null; // psi or temperature
         var pixels = new Color32[cells];
         for (int x = 0; x < n; x++)
         {
@@ -1872,13 +1936,18 @@ public class NoiseLab : MonoBehaviour
                 int i = y * n + x;
                 u[i] = Mathf.Lerp(u0, u1, b);
                 v[i] = Mathf.Lerp(v0, v1, b);
-                if (bigGyres)
-                    psi[i] = Mathf.Lerp(SampleRegionPsi(regions[k0 - first], wx, wy), SampleRegionPsi(regions[k0 + 1 - first], wx, wy), b);
+                var r0 = regions[k0 - first];
+                var r1 = regions[k0 + 1 - first];
+                if (bigColour == BigColour.Gyres)
+                    field[i] = Mathf.Lerp(SampleRegionPsi(r0, wx, wy), SampleRegionPsi(r1, wx, wy), b);
+                else if (bigColour == BigColour.SeaTemp)
+                    field[i] = Mathf.Lerp(SampleRegionField(r0, r0.temp, wx, wy), SampleRegionField(r1, r1.temp, wx, wy), b);
                 else
                     pixels[i] = CurrentColour(heights[i], u[i], v[i]);
             }
         }
-        if (bigGyres) GyreColours(pixels, n, heights, psi);
+        if (bigColour == BigColour.Gyres) GyreColours(pixels, n, heights, field);
+        else if (bigColour == BigColour.SeaTemp) SeaTempColours(pixels, n, heights, field, 2f);
         CurrentArrows(pixels, n, n / 32, heights, u, v);
         if (bigPicture == null)
             bigPicture = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
@@ -1915,11 +1984,47 @@ public class NoiseLab : MonoBehaviour
             }
     }
 
-    // Full screen until a click, a tap or Escape.
+    // 2b: sea surface temperature, blue (−2 °C) to pale yellow to red (28 °C), the same ramp
+    // as the land's Temperature layer, with a dark line every `step` °C (isotherms): where
+    // they bend, the currents carry warm or cold water. Land in grey.
+    static Color32 SeaTempColour(float t) =>
+        Ramp3(Cold, Mild, Hot, Mathf.Clamp01((t - SeaColdest) / (SeaWarmest - SeaColdest)));
+
+    void SeaTempColours(Color32[] pixels, int n, float[] heights, float[] temp, float step)
+    {
+        var line = new Color32(20, 20, 25, 255);
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                int i = y * n + x;
+                if (heights[i] >= threshold) { pixels[i] = Color32.Lerp(Wall, LandTint, 0.35f); continue; }
+                var c = SeaTempColour(temp[i]);
+                int band = Mathf.FloorToInt(temp[i] / step);
+                bool edge = (x + 1 < n && heights[i + 1] < threshold && Mathf.FloorToInt(temp[i + 1] / step) != band) ||
+                            (y + 1 < n && heights[i + n] < threshold && Mathf.FloorToInt(temp[i + n] / step) != band);
+                pixels[i] = edge ? Color32.Lerp(c, line, 0.5f) : c;
+            }
+    }
+
+    // Full screen until a tap on the picture, Back or Escape. 2b: with the ocean's sliders
+    // beside it (landscape) or under it (portrait); moving one redraws the picture.
     void DrawBigPicture(float width, float height, float margin)
     {
-        float side = Mathf.Min(width, height) - 2f * margin;
-        var r = new Rect((width - side) * 0.5f, (height - side) * 0.5f, side, side);
+        const float panelWidth = 360f, panelHeight = 190f;
+        Rect r, panel;
+        if (width - height >= panelWidth)
+        {
+            float s = Mathf.Min(width - panelWidth - 3f * margin, height - 2f * margin);
+            r = new Rect(margin, (height - s) * 0.5f, s, s);
+            panel = new Rect(r.xMax + margin, margin, width - r.xMax - 2f * margin, height - 2f * margin);
+        }
+        else
+        {
+            float s = Mathf.Min(width - 2f * margin, height - panelHeight - 3f * margin);
+            r = new Rect((width - s) * 0.5f, margin, s, s);
+            panel = new Rect(margin, r.yMax + margin, width - 2f * margin, height - r.yMax - 2f * margin);
+        }
+        float side = r.width;
         GUI.DrawTexture(r, bigPicture);
         // the view, where it is inside the picture (texture rows go up, screen rows down)
         float w = side / bigScale;
@@ -1930,16 +2035,40 @@ public class NoiseLab : MonoBehaviour
         DrawRect(new Rect(view.x, view.yMax - 2f, view.width, 2f), line);
         DrawRect(new Rect(view.x, view.y, 2f, view.height), line);
         DrawRect(new Rect(view.xMax - 2f, view.y, 2f, view.height), line);
-        string name = $"{(bigGyres ? "Gyres" : "Currents")} ×{bigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + bigScale)}, " +
-                      $"the view outlined; {bigMs:0} ms  (click, tap or Esc: back)";
-        DrawRect(new Rect(r.x, r.y, 8.5f * name.Length + 8f, 22f), new Color(0f, 0f, 0f, 0.5f));
+        string name = $"{BigColourNames[(int)bigColour]} ×{bigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + bigScale)}, " +
+                      $"the view outlined; {bigMs:0} ms";
+        DrawRect(new Rect(r.x, r.y, Mathf.Min(8.5f * name.Length + 8f, r.width), 22f), new Color(0f, 0f, 0f, 0.5f));
         GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
+
+        // The sliders first: a slider uses its own mouse-up, so releasing it never closes.
+        DrawRect(panel, new Color(0f, 0f, 0f, 0.35f));
+        GUILayout.BeginArea(new Rect(panel.x + 8f, panel.y + 8f, panel.width - 16f, panel.height - 16f));
+        bool close = false;
+        bool before = GUI.changed;
+        GUI.changed = false;
+        GUILayout.BeginHorizontal();
+        BigColourButton();
+        if (GUILayout.Button(new GUIContent("Back", "Back to the view (or tap the picture, or Esc)."), GUILayout.Width(90f), GUILayout.Height(30f)))
+            close = true;
+        GUILayout.EndHorizontal();
+        OceanSliders();
+        GUILayout.Label(OceanSummary());
+        if (GUI.changed && !close) { bigDirty = true; viewStale = true; }
+        GUI.changed = before;
+        GUILayout.EndArea();
+
         Event e = Event.current;
-        if (e.type == EventType.MouseUp || (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape))
+        if ((e.type == EventType.MouseUp && r.Contains(e.mousePosition)) || (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape))
+        {
+            close = true;
+            e.Use();
+        }
+        if (close)
         {
             Destroy(bigPicture);
             bigPicture = null;
-            e.Use();
+            bigDirty = false;
+            if (viewStale) { viewStale = false; dirty = true; } // the view catches up once
         }
     }
 
@@ -2372,9 +2501,9 @@ public class NoiseLab : MonoBehaviour
     // What the image shows. Map: bands or biomes. The rest: one field on its own.
     // v6: WindFlow goes last; it is a panel layer only (the overlay list maps its entries to
     // Show by index + 1 up to WindAir, and Contours after that).
-    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir, WindFlow, Currents }
-    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air", "Wind flow", "Currents" };
-    static readonly string[] ShowCodes = { "map", "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind", "flow", "currents" };
+    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir, WindFlow, Currents, SeaTemp }
+    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air", "Wind flow", "Currents", "Sea temp" };
+    static readonly string[] ShowCodes = { "map", "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind", "flow", "currents", "seatemp" };
 
     // v4: number of panels (1, 2 or 4) and the layer each one shows. A choice that is not
     // available (Temperature with Bands) is kept, and the panel shows the map meanwhile.
@@ -2393,7 +2522,7 @@ public class NoiseLab : MonoBehaviour
         Show.Continent or Show.Erosion or Show.Peaks => heightSource == HeightSource.Splines,
         Show.WindAir => colouring == Colouring.Biomes && wind,
         Show.WindFlow => FlowOn,
-        Show.Currents => colouring == Colouring.Biomes && ocean,
+        Show.Currents or Show.SeaTemp => colouring == Colouring.Biomes && ocean,
         _ => true
     };
 
@@ -2464,6 +2593,7 @@ public class NoiseLab : MonoBehaviour
         }
         if (show == Show.WindFlow) FlowArrows(pixels, n);
         if (show == Show.Currents) CurrentArrows(pixels, n);
+        if (show == Show.SeaTemp) SeaTempColours(pixels, n, values, seaTemp, 1f); // 2b: a line every 1 °C (a view spans ~11° of latitude)
         texture.SetPixels32(pixels);
         texture.Apply();
     }
@@ -2476,6 +2606,7 @@ public class NoiseLab : MonoBehaviour
         Show.WindAir => Color32.Lerp(Dry, Wet, windAir[i]),
         Show.WindFlow => FlowColour(i),
         Show.Currents => CurrentColour(i),
+        Show.SeaTemp => default, // painted whole, with its isotherms, after the loop
         _ => Gray(viewField[FCont + (s - Show.Continent)][i])
     };
 
