@@ -58,3 +58,7 @@ World ×16, Gyres).
 - `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs` (código; autoridad).
 - `Documentation~/planning/active/NoiseLab_v6_Startup.md` (progreso).
 - `Documentation~/planning/active/Fluids_Module_Design.md` (diseño de la 2b–2c; propuesta).
+
+## Después de la v6
+
+- **Módulo de hidrología** (PL-14): H1 ríos → H2 erosión con edad → H3 meandros → H4 deltas, en [`Hydrology_Module_Design.md`](Hydrology_Module_Design.md). La 2b importa ahí: la costa fría y seca de Humboldt debe dar ríos que no llegan al mar y cuencas endorreicas.

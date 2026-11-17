@@ -1689,3 +1689,9 @@ vegetation — recalibrating vegetation densities for those biomes would change 
 **Source:** `Documentation~/planning/exploration/NoiseLab_Views_Catalog.md`; wrapped https://claude.ai/artifact/9gQ8nFyHVwjpktdgMHb6wU.  
 **Status:** Exploration only. Four decisions open (where it lives, where it is demoed, order, S22 budget).
 
+
+### PL-14 — Hydrology module: rivers, erosion with age, meanders, deltas (NoiseLab, after v6)
+**Date:** 2026-11-17  
+**Idea (Claudio):** fold the meanders tangent (Fisk 1944; web lab «El río que se mueve», published 2026-11-17) into the engine's hydrology. NoiseLab has no land water today (no rivers, lakes or erosion; its «Erosion» field is a roughness spline). Order accepted by Claudio: **H1** rivers in NoiseLab (Phase L ported to Burst, flow weighted by the v6 climate's rainfall, basins, endorheic lakes) → **H2** erosion with an «age» (FastScape stream power, Braun & Willett 2013; = PL-12 proposal 4, before Phase L) → **H3** meanders (the web's `meander.js` ported to C# with JS = C# parity, on low-slope reaches; outputs Rivers / Lakes / Wetland and a `TerrainAge` field; needs a zoomed view) → **H4** deltas (DeltaRCM-lite). Everything lives in NoiseLab (`Samples/`) first; anything entering `Runtime/` gets its own phase design and goldens.  
+**Source:** `Documentation~/planning/active/Hydrology_Module_Design.md`; research `Documentation~/research/2026-11-17-meanders-deltas-hydrology.md`.  
+**Status:** Design proposal. After NoiseLab v6 (2b, 2c). Nine decisions open (design doc §10).

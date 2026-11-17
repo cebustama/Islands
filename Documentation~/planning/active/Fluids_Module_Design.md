@@ -142,3 +142,7 @@ escalable posible. Propuesta, no autoridad; manda el código.
   ecuador de los alisios); 2c el clima lee la temperatura del mar (costa fría: más fresca y
   seca; evaporación según la temperatura).
 - **Web:** candidato a página de Islands Lab (ψ, giros, Atacama y Humboldt).
+
+## Añadido el 2026-11-17 (módulo de hidrología)
+
+- La lluvia y la temperatura que deja este módulo (2c) alimentan la hidrología: H1 pondera el caudal con `lluvia − evaporación(temperatura)`. Por eso la hidrología va después de la v6. Diseño en [`Hydrology_Module_Design.md`](Hydrology_Module_Design.md) (PL-14).

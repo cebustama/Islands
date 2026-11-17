@@ -70,6 +70,7 @@ Already in NoiseLab v6: Stommel currents and pressure-projection wind; the eikon
 1. **Web first, JS** (Islands Lab), because the centerline is small, «Fisk mode» looks good fast and the explainer recipe exists. Modes: Fisk (migration, age slider, colour by age, «cut the neck», oxbows layer), valley (river from a D8 path on a NoiseLab map; meanders only where slope is low), delta (DeltaRCM-lite at the mouth).
 2. **Then NoiseLab C# / Burst**: rasterize the centerline to `Rivers` / `Lakes` / wetland; FastScape before Phase L.
 3. **Scale problem:** on a 256² island a meander is invisible. It needs a large plain, the cell zoom (mundo-islas) or a lab of its own. Decide before any pipeline work.
+4. **Planned (2026-11-17):** Claudio folded this into the engine's hydrology, order H1 rivers → H2 FastScape → H3 meanders → H4 deltas, in [`../planning/active/Hydrology_Module_Design.md`](../planning/active/Hydrology_Module_Design.md) (roadmap PL-14). The web lab (Fisk mode) is published: https://claudiobustamante.com/labs/islands/meanders/.
 
 ## Open
 
