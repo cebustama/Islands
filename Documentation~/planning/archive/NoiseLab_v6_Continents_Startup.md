@@ -78,3 +78,11 @@ v1–v5, el paso 1 (1a–1b.2), los pasos de interfaz, la 2a y su arreglo, *Zoom
 - `Documentation~/planning/active/Fluids_Module_Design.md` (diseño de la 2a–2c; propuesta).
 - `Documentation~/research/2026-11-05-mundo-finito-o-infinito.md` (cascada de escalas).
 - `Documentation~/planning/active/PCG_Roadmap.md`, PL-7 (zoom no neutro al detalle).
+
+## Cierre (2026-11-17)
+Hecho: pasos 1, 2 y 4 (el 3 no hizo falta). Decisiones: continentes de varias vistas con C a
+~0,15; umbral por mundo (q=w) con la referencia del mundo que crece con la frecuencia; zoom
+visual (PL-7) después. Resumen y evidencia en `active/NoiseLab_v6_Startup.md` (Progreso).
+Receta probada por Claudio en el editor y el S22:
+
+`NL1;t=simplex/simplex;s=0;f=8;o=1;l=2;g=0.5;w=%71;x=-1.975;y=-1.815;pal=mapa;b=50,30,20/4,30,30,16,12,8;q=w;h=s;n1=simplex/perlin,0.15,4,2,0.5;n2=simplex/perlin,3,3,2,0.5;n3=simplex/perlin,8,4,2,0.5;c=-1:-0.8,0:-0.4,0.1:-0.1,0.2:0.25,0.5:0.4,1:0.7/-1:1,-0.2:0.6,0.3:0.15,1:0.05/-1:-0.3,-0.3:-0.05,0.2:0.1,0.6:0.45,1:0.6;k=z;n4=simplex/perlin,2,4,2,0.5;n5=simplex/perlin,3,4,2,0.5;cl=0.8,0.5,0.5,0.1,0.05,0.7,0.17,0.3;wd=300,0.6,0.6,0.01,0.05;wf=0.5,200;oc=0.1;sh=0.8;ct=0.05;ov=contours:0.45;v=2:map,currents`

@@ -128,7 +128,7 @@ build Android y las mediciones.
   en el editor: residual 0,0000, fastest 5,4×, ω 1,7 sin reintento; Burst check del océano
   4e-5, Burst dos veces 0. Añadido *Zoom out ×4* (las corrientes en 4×4 vistas, a pantalla
   completa). S22: funciona (77 y 68 ms la vista ×4). **2a cerrada.** Siguiente sesión:
-  continentes, arranque en `NoiseLab_v6_Continents_Startup.md`.
+  continentes, arranque en `archive/NoiseLab_v6_Continents_Startup.md` (cerrado).
 - **Decisión de Claudio (2026-11-11):** la próxima sesión, **continentes** (antes de la 2b:
   los giros y Humboldt necesitan cuencas). Pista: la frecuencia de los campos es entera ≥ 1
   por vista; un continente de ~10 vistas pide C a ~0,1 por vista (frecuencias fraccionarias).
@@ -143,3 +143,21 @@ build Android y las mediciones.
 - **Para el lab de placas (captura 2026-11-12):** edad de la cordillera como parámetro, tope de
   altura por isostasia, erosión según la lluvia y destino del sedimento; en
   `research/2026-11-capturas.md` («Supermountains»).
+- **Paso «continentes» (2026-11-12/17), cerrado** (`fdf6eab`, `ffd954f`, `13c6dd1`; sin push):
+  frecuencias de campo de 0,05 a 32 en NoiseLab sin tocar `Runtime/` (las enteras dan los mismos
+  bits: el archipiélago de la 2a sale idéntico, confirmado por Claudio; las fraccionarias
+  muestrean a frecuencia 1 con las coordenadas por f), deslizador logarítmico, códigos `NL1` con
+  decimales, referencia del mundo de max(16, 4/f) vistas; botón **World ×16** (polo a polo,
+  centrado en la longitud de la vista) y color **Gyres** (función de corriente con líneas) en
+  ×4 y ×16. Prueba offline (`stommel.py`, océano sin tierra): las «franjas» de la vista Speed
+  eran giros estirados (16 vistas: 37 % del mar ≥ 4×, 6 giros de polo a polo); el modelo
+  estaba bien, el color engañaba. Con la receta, Claudio ve los giros encerrados entre
+  continentes (editor y S22). S22 (export 2026-11-17 11:46): región de océano 17,7 ms, ×16 en
+  103 ms, Burst check 0 diferencias. **Receta** (código completo en
+  `archive/NoiseLab_v6_Continents_Startup.md`): `n1=simplex/perlin,0.15,4,2,0.5`, `w=%71`,
+  `q=w`, curva C `-1:-0.8,0:-0.4,0.1:-0.1,0.2:0.25,0.5:0.4,1:0.7`. **Lección:** la costa es
+  limpia solo si el nivel del mar cae en el tramo empinado de la curva C; con más agua o una
+  curva que sube y baja (S22: punto `-0.11:0.52`) cae en un tramo plano y se deshace en
+  puntitos. Sin hacer: la máscara extra (no hizo falta) y comparar acreción o placas (insumo
+  del 2026-11-13; queda para el lab de placas). Límite: un océano más ancho que una región
+  (16 vistas) se calcula como si midiera 16. Siguiente: **2b**, `NoiseLab_v6_2b_Startup.md`.
