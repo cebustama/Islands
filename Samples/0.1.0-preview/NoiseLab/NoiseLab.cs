@@ -163,6 +163,7 @@ public class NoiseLab : MonoBehaviour
     [SerializeField, Range(10, 600)] int flowIterations = 200;           // red-black SOR passes (red + black)
     [SerializeField] bool ocean = false;                                 // v6 (2a): ocean currents
     [SerializeField, Range(0.1f, 1f)] float oceanWidth = 0.25f;          // western current width, view widths
+    [SerializeField, Range(0.25f, 8f)] float heatMemory = 2f;            // 2b: how far the sea carries its temperature, view widths at the interior speed
 
     const float LatitudeSpan = 8f;   // view widths from the equator to a pole
     const float CoastUnits = 256f;   // coast distance unit: one cell of a 256 map
@@ -1570,8 +1571,13 @@ public class NoiseLab : MonoBehaviour
         public string key;
         public float[] u, v, psi; // psi: the stream function (continents step: the Gyres colouring)
         public float[] temp;      // 2b: sea surface temperature, °C (land cells too, so the bilinear blend is smooth at the coast)
+        public byte[] sea;        // 2b: 1 = sea cell
         public float ms, residual, omega, fastest, seaShare;
         public int state;
+        // 2b: the temperature has its own key (heat memory): moving that slider never solves the currents again.
+        public string heatKey;
+        public float heatMs, heatChange, heatAnomaly;
+        public int heatRounds, heatState;
     }
 
     readonly System.Collections.Generic.List<OceanRegion> oceanRegions = new();
@@ -1598,12 +1604,122 @@ public class NoiseLab : MonoBehaviour
     {
         string key = OceanKey(index);
         foreach (var r in oceanRegions)
-            if (r.key == key) return r;
+            if (r.key == key)
+            {
+                if (r.heatKey != HeatKey()) SeaHeat(r, useBurst);
+                return r;
+            }
         var region = ComputeOceanRegion(index, useBurst);
+        SeaHeat(region, useBurst);
         oceanLastRegionMs = region.ms;
         oceanRegions.Insert(0, region);
         if (oceanRegions.Count > OceanCacheSize) oceanRegions.RemoveAt(oceanRegions.Count - 1);
         return region;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // v6 (2b), step 2: the currents carry the heat. Steady state of
+    //   u · ∇T = (T0(lat) − T) / τ
+    // the water keeps its temperature as it moves and forgets it toward the base of its
+    // latitude (T0, step 1) at a fixed rate. τ is a time, not a distance: fast water
+    // carries its temperature farther (the Gulf Stream warms Europe because it is fast).
+    // Heat memory = how far the water at the interior (Sverdrup) speed, about 1 in these
+    // units, travels in τ, in view widths; so τ = heat memory.
+    // - Finite volumes on the region's own grid, first-order upwind, the scheme of the air
+    //   (1b.2): a cell's temperature is the mix of what flows into it through its four
+    //   faces, weighted by the flow through each, plus the pull toward T0:
+    //     T = (Σ in_k · T_k + (h / τ) · T0) / (Σ in_k + h / τ)
+    //   The face flows come from psi at the cell corners (the mean of the four cells
+    //   around each corner): the water through a face is the difference of psi at its two
+    //   ends, so what enters a cell is what leaves it (no water made or lost). A face with
+    //   land on either side carries nothing; land and still water keep T0.
+    // - Fast sweeping (four diagonal orders, one thread) until no cell changes more than
+    //   SeaHeatTolerance (at most SeaHeatMaxRounds): same inputs, same rounds, same result.
+    //   A gyre is a closed loop, so the heat goes round it; with a long memory it takes
+    //   more rounds to settle.
+    // ---------------------------------------------------------------------------------
+
+    const int SeaHeatMaxRounds = 100;
+    const float SeaHeatTolerance = 0.005f; // °C, well under a colour step
+
+    string HeatKey() => F(heatMemory);
+
+    void SeaHeat(OceanRegion r, bool burst)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        int n = OceanN, cells = n * n;
+        float h = 1f / OceanPerView, y0 = -LatitudeSpan;
+        float[] psi = r.psi;
+        byte[] sea = r.sea;
+        // psi at the corner up-right of cell (x, y): the mean of the four cells around it (0 outside).
+        float P(int x, int y) => x < 0 || y < 0 || x >= n || y >= n ? 0f : psi[y * n + x];
+        float C(int x, int y) => 0.25f * (P(x, y) + P(x + 1, y) + P(x, y + 1) + P(x + 1, y + 1));
+        bool Sea(int x, int y) => x >= 0 && y >= 0 && x < n && y < n && sea[y * n + x] != 0;
+
+        var weight = new float4[cells];
+        var pull = new float[cells];
+        var t0 = new float[cells];
+        float relax = h / heatMemory;
+        for (int y = 0; y < n; y++)
+        {
+            float rowBase = SeaBaseTemp(y0 + (y + 0.5f) * h);
+            for (int x = 0; x < n; x++)
+            {
+                int i = y * n + x;
+                t0[i] = rowBase;
+                if (!Sea(x, y)) { pull[i] = rowBase; continue; } // weight 0: land keeps T0
+                // Velocity through each face (positive = east or north), from psi at its ends.
+                float uW = Sea(x - 1, y) ? -(C(x - 1, y) - C(x - 1, y - 1)) / h : 0f;
+                float uE = Sea(x + 1, y) ? -(C(x, y) - C(x, y - 1)) / h : 0f;
+                float vS = Sea(x, y - 1) ? (C(x, y - 1) - C(x - 1, y - 1)) / h : 0f;
+                float vN = Sea(x, y + 1) ? (C(x, y) - C(x - 1, y)) / h : 0f;
+                var inflow = new float4(Mathf.Max(uW, 0f), Mathf.Max(-uE, 0f), Mathf.Max(vS, 0f), Mathf.Max(-vN, 0f));
+                float total = inflow.x + inflow.y + inflow.z + inflow.w + relax;
+                weight[i] = inflow / total;
+                pull[i] = relax / total * rowBase;
+            }
+        }
+
+        var nWeight = new NativeArray<float4>(weight, Allocator.TempJob);
+        var nPull = new NativeArray<float>(pull, Allocator.TempJob);
+        var nTemp = new NativeArray<float>(t0, Allocator.TempJob); // starts at the base
+        var nStart = new NativeArray<float>(cells, Allocator.TempJob);
+        var stats = new NativeArray<float>(2, Allocator.TempJob);
+        var probe = new NativeArray<int>(1, Allocator.TempJob);
+        var temp = new float[cells];
+        int state = GridNoiseJob<Simplex2D<Simplex>>.Off;
+        try
+        {
+            var job = new SeaHeatJob
+            {
+                weight = nWeight, pull = nPull, temp = nTemp, start = nStart, stats = stats, probe = probe,
+                n = n, maxRounds = SeaHeatMaxRounds, tolerance = SeaHeatTolerance
+            };
+            if (burst)
+            {
+                job.Schedule().Complete();
+                state = probe[0] != 0 ? GridNoiseJob<Simplex2D<Simplex>>.Managed : GridNoiseJob<Simplex2D<Simplex>>.Compiled;
+            }
+            else job.Execute();
+            nTemp.CopyTo(temp);
+            r.heatChange = stats[0];
+            r.heatRounds = (int)stats[1];
+        }
+        finally
+        {
+            nWeight.Dispose(); nPull.Dispose(); nTemp.Dispose(); nStart.Dispose(); stats.Dispose(); probe.Dispose();
+        }
+
+        // How far the currents moved the temperature: mean |T − T0| over the sea.
+        double anomaly = 0.0;
+        int seaCells = 0;
+        for (int i = 0; i < cells; i++)
+            if (sea[i] != 0) { anomaly += Mathf.Abs(temp[i] - t0[i]); seaCells++; }
+        r.heatAnomaly = seaCells > 0 ? (float)(anomaly / seaCells) : 0f;
+        r.temp = temp;
+        r.heatKey = HeatKey();
+        r.heatState = state;
+        r.heatMs = (float)watch.Elapsed.TotalMilliseconds;
     }
 
     static float OceanLatitude(float y) => 0.5f * Mathf.PI * Mathf.Min(Mathf.Abs(y) / LatitudeSpan, 1f);
@@ -1718,17 +1834,10 @@ public class NoiseLab : MonoBehaviour
                 fastest = Mathf.Max(fastest, u[i] * u[i] + v[i] * v[i]);
             }
 
-        // 2b, step 1: the base temperature of each row (latitude only).
-        var temp = new float[cells];
-        for (int y = 0; y < n; y++)
-        {
-            float t = SeaBaseTemp(y0 + (y + 0.5f) * h);
-            for (int x = 0; x < n; x++) temp[y * n + x] = t;
-        }
-
+        // 2b: the temperature is solved apart (SeaHeat), with its own key.
         return new OceanRegion
         {
-            index = index, key = OceanKey(index), u = u, v = v, psi = psi, temp = temp, state = state,
+            index = index, key = OceanKey(index), u = u, v = v, psi = psi, sea = sea, state = state,
             ms = (float)watch.Elapsed.TotalMilliseconds,
             residual = residual, omega = omegaUsed,
             fastest = Mathf.Sqrt(fastest),
@@ -1818,7 +1927,9 @@ public class NoiseLab : MonoBehaviour
         if (r == null) return "ocean: not computed yet";
         return $"ocean regions {oceanRegionsUsed} (16×16 view widths each, {OceanN}×{OceanN} cells, {OceanPasses} passes); " +
                $"last new region {r.ms:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.state)}), sea {100f * r.seaShare:0}%, " +
-               $"ω {r.omega}{(r.omega != OceanOmegas[0] ? " (retried)" : "")}, residual {r.residual:0.0000}{(r.residual < OceanTolerance ? "" : " NOT CONVERGED")}, fastest {r.fastest:0.0}× the interior speed; view {oceanMs:0.0} ms";
+               $"ω {r.omega}{(r.omega != OceanOmegas[0] ? " (retried)" : "")}, residual {r.residual:0.0000}{(r.residual < OceanTolerance ? "" : " NOT CONVERGED")}, fastest {r.fastest:0.0}× the interior speed; " +
+               $"sea temp: memory {F(heatMemory)}, {r.heatRounds} rounds{(r.heatChange < SeaHeatTolerance ? "" : " NOT SETTLED")}, {r.heatMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.heatState)}), " +
+               $"mean |T − T0| {r.heatAnomaly:0.00} °C; view {oceanMs:0.0} ms";
     }
 
     void OceanControls()
@@ -1855,6 +1966,8 @@ public class NoiseLab : MonoBehaviour
     {
         oceanWidth = R2(Slider("West current", oceanWidth, 0.1f, 1f, "0.00",
             "Width of the fast current on the west side of each ocean, in view widths (friction). Narrow = faster and closer to the coast. Below 0.25 it is thinner than two ocean cells."));
+        heatMemory = R2(Slider("Heat memory", heatMemory, 0.25f, 8f, "0.00",
+            "How far the sea carries its temperature before it takes the one of its latitude, in view widths at the slow interior speed (a view is about 11° of latitude). Fast currents carry it farther: the west current is many times faster. Low = straight isotherms; high = warm water far toward the poles, cold toward the equator."));
     }
 
     static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp" };
@@ -2010,7 +2123,7 @@ public class NoiseLab : MonoBehaviour
     // beside it (landscape) or under it (portrait); moving one redraws the picture.
     void DrawBigPicture(float width, float height, float margin)
     {
-        const float panelWidth = 360f, panelHeight = 190f;
+        const float panelWidth = 360f, panelHeight = 250f;
         Rect r, panel;
         if (width - height >= panelWidth)
         {
@@ -2052,8 +2165,18 @@ public class NoiseLab : MonoBehaviour
             close = true;
         GUILayout.EndHorizontal();
         OceanSliders();
-        GUILayout.Label(OceanSummary());
         if (GUI.changed && !close) { bigDirty = true; viewStale = true; }
+        // 2b: other continents in one tap. A new seed moves the sea level too (the world's
+        // cuts), so the whole view is recomputed first (dirty), then the picture.
+        GUI.changed = false;
+        GUILayout.BeginHorizontal(GUILayout.Height(30f));
+        GUILayout.Label(new GUIContent($"Seed {seed}", "The map's seed: other continents, same settings."), GUILayout.Width(110f));
+        if (GUILayout.Button("−", GUILayout.Width(50f), GUILayout.Height(30f))) seed--;
+        if (GUILayout.Button("+", GUILayout.Width(50f), GUILayout.Height(30f))) seed++;
+        if (GUILayout.Button("Random", GUILayout.Width(90f), GUILayout.Height(30f))) seed = UnityEngine.Random.Range(0, 100000); // UI only
+        GUILayout.EndHorizontal();
+        if (GUI.changed && !close) { dirty = true; bigDirty = true; }
+        GUILayout.Label(OceanSummary());
         GUI.changed = before;
         GUILayout.EndArea();
 
@@ -2090,7 +2213,32 @@ public class NoiseLab : MonoBehaviour
             if (b.u[i] != c.u[i] || b.v[i] != c.v[i]) repeat++;
         }
         return $"\nocean region {index}: managed {a.ms:0.0} ms, Burst {b.ms:0.0} ms; cells that differ {differ} of {a.u.Length}, " +
-               $"max |Δ| {worst:G3} (fastest {a.fastest:0.0}); Burst run twice: {repeat} differ";
+               $"max |Δ| {worst:G3} (fastest {a.fastest:0.0}); Burst run twice: {repeat} differ" + HeatCheck(b);
+    }
+
+    // 2b: the heat solve alone, on the same currents: plain C#, Burst, and Burst again.
+    string HeatCheck(OceanRegion r)
+    {
+        SeaHeat(r, false);
+        var a = r.temp;
+        float aMs = r.heatMs;
+        int aRounds = r.heatRounds;
+        SeaHeat(r, true);
+        var b = r.temp;
+        float bMs = r.heatMs;
+        SeaHeat(r, true);
+        var c = r.temp;
+        float worst = 0f;
+        int differ = 0, repeat = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            float d = Mathf.Abs(a[i] - b[i]);
+            if (d > 0f) differ++;
+            worst = Mathf.Max(worst, d);
+            if (b[i] != c[i]) repeat++;
+        }
+        return $"\nsea temp, region {r.index}: managed {aMs:0.0} ms ({aRounds} rounds), Burst {bMs:0.0} ms ({r.heatRounds} rounds); " +
+               $"cells that differ {differ} of {a.Length}, max |Δ| {worst:G3} °C; Burst run twice: {repeat} differ";
     }
 
     // Speed of the current: dark = still, light = the interior (Sverdrup) speed, orange =
@@ -2809,7 +2957,7 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
-        if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)}"; // v6 (2a): currents
+        if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)},{F(heatMemory)}"; // v6 (2a): currents; 2b: heat memory
         if (shade) code += $";sh={F(relief)}";
         if (HasContours()) code += $";ct={F(contourStep)}";
         if (overlays.Count > 0) code += ";ov=" + OverlayCode();
@@ -2890,6 +3038,7 @@ public class NoiseLab : MonoBehaviour
         flowIterations = 200;
         ocean = false; // v6 (2a): a code without oc= has no currents
         oceanWidth = 0.25f;
+        heatMemory = 2f; // 2b: a 2a code (oc= with one value) keeps the default
         // v4: a code without v= opens one panel with the map.
         viewCount = 1;
         DefaultPanels.CopyTo(panelShow, 0);
@@ -2965,8 +3114,12 @@ public class NoiseLab : MonoBehaviour
                 case "cl": ReadClimate(val); break;
                 case "wd": ReadWind(val); break;
                 case "oc":
-                    if (TryF(val, out float ow)) { ocean = true; oceanWidth = Mathf.Clamp(ow, 0.1f, 1f); }
+                {
+                    string[] oc = val.Split(',');
+                    if (TryF(oc[0], out float ow)) { ocean = true; oceanWidth = Mathf.Clamp(ow, 0.1f, 1f); }
+                    if (oc.Length > 1 && TryF(oc[1], out float hm)) heatMemory = Mathf.Clamp(hm, 0.25f, 8f);
                     break;
+                }
                 case "wf":
                 {
                     string[] wf = val.Split(',');
@@ -4932,6 +5085,61 @@ struct FlowAirJob : IJob
         float a = w4.x * (x > 0 ? air[c - 1] : 1f) + w4.y * (x < fw - 1 ? air[c + 1] : 1f)
                 + w4.z * (y > 0 ? air[c - fw] : 1f) + w4.w * (y < fh - 1 ? air[c + fw] : 1f);
         air[c] = (a + (1f - a) * gain[c]) * keep[c];
+    }
+}
+
+// v6 (2b): the sea temperature carried by the currents (see NoiseLab.SeaHeat), by fast
+// sweeping until it settles. One thread, as FlowAirJob. weight: share of the inflow through
+// the west, east, south and north faces; pull: the relaxation share times the base
+// temperature. stats: largest change of a cell in the last round, rounds used.
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct SeaHeatJob : IJob
+{
+    [ReadOnly] public NativeArray<float4> weight;
+    [ReadOnly] public NativeArray<float> pull;
+    public NativeArray<float> temp, start, stats;
+    public NativeArray<int> probe;
+    public int n, maxRounds;
+    public float tolerance;
+
+    public void Execute()
+    {
+        BurstProbe.Check(probe);
+        int cells = n * n;
+        float worst = 0f;
+        int rounds = 0;
+        while (rounds < maxRounds)
+        {
+            rounds++;
+            for (int i = 0; i < cells; i++) start[i] = temp[i];
+            for (int sweep = 0; sweep < 4; sweep++)
+            {
+                bool right = (sweep & 1) == 0, up = (sweep & 2) == 0;
+                for (int k = 0; k < n; k++)
+                {
+                    int y = up ? k : n - 1 - k;
+                    for (int m = 0; m < n; m++) Update(right ? m : n - 1 - m, y);
+                }
+            }
+            worst = 0f;
+            for (int i = 0; i < cells; i++) worst = math.max(worst, math.abs(temp[i] - start[i]));
+            if (worst < tolerance) break;
+        }
+        stats[0] = worst;
+        stats[1] = rounds;
+    }
+
+    // A face with no inflow has weight 0, so the neighbour beyond the grid is never read.
+    void Update(int x, int y)
+    {
+        int c = y * n + x;
+        float4 w4 = weight[c];
+        float t = pull[c];
+        if (w4.x > 0f) t += w4.x * temp[c - 1];
+        if (w4.y > 0f) t += w4.y * temp[c + 1];
+        if (w4.z > 0f) t += w4.z * temp[c - n];
+        if (w4.w > 0f) t += w4.w * temp[c + n];
+        temp[c] = t;
     }
 }
 
