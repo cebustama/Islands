@@ -164,6 +164,7 @@ public class NoiseLab : MonoBehaviour
     [SerializeField] bool ocean = false;                                 // v6 (2a): ocean currents
     [SerializeField, Range(0.1f, 1f)] float oceanWidth = 0.25f;          // western current width, view widths
     [SerializeField, Range(0.25f, 8f)] float heatMemory = 2f;            // 2b: how far the sea carries its temperature, view widths at the interior speed
+    [SerializeField, Range(0f, 1f)] float upwelling = 0.5f;              // 2b step 3: strength of the coastal upwelling
 
     const float LatitudeSpan = 8f;   // view widths from the equator to a pole
     const float CoastUnits = 256f;   // coast distance unit: one cell of a 256 map
@@ -1576,8 +1577,8 @@ public class NoiseLab : MonoBehaviour
         public int state;
         // 2b: the temperature has its own key (heat memory): moving that slider never solves the currents again.
         public string heatKey;
-        public float heatMs, heatChange, heatAnomaly;
-        public int heatRounds, heatState;
+        public float heatMs, heatChange, heatAnomaly, upAnomaly, upColdest;
+        public int heatRounds, heatState, upCells;
     }
 
     readonly System.Collections.Generic.List<OceanRegion> oceanRegions = new();
@@ -1642,7 +1643,25 @@ public class NoiseLab : MonoBehaviour
     const int SeaHeatMaxRounds = 100;
     const float SeaHeatTolerance = 0.005f; // °C, well under a colour step
 
-    string HeatKey() => F(heatMemory);
+    string HeatKey() => $"{F(heatMemory)}|{F(upwelling)}";
+
+    // ---------------------------------------------------------------------------------
+    // 2b, step 3: coastal upwelling (Humboldt, Benguela, California, Canary). On the west
+    // coast of a continent in the subtropics the wind blows toward the equator along the
+    // coast; the Earth's turn pushes the surface water out to sea (Ekman transport) and
+    // cold water rises from below to take its place. The planet's wind here is zonal only
+    // (OceanWindX), so the rule cannot read an alongshore wind; it reads its trace instead:
+    // the same wind drives the slow current toward the equator along those coasts. A sea
+    // cell upwells when the next cell to the east is land (a real coast, not the region's
+    // wall) and its water flows toward the equator; the faster, the stronger. It is one more
+    // pull in the mix, toward the deep water temperature (or T0 where that is colder):
+    //   T = (Σ in_k · T_k + relax · T0 + up · Tdeep) / (Σ in_k + relax + up),
+    //   up = 2 · Upwelling · (speed toward the equator)
+    // so at Upwelling 0.5 and the interior speed the coast goes about halfway to Tdeep, and
+    // the current carries the cold water on, toward the equator and then west.
+    // Subpolar gyres run poleward along the same coasts, so they never upwell.
+    // ---------------------------------------------------------------------------------
+    const float SeaDeepTemp = 10f; // °C, the water that rises (real upwelled water: about 8–14 °C)
 
     void SeaHeat(OceanRegion r, bool burst)
     {
@@ -1660,6 +1679,8 @@ public class NoiseLab : MonoBehaviour
         var pull = new float[cells];
         var t0 = new float[cells];
         float relax = h / heatMemory;
+        float[] cv = r.v;
+        var upAt = new bool[cells];
         for (int y = 0; y < n; y++)
         {
             float rowBase = SeaBaseTemp(y0 + (y + 0.5f) * h);
@@ -1674,9 +1695,17 @@ public class NoiseLab : MonoBehaviour
                 float vS = Sea(x, y - 1) ? (C(x, y - 1) - C(x - 1, y - 1)) / h : 0f;
                 float vN = Sea(x, y + 1) ? (C(x, y) - C(x - 1, y)) / h : 0f;
                 var inflow = new float4(Mathf.Max(uW, 0f), Mathf.Max(-uE, 0f), Mathf.Max(vS, 0f), Mathf.Max(-vN, 0f));
-                float total = inflow.x + inflow.y + inflow.z + inflow.w + relax;
+                // Step 3: land right to the east (inside the grid) and water toward the equator.
+                float up = 0f;
+                if (x + 1 < n && sea[i + 1] == 0)
+                {
+                    float toEquator = (y0 + (y + 0.5f) * h) > 0f ? -cv[i] : cv[i];
+                    up = 2f * upwelling * Mathf.Max(toEquator, 0f);
+                    upAt[i] = toEquator > 0f; // counted at any strength, so Upwelling 0 gives the baseline
+                }
+                float total = inflow.x + inflow.y + inflow.z + inflow.w + relax + up;
                 weight[i] = inflow / total;
-                pull[i] = relax / total * rowBase;
+                pull[i] = (relax * rowBase + up * Mathf.Min(SeaDeepTemp, rowBase)) / total;
             }
         }
 
@@ -1716,6 +1745,15 @@ public class NoiseLab : MonoBehaviour
         for (int i = 0; i < cells; i++)
             if (sea[i] != 0) { anomaly += Mathf.Abs(temp[i] - t0[i]); seaCells++; }
         r.heatAnomaly = seaCells > 0 ? (float)(anomaly / seaCells) : 0f;
+        // Step 3: the upwelling coast, T − T0 (negative = colder than its latitude).
+        double upSum = 0.0;
+        int upCount = 0;
+        float coldest = 0f;
+        for (int i = 0; i < cells; i++)
+            if (upAt[i]) { float d = temp[i] - t0[i]; upSum += d; upCount++; coldest = Mathf.Min(coldest, d); }
+        r.upCells = upCount;
+        r.upAnomaly = upCount > 0 ? (float)(upSum / upCount) : 0f;
+        r.upColdest = coldest;
         r.temp = temp;
         r.heatKey = HeatKey();
         r.heatState = state;
@@ -1929,7 +1967,8 @@ public class NoiseLab : MonoBehaviour
                $"last new region {r.ms:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.state)}), sea {100f * r.seaShare:0}%, " +
                $"ω {r.omega}{(r.omega != OceanOmegas[0] ? " (retried)" : "")}, residual {r.residual:0.0000}{(r.residual < OceanTolerance ? "" : " NOT CONVERGED")}, fastest {r.fastest:0.0}× the interior speed; " +
                $"sea temp: memory {F(heatMemory)}, {r.heatRounds} rounds{(r.heatChange < SeaHeatTolerance ? "" : " NOT SETTLED")}, {r.heatMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.heatState)}), " +
-               $"mean |T − T0| {r.heatAnomaly:0.00} °C; view {oceanMs:0.0} ms";
+               $"mean |T − T0| {r.heatAnomaly:0.00} °C; upwelling {F(upwelling)}: {r.upCells} coast cells, mean T − T0 {r.upAnomaly:0.00} °C, coldest {r.upColdest:0.00} °C; " +
+               $"view {oceanMs:0.0} ms";
     }
 
     void OceanControls()
@@ -1968,16 +2007,18 @@ public class NoiseLab : MonoBehaviour
             "Width of the fast current on the west side of each ocean, in view widths (friction). Narrow = faster and closer to the coast. Below 0.25 it is thinner than two ocean cells."));
         heatMemory = R2(Slider("Heat memory", heatMemory, 0.25f, 8f, "0.00",
             "How far the sea carries its temperature before it takes the one of its latitude, in view widths at the slow interior speed (a view is about 11° of latitude). Fast currents carry it farther: the west current is many times faster. Low = straight isotherms; high = warm water far toward the poles, cold toward the equator."));
+        upwelling = R2(Slider("Upwelling", upwelling, 0f, 1f, "0.00",
+            "Cold water rising on the west coast of the continents, where the current runs toward the equator along the coast (Humboldt, Benguela, California). 0 = none; 0.5 = about halfway to 10 °C at the interior speed."));
     }
 
-    static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp" };
+    static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp", "Temp anomaly" };
 
     void BigColourButton()
     {
         if (GUILayout.Button(new GUIContent($"Colour: {BigColourNames[(int)bigColour]}",
                 "How the ×4 and ×16 pictures paint the sea (tap to change). Speed: dark = still, orange = four times the interior speed and more. " +
                 "Gyres: red turns one way, blue the other, lines follow the water (stream function); each gyre is a closed loop. " +
-                "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms)."),
+                "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms). Temp anomaly: how much warmer (red) or colder (blue) than its latitude, white = the same, full colour at ±6 °C, a line every 1 °C."),
                 GUILayout.Width(160f), GUILayout.Height(30f)))
             bigColour = (BigColour)(((int)bigColour + 1) % BigColourNames.Length);
     }
@@ -1990,7 +2031,7 @@ public class NoiseLab : MonoBehaviour
     const int BigN = 512, WorldScale = 16;
     int bigScale = 4;
     // continents step: paint the stream function instead of the speed; 2b: or the sea temperature
-    enum BigColour { Speed, Gyres, SeaTemp }
+    enum BigColour { Speed, Gyres, SeaTemp, Anomaly }
     BigColour bigColour;
     Texture2D bigPicture;
     Vector2 bigOrigin;
@@ -2053,7 +2094,7 @@ public class NoiseLab : MonoBehaviour
                 var r1 = regions[k0 + 1 - first];
                 if (bigColour == BigColour.Gyres)
                     field[i] = Mathf.Lerp(SampleRegionPsi(r0, wx, wy), SampleRegionPsi(r1, wx, wy), b);
-                else if (bigColour == BigColour.SeaTemp)
+                else if (bigColour == BigColour.SeaTemp || bigColour == BigColour.Anomaly)
                     field[i] = Mathf.Lerp(SampleRegionField(r0, r0.temp, wx, wy), SampleRegionField(r1, r1.temp, wx, wy), b);
                 else
                     pixels[i] = CurrentColour(heights[i], u[i], v[i]);
@@ -2061,6 +2102,7 @@ public class NoiseLab : MonoBehaviour
         }
         if (bigColour == BigColour.Gyres) GyreColours(pixels, n, heights, field);
         else if (bigColour == BigColour.SeaTemp) SeaTempColours(pixels, n, heights, field, 2f);
+        else if (bigColour == BigColour.Anomaly) AnomalyColours(pixels, n, heights, field, bigOrigin.y, step);
         CurrentArrows(pixels, n, n / 32, heights, u, v);
         if (bigPicture == null)
             bigPicture = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
@@ -2115,6 +2157,33 @@ public class NoiseLab : MonoBehaviour
                 int band = Mathf.FloorToInt(temp[i] / step);
                 bool edge = (x + 1 < n && heights[i + 1] < threshold && Mathf.FloorToInt(temp[i + 1] / step) != band) ||
                             (y + 1 < n && heights[i + n] < threshold && Mathf.FloorToInt(temp[i + n] / step) != band);
+                pixels[i] = edge ? Color32.Lerp(c, line, 0.5f) : c;
+            }
+    }
+
+    // 2b step 3: the temperature minus the base of its latitude (T − T0): white = the same,
+    // red warmer, blue colder, full colour at ±6 °C, a line every 1 °C. The latitude bands
+    // vanish, so what the currents and the upwelling do stands out.
+    void AnomalyColours(Color32[] pixels, int n, float[] heights, float[] temp, float originY, float step)
+    {
+        var white = new Color32(245, 245, 240, 255);
+        var line = new Color32(20, 20, 25, 255);
+        var anomaly = new float[pixels.Length];
+        for (int y = 0; y < n; y++)
+        {
+            float t0 = SeaBaseTemp(originY + (y + 0.5f) * step);
+            for (int x = 0; x < n; x++) anomaly[y * n + x] = temp[y * n + x] - t0;
+        }
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                int i = y * n + x;
+                if (heights[i] >= threshold) { pixels[i] = Color32.Lerp(Wall, LandTint, 0.35f); continue; }
+                float a = anomaly[i];
+                var c = Color32.Lerp(white, a >= 0f ? Hot : Cold, Mathf.Clamp01(Mathf.Abs(a) / 6f));
+                int band = Mathf.FloorToInt(a);
+                bool edge = (x + 1 < n && heights[i + 1] < threshold && Mathf.FloorToInt(anomaly[i + 1]) != band) ||
+                            (y + 1 < n && heights[i + n] < threshold && Mathf.FloorToInt(anomaly[i + n]) != band);
                 pixels[i] = edge ? Color32.Lerp(c, line, 0.5f) : c;
             }
     }
@@ -2957,7 +3026,7 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
-        if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)},{F(heatMemory)}"; // v6 (2a): currents; 2b: heat memory
+        if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)},{F(heatMemory)},{F(upwelling)}"; // v6 (2a): currents; 2b: heat memory, upwelling
         if (shade) code += $";sh={F(relief)}";
         if (HasContours()) code += $";ct={F(contourStep)}";
         if (overlays.Count > 0) code += ";ov=" + OverlayCode();
@@ -3039,6 +3108,7 @@ public class NoiseLab : MonoBehaviour
         ocean = false; // v6 (2a): a code without oc= has no currents
         oceanWidth = 0.25f;
         heatMemory = 2f; // 2b: a 2a code (oc= with one value) keeps the default
+        upwelling = 0.5f;
         // v4: a code without v= opens one panel with the map.
         viewCount = 1;
         DefaultPanels.CopyTo(panelShow, 0);
@@ -3118,6 +3188,7 @@ public class NoiseLab : MonoBehaviour
                     string[] oc = val.Split(',');
                     if (TryF(oc[0], out float ow)) { ocean = true; oceanWidth = Mathf.Clamp(ow, 0.1f, 1f); }
                     if (oc.Length > 1 && TryF(oc[1], out float hm)) heatMemory = Mathf.Clamp(hm, 0.25f, 8f);
+                    if (oc.Length > 2 && TryF(oc[2], out float up)) upwelling = Mathf.Clamp01(up);
                     break;
                 }
                 case "wf":
