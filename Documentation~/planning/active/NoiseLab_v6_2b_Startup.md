@@ -62,3 +62,4 @@ World ×16, Gyres).
 ## Después de la v6
 
 - **Módulo de hidrología** (PL-14): H1 ríos → H2 erosión con edad → H3 meandros → H4 deltas, en [`Hydrology_Module_Design.md`](Hydrology_Module_Design.md). La 2b importa ahí: la costa fría y seca de Humboldt debe dar ríos que no llegan al mar y cuencas endorreicas.
+- **Matriz de migración** (PL-15): al cerrar cada paso, actualizar su fila en [`NoiseLab_Migration_Matrix.md`](NoiseLab_Migration_Matrix.md). Al cerrar el paso 3, O3 pasa a validada (editor + S22) y O4 (2c) queda como la siguiente.

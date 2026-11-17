@@ -1695,3 +1695,10 @@ vegetation — recalibrating vegetation densities for those biomes would change 
 **Idea (Claudio):** fold the meanders tangent (Fisk 1944; web lab «El río que se mueve», published 2026-11-17) into the engine's hydrology. NoiseLab has no land water today (no rivers, lakes or erosion; its «Erosion» field is a roughness spline). Order accepted by Claudio: **H1** rivers in NoiseLab (Phase L ported to Burst, flow weighted by the v6 climate's rainfall, basins, endorheic lakes) → **H2** erosion with an «age» (FastScape stream power, Braun & Willett 2013; = PL-12 proposal 4, before Phase L) → **H3** meanders (the web's `meander.js` ported to C# with JS = C# parity, on low-slope reaches; outputs Rivers / Lakes / Wetland and a `TerrainAge` field; needs a zoomed view) → **H4** deltas (DeltaRCM-lite). Everything lives in NoiseLab (`Samples/`) first; anything entering `Runtime/` gets its own phase design and goldens.  
 **Source:** `Documentation~/planning/active/Hydrology_Module_Design.md`; research `Documentation~/research/2026-11-17-meanders-deltas-hydrology.md`.  
 **Status:** Design proposal. After NoiseLab v6 (2b, 2c). Nine decisions open (design doc §10).
+
+
+### PL-15 — NoiseLab → engine migration matrix (cross-phase, standing record)
+**Date:** 2026-11-17  
+**Idea (Claudio):** NoiseLab is the validated restructuring of what the engine offers: ideas are proven there first (editor + S22) and migrate later. A standing record lists every piece NoiseLab has and the engine lacks (relief R1–R5, climate C1–C9, ocean O1–O4, adapters/tools T1–T7), what the engine has that NoiseLab does not yet validate (FV1–FV10), and five structural decisions that block any migration (MD-1 open world vs finite grid, MD-2 window independence, MD-3 quantile reference, MD-4 Burst in core, MD-5 island mask vs continents).  
+**Source:** `Documentation~/planning/active/NoiseLab_Migration_Matrix.md`.  
+**Status:** Record only, kept current as NoiseLab steps close. Not implementation authority; each migration is its own batch with design, tests and goldens. MD-1…MD-5 undecided.
