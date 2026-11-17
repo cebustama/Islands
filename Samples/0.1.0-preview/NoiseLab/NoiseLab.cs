@@ -1561,7 +1561,7 @@ public class NoiseLab : MonoBehaviour
     {
         public int index;
         public string key;
-        public float[] u, v;
+        public float[] u, v, psi; // psi: the stream function (continents step: the Gyres colouring)
         public float ms, residual, omega, fastest, seaShare;
         public int state;
     }
@@ -1699,7 +1699,7 @@ public class NoiseLab : MonoBehaviour
 
         return new OceanRegion
         {
-            index = index, key = OceanKey(index), u = u, v = v, state = state,
+            index = index, key = OceanKey(index), u = u, v = v, psi = psi, state = state,
             ms = (float)watch.Elapsed.TotalMilliseconds,
             residual = residual, omega = omegaUsed,
             fastest = Mathf.Sqrt(fastest),
@@ -1734,6 +1734,17 @@ public class NoiseLab : MonoBehaviour
         int i = y0 * n + x0;
         u = Mathf.Lerp(Mathf.Lerp(r.u[i], r.u[i + 1], tx), Mathf.Lerp(r.u[i + n], r.u[i + n + 1], tx), ty);
         v = Mathf.Lerp(Mathf.Lerp(r.v[i], r.v[i + 1], tx), Mathf.Lerp(r.v[i + n], r.v[i + n + 1], tx), ty);
+    }
+
+    static float SampleRegionPsi(OceanRegion r, float x, float y)
+    {
+        int n = OceanN;
+        float gx = Mathf.Clamp((x - (OceanStride * r.index - 8f)) * OceanPerView - 0.5f, 0f, n - 1);
+        float gy = Mathf.Clamp((y + LatitudeSpan) * OceanPerView - 0.5f, 0f, n - 1);
+        int x0 = Mathf.Min((int)gx, n - 2), y0 = Mathf.Min((int)gy, n - 2);
+        float tx = gx - x0, ty = gy - y0;
+        int i = y0 * n + x0;
+        return Mathf.Lerp(Mathf.Lerp(r.psi[i], r.psi[i + 1], tx), Mathf.Lerp(r.psi[i + n], r.psi[i + n + 1], tx), ty);
     }
 
     // The currents at every view cell: the two regions around each column, blended.
@@ -1798,6 +1809,13 @@ public class NoiseLab : MonoBehaviour
             if (GUILayout.Button(new GUIContent("World ×16", "The whole latitude range, pole to pole: 16×16 view widths, centred on the view's longitude, full screen. The first time it may solve a few more ocean regions."), GUILayout.Width(140f), GUILayout.Height(30f)))
                 MakeBigPicture(WorldScale);
             GUILayout.EndHorizontal();
+            GUILayout.BeginHorizontal(); // its own row: three buttons do not fit on a narrow panel
+            if (GUILayout.Button(new GUIContent(bigGyres ? "Colour: Gyres" : "Colour: Speed",
+                    "How the ×4 and ×16 pictures paint the sea. Speed: dark = still, orange = four times the interior speed and more. " +
+                    "Gyres: red turns one way, blue the other, lines follow the water (stream function); each gyre is a closed loop."),
+                    GUILayout.Width(140f), GUILayout.Height(30f)))
+                bigGyres = !bigGyres;
+            GUILayout.EndHorizontal();
         }
     }
 
@@ -1808,6 +1826,7 @@ public class NoiseLab : MonoBehaviour
     // Continents step: a second size, the whole latitude range (pole to pole = 16 views).
     const int BigN = 512, WorldScale = 16;
     int bigScale = 4;
+    bool bigGyres;   // continents step: paint the stream function instead of the speed
     Texture2D bigPicture;
     Vector2 bigOrigin;
     float bigMs;
@@ -1837,6 +1856,7 @@ public class NoiseLab : MonoBehaviour
         for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
         var u = new float[cells];
         var v = new float[cells];
+        var psi = bigGyres ? new float[cells] : null;
         var pixels = new Color32[cells];
         for (int x = 0; x < n; x++)
         {
@@ -1852,15 +1872,47 @@ public class NoiseLab : MonoBehaviour
                 int i = y * n + x;
                 u[i] = Mathf.Lerp(u0, u1, b);
                 v[i] = Mathf.Lerp(v0, v1, b);
-                pixels[i] = CurrentColour(heights[i], u[i], v[i]);
+                if (bigGyres)
+                    psi[i] = Mathf.Lerp(SampleRegionPsi(regions[k0 - first], wx, wy), SampleRegionPsi(regions[k0 + 1 - first], wx, wy), b);
+                else
+                    pixels[i] = CurrentColour(heights[i], u[i], v[i]);
             }
         }
+        if (bigGyres) GyreColours(pixels, n, heights, psi);
         CurrentArrows(pixels, n, n / 32, heights, u, v);
         if (bigPicture == null)
             bigPicture = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
         bigPicture.SetPixels32(pixels);
         bigPicture.Apply();
         bigMs = (float)watch.Elapsed.TotalMilliseconds;
+    }
+
+    // Continents step: the stream function. Water flows along the lines of equal psi, so
+    // each gyre is a closed loop; the sign says which way it turns (red: psi > 0, blue:
+    // psi < 0), the strength is how deep the colour is. 12 lines between 0 and the largest
+    // |psi| of the picture. Land in grey, as in the speed colouring.
+    void GyreColours(Color32[] pixels, int n, float[] heights, float[] psi)
+    {
+        float max = 1e-6f;
+        for (int i = 0; i < psi.Length; i++)
+            if (heights[i] < threshold) max = Mathf.Max(max, Mathf.Abs(psi[i]));
+        float spacing = max / 12f;
+        var pale = new Color32(235, 235, 230, 255);
+        var red = new Color32(200, 60, 45, 255);
+        var blue = new Color32(40, 90, 190, 255);
+        var line = new Color32(20, 20, 25, 255);
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                int i = y * n + x;
+                if (heights[i] >= threshold) { pixels[i] = Color32.Lerp(Wall, LandTint, 0.35f); continue; }
+                float p = psi[i];
+                var c = Color32.Lerp(pale, p >= 0f ? red : blue, Mathf.Sqrt(Mathf.Abs(p) / max));
+                int band = Mathf.FloorToInt(p / spacing);
+                bool edge = (x + 1 < n && heights[i + 1] < threshold && Mathf.FloorToInt(psi[i + 1] / spacing) != band) ||
+                            (y + 1 < n && heights[i + n] < threshold && Mathf.FloorToInt(psi[i + n] / spacing) != band);
+                pixels[i] = edge ? Color32.Lerp(c, line, 0.6f) : c;
+            }
     }
 
     // Full screen until a click, a tap or Escape.
@@ -1878,7 +1930,7 @@ public class NoiseLab : MonoBehaviour
         DrawRect(new Rect(view.x, view.yMax - 2f, view.width, 2f), line);
         DrawRect(new Rect(view.x, view.y, 2f, view.height), line);
         DrawRect(new Rect(view.xMax - 2f, view.y, 2f, view.height), line);
-        string name = $"Currents ×{bigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + bigScale)}, " +
+        string name = $"{(bigGyres ? "Gyres" : "Currents")} ×{bigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + bigScale)}, " +
                       $"the view outlined; {bigMs:0} ms  (click, tap or Esc: back)";
         DrawRect(new Rect(r.x, r.y, 8.5f * name.Length + 8f, 22f), new Color(0f, 0f, 0f, 0.5f));
         GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
