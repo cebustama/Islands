@@ -942,11 +942,13 @@ public class NoiseLab : MonoBehaviour
     void Climate()
     {
         if (colouring != Colouring.Biomes) return;
+        // v6 (2a): its own world grid, cached. 2c: first, because the climate reads the sea.
+        if (ocean) Ocean(); else extSeaAnom = null;
         var watch = System.Diagnostics.Stopwatch.StartNew();
         if (useBurst) ClimateBurst(); else ClimateManaged();
         climateMs = (float)watch.Elapsed.TotalMilliseconds; // v6 1b: includes the flow and its air
-        if (ocean) Ocean(); // v6 (2a): its own world grid, cached
         ViewMeans();
+        SeaCoastStats();
     }
 
     // v6 UI: mean temperature and moisture of the land in the view (0–1, the values the
@@ -1127,7 +1129,7 @@ public class NoiseLab : MonoBehaviour
                 extCoast = dist, extRank = rank, extAir = air, tn = tn, mn = mn,
                 coast = coastV, temp = tempV, moist = moistV, air = airV,
                 n = n, w = w, mL = mL, mB = mB, wind = wind, toUnits = CoastUnits / n,
-                offsetY = offset.y, latitudeSpan = LatitudeSpan,
+                offsetY = offset.y, latitudeSpan = LatitudeSpan, span = 1f,
                 baseTemperature = baseTemperature, lapseRate = lapseRate, latitudeEffect = latitudeEffect,
                 coastModeration = coastModeration, tempNoiseAmplitude = tempNoiseAmplitude,
                 moistureNoiseAmplitude = moistureNoiseAmplitude, coastalMoistureBonus = coastalMoistureBonus,
@@ -1573,6 +1575,7 @@ public class NoiseLab : MonoBehaviour
         public float[] u, v, psi; // psi: the stream function (continents step: the Gyres colouring)
         public float[] temp;      // 2b: sea surface temperature, °C (land cells too, so the bilinear blend is smooth at the coast)
         public byte[] sea;        // 2b: 1 = sea cell
+        public float[] anom;      // 2c: T − T0 °C over the sea, carried SeaAnomRings cells into the land (what the climate reads)
         public float ms, residual, omega, fastest, seaShare;
         public int state;
         // 2b: the temperature has its own key (heat memory): moving that slider never solves the currents again.
@@ -1754,10 +1757,61 @@ public class NoiseLab : MonoBehaviour
         r.upCells = upCount;
         r.upAnomaly = upCount > 0 ? (float)(upSum / upCount) : 0f;
         r.upColdest = coldest;
+        r.anom = SeaAnomaly(temp, t0, sea, n);
         r.temp = temp;
         r.heatKey = HeatKey();
         r.heatState = state;
         r.heatMs = (float)watch.Elapsed.TotalMilliseconds;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // 2c, step 1: what the land climate reads from the sea. The anomaly T − T0 (how much
+    // colder or warmer than its latitude), not the temperature itself: the climate already
+    // cools with latitude, the absolute value would count it twice, and with the sea
+    // weights at 0 the climate stays exactly as it was.
+    // The region grid is coarse (1/8 of a view per cell) and its land cells hold T0, so a
+    // bilinear read at the real coast would mix the cold coast cell with land at anomaly 0
+    // and halve it; the coarse coast also misses the real one by up to a cell. So the
+    // anomaly is carried SeaAnomRings cells into the land: each ring takes the mean of its
+    // known 8 neighbours (computed into a copy, so the order of the cells does not matter).
+    // Farther land keeps 0. Cached with the region's temperature (same heat key).
+    // ---------------------------------------------------------------------------------
+    const int SeaAnomRings = 2;
+
+    static float[] SeaAnomaly(float[] temp, float[] t0, byte[] sea, int n)
+    {
+        int cells = n * n;
+        var anom = new float[cells];
+        var known = new bool[cells];
+        for (int i = 0; i < cells; i++)
+            if (sea[i] != 0) { anom[i] = temp[i] - t0[i]; known[i] = true; }
+        var next = new float[cells];
+        var nextKnown = new bool[cells];
+        for (int ring = 0; ring < SeaAnomRings; ring++)
+        {
+            System.Array.Copy(anom, next, cells);
+            System.Array.Copy(known, nextKnown, cells);
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int i = y * n + x;
+                    if (known[i]) continue;
+                    float sum = 0f;
+                    int count = 0;
+                    for (int dy = -1; dy <= 1; dy++)
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            int xx = x + dx, yy = y + dy;
+                            if (xx < 0 || yy < 0 || xx >= n || yy >= n) continue;
+                            int j = yy * n + xx;
+                            if (known[j]) { sum += anom[j]; count++; }
+                        }
+                    if (count > 0) { next[i] = sum / count; nextKnown[i] = true; }
+                }
+            System.Array.Copy(next, anom, cells);
+            System.Array.Copy(nextKnown, known, cells);
+        }
+        return anom;
     }
 
     static float OceanLatitude(float y) => 0.5f * Mathf.PI * Mathf.Min(Mathf.Abs(y) / LatitudeSpan, 1f);
@@ -1927,36 +1981,107 @@ public class NoiseLab : MonoBehaviour
     }
 
     // The currents at every view cell: the two regions around each column, blended.
+    // 2c: runs before the climate, and also reads the sea anomaly on the climate grid
+    // (view + margins, extSeaAnom), so the regions span the margins too. The blending is
+    // RegionSampleJob (Burst; with Burst off the same Execute in plain C#): the climate grid
+    // is ~5× the view's cells, and in plain C# it cost ~60 ms in the editor.
     void Ocean()
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        int n = sampleN;
+        int n = sampleN, w = extW, h = extH;
         currentU = Ensure(currentU, n * n);
         currentV = Ensure(currentV, n * n);
         seaTemp = Ensure(seaTemp, n * n);
-        int first = Mathf.FloorToInt(offset.x / OceanStride), last = Mathf.FloorToInt((offset.x + 1f) / OceanStride) + 1;
+        extSeaAnom = Ensure(extSeaAnom, w * h);
+        int first = Mathf.FloorToInt((offset.x - (float)mL / n) / OceanStride);
+        int last = Mathf.FloorToInt((offset.x + (float)(n + mR) / n) / OceanStride) + 1;
         var regions = new OceanRegion[last - first + 1];
         for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
         oceanRegionsUsed = first == last - 1 ? $"{first}, {last}" : $"{first} to {last}";
-        for (int x = 0; x < n; x++)
+
+        var gridWatch = System.Diagnostics.Stopwatch.StartNew();
+        int rn = OceanN * OceanN;
+        NativeArray<float> Stack(System.Func<OceanRegion, float[]> pick)
         {
-            float wx = offset.x + (x + 0.5f) / n;
-            float t = wx / OceanStride;
-            int k0 = Mathf.FloorToInt(t);
-            float b = t - k0; // weight of region k0 + 1
-            var r0 = regions[k0 - first];
-            var r1 = regions[k0 + 1 - first];
-            for (int y = 0; y < n; y++)
-            {
-                float wy = offset.y + (y + 0.5f) / n;
-                SampleRegion(r0, wx, wy, out float u0, out float v0);
-                SampleRegion(r1, wx, wy, out float u1, out float v1);
-                currentU[y * n + x] = Mathf.Lerp(u0, u1, b);
-                currentV[y * n + x] = Mathf.Lerp(v0, v1, b);
-                seaTemp[y * n + x] = Mathf.Lerp(SampleRegionField(r0, r0.temp, wx, wy), SampleRegionField(r1, r1.temp, wx, wy), b);
-            }
+            var a = new NativeArray<float>(regions.Length * rn, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            for (int k = 0; k < regions.Length; k++) NativeArray<float>.Copy(pick(regions[k]), 0, a, k * rn, rn);
+            return a;
         }
+        var fu = Stack(r => r.u);
+        var fv = Stack(r => r.v);
+        var ft = Stack(r => r.temp);
+        var fa = Stack(r => r.anom);
+        var ou = new NativeArray<float>(n * n, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var ov = new NativeArray<float>(n * n, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var ot = new NativeArray<float>(n * n, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var oa = new NativeArray<float>(w * h, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var probe = new NativeArray<int>(1, Allocator.TempJob);
+        try
+        {
+            RegionSampleJob Job(NativeArray<float> field, NativeArray<float> output, int cols, int shiftX, int shiftY) => new RegionSampleJob
+            {
+                field = field, output = output, probe = probe, first = first, cols = cols, n = n,
+                originX = offset.x, originY = offset.y, shiftX = shiftX, shiftY = shiftY,
+                oceanN = OceanN, perView = OceanPerView, stride = OceanStride, latitudeSpan = LatitudeSpan
+            };
+            var jobs = new[] { (Job(fu, ou, n, 0, 0), n), (Job(fv, ov, n, 0, 0), n), (Job(ft, ot, n, 0, 0), n), (Job(fa, oa, w, mL, mB), h) };
+            if (useBurst)
+            {
+                JobHandle handle = default; // one after the other: they share the probe
+                foreach (var (job, rows) in jobs) handle = job.ScheduleParallel(rows, 8, handle);
+                handle.Complete();
+                oceanSampleState = probe[0] != 0 ? GridNoiseJob<Simplex2D<Simplex>>.Managed : GridNoiseJob<Simplex2D<Simplex>>.Compiled;
+            }
+            else
+            {
+                foreach (var (job, rows) in jobs) for (int y = 0; y < rows; y++) job.Execute(y);
+                oceanSampleState = GridNoiseJob<Simplex2D<Simplex>>.Off;
+            }
+            ou.CopyTo(currentU);
+            ov.CopyTo(currentV);
+            ot.CopyTo(seaTemp);
+            oa.CopyTo(extSeaAnom);
+        }
+        finally
+        {
+            fu.Dispose(); fv.Dispose(); ft.Dispose(); fa.Dispose();
+            ou.Dispose(); ov.Dispose(); ot.Dispose(); oa.Dispose(); probe.Dispose();
+        }
+        seaGridMs = (float)gridWatch.Elapsed.TotalMilliseconds;
         oceanMs = (float)watch.Elapsed.TotalMilliseconds;
+    }
+
+    int oceanSampleState = -1;
+
+    float[] extSeaAnom; // 2c: T − T0 °C at every climate cell (null with Currents off)
+    float seaGridMs;
+
+    // 2c: what the coast of the view reads from the sea. Land within SeaCoastCells (cells of
+    // a 256 map) of the sea: how many, the mean anomaly, the coldest and how many under −2 °C.
+    const float SeaCoastCells = 4f;
+    int seaCoastLand, seaCoastCold;
+    float seaCoastMean, seaCoastMin;
+
+    void SeaCoastStats()
+    {
+        seaCoastLand = seaCoastCold = 0;
+        seaCoastMean = seaCoastMin = 0f;
+        if (extSeaAnom == null) return;
+        int n = sampleN, w = extW;
+        float toUnits = CoastUnits / n;
+        double sum = 0.0;
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                int i = y * n + x;
+                if (values[i] < threshold || coast[i] * toUnits > SeaCoastCells) continue;
+                float a = extSeaAnom[(y + mB) * w + x + mL];
+                sum += a;
+                seaCoastMin = Mathf.Min(seaCoastMin, a);
+                if (a < -2f) seaCoastCold++;
+                seaCoastLand++;
+            }
+        seaCoastMean = seaCoastLand > 0 ? (float)(sum / seaCoastLand) : 0f;
     }
 
     string OceanSummary()
@@ -1968,7 +2093,8 @@ public class NoiseLab : MonoBehaviour
                $"ω {r.omega}{(r.omega != OceanOmegas[0] ? " (retried)" : "")}, residual {r.residual:0.0000}{(r.residual < OceanTolerance ? "" : " NOT CONVERGED")}, fastest {r.fastest:0.0}× the interior speed; " +
                $"sea temp: memory {F(heatMemory)}, {r.heatRounds} rounds{(r.heatChange < SeaHeatTolerance ? "" : " NOT SETTLED")}, {r.heatMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.heatState)}), " +
                $"mean |T − T0| {r.heatAnomaly:0.00} °C; upwelling {F(upwelling)}: {r.upCells} coast cells, mean T − T0 {r.upAnomaly:0.00} °C, coldest {r.upColdest:0.00} °C; " +
-               $"view {oceanMs:0.0} ms";
+               $"view {oceanMs:0.0} ms (sampling {seaGridMs:0.0} ms, {GridNoiseJob<Simplex2D<Simplex>>.StateName(oceanSampleState)}; climate grid {extW}×{extH}); " +
+               $"coast land (≤{SeaCoastCells:0} cells): {seaCoastLand}, sea T − T0 mean {seaCoastMean:0.00} °C, coldest {seaCoastMin:0.00} °C, under −2 °C: {seaCoastCold}";
     }
 
     void OceanControls()
@@ -2011,14 +2137,14 @@ public class NoiseLab : MonoBehaviour
             "Cold water rising on the west coast of the continents, where the current runs toward the equator along the coast (Humboldt, Benguela, California). 0 = none; 0.5 = about halfway to 10 °C at the interior speed."));
     }
 
-    static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp", "Temp anomaly" };
+    static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp", "Temp anomaly", "Biomes" };
 
     void BigColourButton()
     {
         if (GUILayout.Button(new GUIContent($"Colour: {BigColourNames[(int)bigColour]}",
                 "How the ×4 and ×16 pictures paint the sea (tap to change). Speed: dark = still, orange = four times the interior speed and more. " +
                 "Gyres: red turns one way, blue the other, lines follow the water (stream function); each gyre is a closed loop. " +
-                "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms). Temp anomaly: how much warmer (red) or colder (blue) than its latitude, white = the same, full colour at ±6 °C, a line every 1 °C."),
+                "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms). Temp anomaly: how much warmer (red) or colder (blue) than its latitude, white = the same, full colour at ±6 °C, a line every 1 °C. Biomes: the land's biomes from the same climate as the view, coarser (always the sweep wind, no beach), the sea as in Temp anomaly."),
                 GUILayout.Width(160f), GUILayout.Height(30f)))
             bigColour = (BigColour)(((int)bigColour + 1) % BigColourNames.Length);
     }
@@ -2031,7 +2157,7 @@ public class NoiseLab : MonoBehaviour
     const int BigN = 512, WorldScale = 16;
     int bigScale = 4;
     // continents step: paint the stream function instead of the speed; 2b: or the sea temperature
-    enum BigColour { Speed, Gyres, SeaTemp, Anomaly }
+    enum BigColour { Speed, Gyres, SeaTemp, Anomaly, Biomes } // 2c: Biomes
     BigColour bigColour;
     Texture2D bigPicture;
     Vector2 bigOrigin;
@@ -2094,7 +2220,7 @@ public class NoiseLab : MonoBehaviour
                 var r1 = regions[k0 + 1 - first];
                 if (bigColour == BigColour.Gyres)
                     field[i] = Mathf.Lerp(SampleRegionPsi(r0, wx, wy), SampleRegionPsi(r1, wx, wy), b);
-                else if (bigColour == BigColour.SeaTemp || bigColour == BigColour.Anomaly)
+                else if (bigColour == BigColour.SeaTemp || bigColour == BigColour.Anomaly || bigColour == BigColour.Biomes)
                     field[i] = Mathf.Lerp(SampleRegionField(r0, r0.temp, wx, wy), SampleRegionField(r1, r1.temp, wx, wy), b);
                 else
                     pixels[i] = CurrentColour(heights[i], u[i], v[i]);
@@ -2103,6 +2229,11 @@ public class NoiseLab : MonoBehaviour
         if (bigColour == BigColour.Gyres) GyreColours(pixels, n, heights, field);
         else if (bigColour == BigColour.SeaTemp) SeaTempColours(pixels, n, heights, field, 2f);
         else if (bigColour == BigColour.Anomaly) AnomalyColours(pixels, n, heights, field, bigOrigin.y, step);
+        else if (bigColour == BigColour.Biomes)
+        {
+            AnomalyColours(pixels, n, heights, field, bigOrigin.y, step); // the sea as in Temp anomaly
+            BigBiomes(pixels, heights);
+        }
         CurrentArrows(pixels, n, n / 32, heights, u, v);
         if (bigPicture == null)
             bigPicture = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
@@ -2188,6 +2319,115 @@ public class NoiseLab : MonoBehaviour
             }
     }
 
+    // ---------------------------------------------------------------------------------
+    // 2c: the land's biomes in the big picture, to see the whole coast of a continent at
+    // once (an "Atacama" next to every "Humboldt"). The view's climate jobs on the picture's
+    // grid: rank, coast distance, the wind sweep and ViewClimateJob, every distance in cells
+    // of a 256 map as in the view, so one pixel (2 cells at ×4, 8 at ×16) is a coarse sample
+    // of the same model. Simplified: always the sweep (the flow is too costly at this size),
+    // no margins (the air enters the picture as sea air), no beach. Kept by its key.
+    // ---------------------------------------------------------------------------------
+    float[] bigTemp, bigMoist;
+    string bigClimateKey;
+    float bigClimateMs;
+
+    string BigClimateKey() =>
+        $"{bigHeightsKey}|{F(threshold)}|{FieldKey(FTemp)}|{FieldKey(FMoist)}|" +
+        $"{F(baseTemperature)}|{F(lapseRate)}|{F(latitudeEffect)}|{F(coastModeration)}|{F(tempNoiseAmplitude)}|" +
+        $"{F(moistureNoiseAmplitude)}|{F(coastalMoistureBonus)}|{F(coastDecayRate)}|" +
+        $"{wind}|{F(windAngle)}|{F(windStrength)}|{F(windLift)}|{F(windDry)}|{F(windEvaporation)}";
+
+    void BigBiomes(Color32[] pixels, float[] heights)
+    {
+        int n = BigN, cells = n * n;
+        string key = BigClimateKey();
+        if (bigTemp == null || bigClimateKey != key)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            float step = (float)bigScale / n;
+            var src = new float[2][];
+            int keepState = burstState;
+            for (int k = 0; k < 2; k++)
+            {
+                src[k] = new float[cells];
+                int f = ClimateFields[k];
+                SampleInto(src[k], GetField(f), FieldSeed(f), n, bigOrigin.x + 0.5f * step, bigOrigin.y + 0.5f * step, step);
+            }
+            burstState = keepState;
+            float[] source = CutSource;
+            int below = LowerBound(source, threshold);
+            float toUnits = CoastUnits * bigScale / n;
+            var nHeights = new NativeArray<float>(heights, Allocator.TempJob);
+            var sorted = new NativeArray<float>(source, Allocator.TempJob);
+            var rank = new NativeArray<float>(cells, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var dist = new NativeArray<float>(cells, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var air = new NativeArray<float>(wind ? cells : 1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var tn = new NativeArray<float>(src[0], Allocator.TempJob);
+            var mn = new NativeArray<float>(src[1], Allocator.TempJob);
+            var coastV = new NativeArray<float>(cells, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var tempV = new NativeArray<float>(cells, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var moistV = new NativeArray<float>(cells, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var airV = new NativeArray<float>(wind ? cells : 1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+            var probe = new NativeArray<int>(1, Allocator.TempJob);
+            var rankProbe = new NativeArray<int>(1, Allocator.TempJob);
+            try
+            {
+                var hRank = new RankJob
+                {
+                    heights = nHeights, sorted = sorted, rank = rank, w = n,
+                    below = below, landCount = sorted.Length - below, probe = rankProbe
+                }.ScheduleParallel(n, 8, default);
+                var hCols = new CoastColumnsJob
+                {
+                    heights = nHeights, dist = dist, w = n, h = n, threshold = threshold, probe = probe
+                }.ScheduleParallel(n, 8, default);
+                var hRows = new CoastRowsJob { dist = dist, w = n, probe = probe }.ScheduleParallel(n, 8, hCols);
+                var deps = JobHandle.CombineDependencies(hRank, hRows);
+                if (wind)
+                {
+                    float a = windAngle * Mathf.Deg2Rad;
+                    float wx = Mathf.Cos(a), wy = Mathf.Sin(a);
+                    bool xMajor = Mathf.Abs(wx) >= Mathf.Abs(wy);
+                    float major = xMajor ? wx : wy, minor = xMajor ? wy : wx;
+                    float slope = minor / Mathf.Abs(major);
+                    float stepLen = Mathf.Sqrt(1f + slope * slope) * toUnits;
+                    deps = new WindJob
+                    {
+                        heights = nHeights, rank = rank, air = air, w = n, h = n, threshold = threshold,
+                        xMajor = xMajor, dir = major >= 0f ? 1 : -1, slope = slope,
+                        keepFlat = Mathf.Exp(-windDry * stepLen), pickUp = 1f - Mathf.Exp(-windEvaporation * stepLen),
+                        lift = windLift * LiftScale, probe = probe
+                    }.Schedule(deps);
+                }
+                new ViewClimateJob
+                {
+                    extCoast = dist, extRank = rank, extAir = air, tn = tn, mn = mn,
+                    coast = coastV, temp = tempV, moist = moistV, air = airV,
+                    n = n, w = n, mL = 0, mB = 0, wind = wind, toUnits = toUnits,
+                    offsetY = bigOrigin.y, latitudeSpan = LatitudeSpan, span = bigScale,
+                    baseTemperature = baseTemperature, lapseRate = lapseRate, latitudeEffect = latitudeEffect,
+                    coastModeration = coastModeration, tempNoiseAmplitude = tempNoiseAmplitude,
+                    moistureNoiseAmplitude = moistureNoiseAmplitude, coastalMoistureBonus = coastalMoistureBonus,
+                    coastDecayRate = coastDecayRate, windStrength = windStrength, probe = probe
+                }.ScheduleParallel(n, 8, deps).Complete();
+                bigTemp = Ensure(bigTemp, cells);
+                bigMoist = Ensure(bigMoist, cells);
+                tempV.CopyTo(bigTemp);
+                moistV.CopyTo(bigMoist);
+            }
+            finally
+            {
+                nHeights.Dispose(); sorted.Dispose(); rank.Dispose(); dist.Dispose(); air.Dispose();
+                tn.Dispose(); mn.Dispose(); coastV.Dispose(); tempV.Dispose(); moistV.Dispose(); airV.Dispose();
+                probe.Dispose(); rankProbe.Dispose();
+            }
+            bigClimateKey = key;
+            bigClimateMs = (float)watch.Elapsed.TotalMilliseconds;
+        }
+        for (int i = 0; i < cells; i++)
+            if (heights[i] >= threshold) pixels[i] = BiomeColours[(int)BiomeTable.Lookup(bigTemp[i], bigMoist[i])];
+    }
+
     // Full screen until a tap on the picture, Back or Escape. 2b: with the ocean's sliders
     // beside it (landscape) or under it (portrait); moving one redraws the picture.
     void DrawBigPicture(float width, float height, float margin)
@@ -2218,7 +2458,7 @@ public class NoiseLab : MonoBehaviour
         DrawRect(new Rect(view.x, view.y, 2f, view.height), line);
         DrawRect(new Rect(view.xMax - 2f, view.y, 2f, view.height), line);
         string name = $"{BigColourNames[(int)bigColour]} ×{bigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + bigScale)}, " +
-                      $"the view outlined; {bigMs:0} ms";
+                      $"the view outlined; {bigMs:0} ms" + (bigColour == BigColour.Biomes ? $" (climate {bigClimateMs:0} ms)" : "");
         DrawRect(new Rect(r.x, r.y, Mathf.Min(8.5f * name.Length + 8f, r.width), 22f), new Color(0f, 0f, 0f, 0.5f));
         GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
 
@@ -2282,7 +2522,29 @@ public class NoiseLab : MonoBehaviour
             if (b.u[i] != c.u[i] || b.v[i] != c.v[i]) repeat++;
         }
         return $"\nocean region {index}: managed {a.ms:0.0} ms, Burst {b.ms:0.0} ms; cells that differ {differ} of {a.u.Length}, " +
-               $"max |Δ| {worst:G3} (fastest {a.fastest:0.0}); Burst run twice: {repeat} differ" + HeatCheck(b);
+               $"max |Δ| {worst:G3} (fastest {a.fastest:0.0}); Burst run twice: {repeat} differ" + HeatCheck(b) + SampleCheck();
+    }
+
+    // 2c: the sampling of the regions (view currents and temperature, anomaly on the climate
+    // grid) in plain C# and with Burst. Leaves the result of the path in use.
+    string SampleCheck()
+    {
+        bool keep = useBurst;
+        useBurst = false; Ocean();
+        float managedMs = seaGridMs;
+        var t0 = (float[])seaTemp.Clone();
+        var a0 = (float[])extSeaAnom.Clone();
+        useBurst = true; Ocean();
+        float burstMs = seaGridMs;
+        string state = GridNoiseJob<Simplex2D<Simplex>>.StateName(oceanSampleState);
+        float worst = 0f;
+        for (int i = 0; i < t0.Length; i++) worst = Mathf.Max(worst, Mathf.Abs(t0[i] - seaTemp[i]));
+        float worstA = 0f;
+        for (int i = 0; i < a0.Length; i++) worstA = Mathf.Max(worstA, Mathf.Abs(a0[i] - extSeaAnom[i]));
+        useBurst = keep;
+        if (!keep) Ocean();
+        return $"\nsea sampling (view {sampleN}², climate grid {extW}×{extH}): managed {managedMs:0.0} ms, Burst {burstMs:0.0} ms ({state}); " +
+               $"max |Δ| sea temp {worst:G3} °C, anomaly {worstA:G3} °C";
     }
 
     // 2b: the heat solve alone, on the same currents: plain C#, Burst, and Burst again.
@@ -4973,13 +5235,14 @@ struct ViewClimateJob : IJobFor
     public int n, w, mL, mB;
     public bool wind;
     public float toUnits, offsetY, latitudeSpan;
+    public float span; // 2c: view widths the n rows cover (1 for the view; the big picture's scale for its Biomes colour)
     public float baseTemperature, lapseRate, latitudeEffect, coastModeration, tempNoiseAmplitude;
     public float moistureNoiseAmplitude, coastalMoistureBonus, coastDecayRate, windStrength;
 
     public void Execute(int y)
     {
         if (y == 0) BurstProbe.Check(probe);
-        float yWorld = offsetY + (y + 0.5f) / n;
+        float yWorld = offsetY + (y + 0.5f) * span / n; // span 1: the same as (y + 0.5) / n
         float lat = math.saturate(math.abs(yWorld) / latitudeSpan);
         for (int x = 0; x < n; x++)
         {
@@ -5156,6 +5419,48 @@ struct FlowAirJob : IJob
         float a = w4.x * (x > 0 ? air[c - 1] : 1f) + w4.y * (x < fw - 1 ? air[c + 1] : 1f)
                 + w4.z * (y > 0 ? air[c - fw] : 1f) + w4.w * (y < fh - 1 ? air[c + fw] : 1f);
         air[c] = (a + (1f - a) * gain[c]) * keep[c];
+    }
+}
+
+// v6 (2c): one field of the ocean regions (currents, temperature or anomaly) read at every
+// cell of a grid, as NoiseLab.SampleRegionField and the blend of NoiseLab.Ocean: bilinear
+// between a region's cell centres, the two regions around each column weighted by how far
+// they are. field holds the regions first, first + 1, … one after the other (oceanN² each).
+// Grid cell (x, y) is the world point (originX + (x − shiftX + 0.5) / n, originY + (y − shiftY + 0.5) / n).
+// Index: grid row.
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+struct RegionSampleJob : IJobFor
+{
+    [ReadOnly] public NativeArray<float> field;
+    [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> output;
+    [NativeDisableParallelForRestriction] public NativeArray<int> probe;
+    public int first, cols, n, shiftX, shiftY, oceanN, perView;
+    public float originX, originY, stride, latitudeSpan;
+
+    float Sample(int k, float x, float y)
+    {
+        int rn = oceanN;
+        float gx = math.clamp((x - (stride * (first + k) - 8f)) * perView - 0.5f, 0f, rn - 1);
+        float gy = math.clamp((y + latitudeSpan) * perView - 0.5f, 0f, rn - 1);
+        int x0 = math.min((int)gx, rn - 2), y0 = math.min((int)gy, rn - 2);
+        float tx = gx - x0, ty = gy - y0;
+        int i = k * rn * rn + y0 * rn + x0;
+        return math.lerp(math.lerp(field[i], field[i + 1], tx), math.lerp(field[i + rn], field[i + rn + 1], tx), ty);
+    }
+
+    public void Execute(int y)
+    {
+        if (y == 0) BurstProbe.Check(probe);
+        float wy = originY + (y - shiftY + 0.5f) / n;
+        for (int x = 0; x < cols; x++)
+        {
+            float wx = originX + (x - shiftX + 0.5f) / n;
+            float t = wx / stride;
+            int k0 = (int)math.floor(t);
+            float b = t - k0;
+            int k = k0 - first;
+            output[y * cols + x] = math.lerp(Sample(k, wx, wy), Sample(k + 1, wx, wy), b);
+        }
     }
 }
 
