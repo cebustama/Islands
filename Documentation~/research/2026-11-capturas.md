@@ -125,3 +125,11 @@ Ideas, links and videos delivered with `/capturar` that belong to Islands. Most 
 - 💡 **Possible use here:** inventory grouped by theme, with what is already in research and what is new (Galak-Z, Plot and Parcel, Tom Betts, Nature of Order, Isaac, Nuclear Throne, UnitOfTime, Gun Game…), plus the proposed analysis (cards per video mapped to the technique library, cross-reference against code, ranked backlog) in [`2026-11-01-playlist-pcg.md`](2026-11-01-playlist-pcg.md).
 - **Connects with:** web (emergence scene, Islands Lab), mundo-islas (RimWorld, Dwarf Fortress, narrative), videojuego-colonizacion (Kate Edwards, speculative biology).
 - **Status:** Tier 1 analysed (2026-11-01) in [`playlist-pcg/`](playlist-pcg/backlog.md); Tier 2 analysed the same day (`cards-tier2.md`); Tier 3 the same day (`cards-tier3.md`: wind and rain shadow, `FillDepth` lakes, floodplains, reaction-diffusion, plates). Wrapped: https://claude.ai/artifact/2ENwKc2kpHJmcVvpCNfexa.
+
+## 2026-11-18 — Final Fantasy VI maps as a NoiseLab view (images, fantasyanime.site)
+
+- **What:** two screenshots of an Instagram/Threads post by fantasyanime.site, «Various maps from Final Fantasy VI (SNES)»: terraced plateaus with south-facing cliff walls, waterfalls and cave mouths; a floating-continent map over a sea of clouds. Images in `D:\Projects\_bandeja\capturas\2026-11-18-ff6-mapas\` (copyright Square Enix; reference only).
+- **Claudio's question:** can NoiseLab maps be rendered with an FF6-style tileset?
+- 💡 **Possible use here:** yes. Height quantized into a few terraces (the quantile bands), ¾ view where a higher plateau draws a wall of (level difference × k) tiles on its south edge (painted north to south), dual-grid autotiling for edges (~16 pieces per terrain pair), tileset chosen by biome, local rules for waterfalls (river over a wall, after hydrology H1) and caves. Added as a row in family B of [`NoiseLab_Views_Catalog.md`](../planning/exploration/NoiseLab_Views_Catalog.md). The hard part is the tileset, not the code; FF6 tiles only for private tests.
+- **Connects with:** mundo-islas (zoom to the tile, world map as a 16-bit JRPG), web (tileset generated from a palette, like the araucaria sprites).
+- **Status:** saved; after v6, with the other views. Possible quick web prototype with a placeholder tileset.
