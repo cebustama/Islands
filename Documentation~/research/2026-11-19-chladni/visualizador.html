@@ -1,0 +1,504 @@
+<title>Placas de Chladni</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: una lámina grabada de 1787 como mesa de trabajo; la placa a la izquierda, los mandos a la derecha, la «Tab.» de figuras debajo. */
+:root {
+  --paper: #e8e5dd;
+  --plate: #f1eee7;
+  --ink: #221f1b;
+  --muted: #6b655c;
+  --rule: #c9c3b6;
+  --brass: #8c5f26;
+  --pos: #b0513a;
+  --neg: #35698c;
+  --sea-deep: #2f5d78;
+  --sea-shallow: #7fb0bf;
+  --sand: #d9c58f;
+  --grass: #7c9a55;
+  --hill: #8a7550;
+  --peak: #efece4;
+  --font-display: "IM Fell English", "Iowan Old Style", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #15181b; --plate: #1d2126; --ink: #e6d9bb; --muted: #9a9284; --rule: #343a41;
+    --brass: #d3a45e; --pos: #e07a5f; --neg: #6aa6cf; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #15181b; --plate: #1d2126; --ink: #e6d9bb; --muted: #9a9284; --rule: #343a41;
+  --brass: #d3a45e; --pos: #e07a5f; --neg: #6aa6cf; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 48px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 28px; }
+header { display: grid; gap: 4px; border-bottom: 1px solid var(--rule); padding-bottom: 14px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(32px, 6vw, 52px); line-height: 1.05; margin: 0; text-wrap: balance; }
+.lede { margin: 0; max-width: 62ch; color: var(--muted); }
+.stage { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
+figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+.canvasbox { position: relative; width: 100%; max-width: 560px; aspect-ratio: 1; }
+#plate { width: 100%; height: 100%; display: block; image-rendering: auto; touch-action: none; }
+figcaption { font-family: var(--font-display); font-style: italic; font-size: 17px; }
+figcaption .mono { font-family: var(--font-mono); font-style: normal; font-size: 13px; color: var(--muted); }
+.warn { font-size: 13px; color: var(--pos); min-height: 1.2em; }
+.panel { display: grid; gap: 18px; min-width: 0; }
+.group { display: grid; gap: 8px; }
+.label { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.label output { color: var(--ink); letter-spacing: 0; text-transform: none; font-size: 13px; font-variant-numeric: tabular-nums; }
+.seg { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--ink); width: fit-content; max-width: 100%; }
+.seg button { font: 500 13px var(--font-body); background: transparent; color: var(--ink); border: 0; border-right: 1px solid var(--ink); padding: 7px 12px; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.seg button:focus-visible, .btn:focus-visible, input:focus-visible, .thumb:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+input[type=range] { width: 100%; accent-color: var(--brass); }
+.btn { font: 500 14px var(--font-body); background: transparent; color: var(--ink); border: 1px solid var(--ink); padding: 8px 14px; cursor: pointer; }
+.btn.primary { background: var(--brass); border-color: var(--brass); color: var(--paper); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.note { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.tab { display: grid; gap: 12px; border-top: 1px solid var(--rule); padding-top: 18px; }
+.tab h2 { font-family: var(--font-display); font-weight: 400; font-style: italic; font-size: 26px; margin: 0; }
+.tab p { margin: 0; color: var(--muted); font-size: 14px; }
+.thumbs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; border: 1px solid var(--ink); padding: 14px; background: var(--plate); }
+@media (max-width: 760px) { .thumbs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.thumb { display: grid; gap: 2px; background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink); text-align: left; }
+.thumb span { font-family: var(--font-display); font-size: 14px; }
+.thumb canvas { width: 100%; aspect-ratio: 1; display: block; }
+.thumb[aria-current="true"] span { color: var(--brass); }
+.texts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; border-top: 1px solid var(--rule); padding-top: 18px; }
+.texts section { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.texts h3 { font-family: var(--font-display); font-weight: 400; font-size: 21px; margin: 0; }
+.texts p { margin: 0; font-size: 14.5px; max-width: 62ch; }
+.formula { font-family: var(--font-mono); font-size: 13px; background: var(--plate); border: 1px solid var(--rule); padding: 8px 10px; overflow-x: auto; white-space: nowrap; }
+.foot { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 12px; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Prototipo · Islands Lab · después de Chladni, 1787</div>
+    <h1>Placas de Chladni</h1>
+    <p class="lede">Cada nota hace vibrar la placa de una forma. La arena se queda donde la placa no se mueve y dibuja la figura. Cambia la placa, los números del modo y la vista.</p>
+  </header>
+
+  <div class="stage">
+    <figure>
+      <div class="canvasbox"><canvas id="plate" width="440" height="440" aria-label="Figura de la placa"></canvas></div>
+      <figcaption id="caption">—</figcaption>
+      <div class="warn" id="warn"></div>
+    </figure>
+
+    <div class="panel">
+      <div class="group">
+        <div class="label">Placa</div>
+        <div class="seg" id="shapeSeg">
+          <button id="shape-ci" data-v="ci" aria-pressed="false">Circular</button>
+          <button id="shape-sq" data-v="sq" aria-pressed="true">Cuadrada</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label"><span>Subir la nota</span><output id="noteOut">—</output></div>
+        <input type="range" id="noteIdx" min="0" max="10" step="1" value="0" aria-label="Modo ordenado por frecuencia">
+        <div class="row">
+          <button class="btn primary" id="listen" aria-pressed="false">▶ Escuchar</button>
+          <span class="note">Tono aproximado; empieza al pulsar.</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label"><span id="nLabel">n</span><output id="nOut">0</output></div>
+        <input type="range" id="n" min="0" max="8" step="1" value="1">
+        <div class="label"><span id="mLabel">m</span><output id="mOut">0</output></div>
+        <input type="range" id="m" min="0" max="8" step="1" value="4">
+        <div id="mixGroup" class="group">
+          <div class="label"><span>Mezcla de los dos modos</span><output id="sOut">+1</output></div>
+          <input type="range" id="s" min="-1" max="1" step="0.05" value="1">
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label">Vista</div>
+        <div class="seg" id="styleSeg">
+          <button id="st-lamina" data-v="lamina" aria-pressed="true">Lámina</button>
+          <button id="st-lineas" data-v="lineas" aria-pressed="false">Líneas</button>
+          <button id="st-arena" data-v="arena" aria-pressed="false">Arena</button>
+          <button id="st-fase" data-v="fase" aria-pressed="false">Fase</button>
+          <button id="st-isla" data-v="isla" aria-pressed="false">Isla</button>
+        </div>
+      </div>
+
+      <div class="group" id="epsGroup">
+        <div class="label"><span>Cuánta arena</span><output id="epsOut">0.06</output></div>
+        <input type="range" id="eps" min="0.01" max="0.25" step="0.01" value="0.06">
+      </div>
+      <div class="group" id="waterGroup" hidden>
+        <div class="label"><span>Agua (por porcentaje)</span><output id="waterOut">45 %</output></div>
+        <input type="range" id="water" min="10" max="85" step="1" value="45">
+      </div>
+      <div class="group" id="sandGroup" hidden>
+        <div class="row"><button class="btn" id="pour">Echar arena de nuevo</button><span class="note" id="grains">14 000 granos</span></div>
+      </div>
+      <div class="group">
+        <div class="label"><span>Deformar con ruido</span><output id="warpOut">0</output></div>
+        <input type="range" id="warp" min="0" max="0.2" step="0.005" value="0">
+      </div>
+    </div>
+  </div>
+
+  <section class="tab">
+    <h2 id="tabTitle">Tab. I</h2>
+    <p>Las doce figuras siguientes, de la nota actual hacia arriba. Toca una para verla grande.</p>
+    <div class="thumbs" id="thumbs"></div>
+  </section>
+
+  <div class="texts">
+    <section>
+      <h3>Cómo se forma</h3>
+      <p>Chladni echaba arena sobre una placa y la frotaba con un arco de violín. A ciertas notas la placa resuena: unas zonas suben y bajan mucho y unas líneas no se mueven. La arena salta de lo que vibra y se queda en lo quieto. En la vista <em>Arena</em>, cada grano salta según cuánto se mueve la placa bajo él; nadie le dice adónde ir, y aun así llega a la figura.</p>
+    </section>
+    <section>
+      <h3>Las fórmulas</h3>
+      <div class="formula">cuadrada: cos(nπx)·cos(mπy) + s·cos(mπx)·cos(nπy)</div>
+      <div class="formula">circular: J<sub>n</sub>(k·r)·cos(nθ), con k el cero m-ésimo de J<sub>n</sub>′</div>
+      <p>Son la aproximación de membrana. La placa real obedece a ∇⁴w = λw, sin solución cerrada para el cuadrado libre (Ritz la calculó en 1909). Las estrellas negras salen solas: cerca del centro la placa se mueve como rⁿ, casi nada.</p>
+    </section>
+    <section>
+      <h3>La ley de Chladni</h3>
+      <p>En la placa circular, la frecuencia crece como (m + 2n)²: los diámetros suben la nota el doble que los círculos. Aquí la usamos para estimar el tono de la circular; en la cuadrada, n² + m². Sirven para oír el orden de las notas, no la afinación de una placa de verdad.</p>
+    </section>
+    <section>
+      <h3>Quién lo explicó</h3>
+      <p>Tras ver a Chladni en París en 1808, Napoleón respaldó un premio de la Academia de Ciencias. Lo ganó Sophie Germain en 1816, al tercer intento: la primera mujer premiada por esa Academia. Kirchhoff corrigió su teoría en 1850 y es a quien suele recordar la historia.</p>
+    </section>
+    <section>
+      <h3>Para Islands</h3>
+      <p>Una figura es un campo f(x, y), como un ruido. Las líneas son |f| &lt; ε, el mismo umbral que el agua de NoiseLab, y la vista <em>Isla</em> usa el corte por porcentaje: los lóbulos que vibran se vuelven islas y las líneas, canales. «Deformar» rompe la simetría para que no parezca artificial.</p>
+    </section>
+  </div>
+  <p class="foot">Textos ✦ IA. Láminas originales: Ernst Chladni, <em>Entdeckungen über die Theorie des Klanges</em> (Leipzig, 1787), dominio público. Nota de investigación en Islands: <code>Documentation~/research/2026-11-19-chladni.md</code>.</p>
+</div>
+
+<script>
+(() => {
+  const G = 440;
+  const canvas = document.getElementById('plate');
+  const ctx = canvas.getContext('2d');
+  const $ = id => document.getElementById(id);
+
+  const state = { shape: 'sq', n: 1, m: 4, s: 1, style: 'lamina', eps: 0.06, water: 45, warp: 0 };
+
+  // ---------- Bessel ----------
+  function besselJ(n, x) {
+    const N = 160; let s = 0;
+    for (let i = 0; i <= N; i++) {
+      const t = Math.PI * i / N, w = (i === 0 || i === N) ? 0.5 : 1;
+      s += w * Math.cos(n * t - x * Math.sin(t));
+    }
+    return s / N;
+  }
+  const dJ = (n, x) => n === 0 ? -besselJ(1, x) : 0.5 * (besselJ(n - 1, x) - besselJ(n + 1, x));
+  const zeroCache = {};
+  function derivZeros(n) {
+    if (zeroCache[n]) return zeroCache[n];
+    const zs = []; let x0 = 0.05, y0 = dJ(n, x0);
+    for (let x = 0.15; x < 60 && zs.length < 8; x += 0.1) {
+      const y = dJ(n, x);
+      if (y0 === 0 || y0 * y < 0) {
+        let a = x - 0.1, b = x, fa = y0;
+        for (let k = 0; k < 40; k++) { const c = (a + b) / 2, fc = dJ(n, c); if (fa * fc <= 0) b = c; else { a = c; fa = fc; } }
+        zs.push((a + b) / 2);
+      }
+      x0 = x; y0 = y;
+    }
+    return (zeroCache[n] = zs);
+  }
+  const radialCache = {};
+  function radial(n, m) {
+    const key = n + ',' + m; if (radialCache[key]) return radialCache[key];
+    const zs = derivZeros(n); const k = n === 0 ? zs[m - 1] : zs[m];
+    const T = 1024, R = new Float32Array(T);
+    for (let i = 0; i < T; i++) R[i] = besselJ(n, k * i / (T - 1));
+    return (radialCache[key] = R);
+  }
+
+  // ---------- ruido de valor para deformar ----------
+  function hash(ix, iy, s) {
+    let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(s, 982451653);
+    h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+    return (h >>> 0) / 4294967295;
+  }
+  function vnoise(x, y, s) {
+    const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+    const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    const a = hash(ix, iy, s), b = hash(ix + 1, iy, s), c = hash(ix, iy + 1, s), d = hash(ix + 1, iy + 1, s);
+    return (a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v) * 2 - 1;
+  }
+  const warpX = (x, y) => vnoise(x * 3 + 11, y * 3, 1) + 0.5 * vnoise(x * 7, y * 7 + 5, 2);
+  const warpY = (x, y) => vnoise(x * 3, y * 3 + 17, 3) + 0.5 * vnoise(x * 7 + 9, y * 7, 4);
+
+  // ---------- modos y notas ----------
+  function validMode(shape, n, m) {
+    if (shape === 'sq') return !(n === 0 && m === 0);
+    return !(n === 0 && m === 0);
+  }
+  function freq(shape, n, m) {
+    return shape === 'sq' ? 40 * (n * n + m * m) : 20 * Math.pow(m + 2 * n, 2);
+  }
+  function modeList(shape) {
+    const out = [];
+    if (shape === 'sq') { for (let n = 0; n <= 8; n++) for (let m = n; m <= 8; m++) if (validMode(shape, n, m)) out.push({ n, m }); }
+    else { for (let n = 0; n <= 8; n++) for (let m = 0; m <= 3; m++) if (validMode(shape, n, m)) out.push({ n, m }); }
+    out.sort((a, b) => freq(shape, a.n, a.m) - freq(shape, b.n, b.m) || a.n - b.n);
+    return out;
+  }
+  const NOTES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+  function noteName(f) {
+    const midi = Math.round(69 + 12 * Math.log2(f / 440));
+    return NOTES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
+  }
+
+  // ---------- campo ----------
+  function computeField(shape, n, m, s, warp, size) {
+    const f = new Float32Array(size * size), inside = new Uint8Array(size * size);
+    let max = 0;
+    const R = shape === 'ci' ? radial(n, m) : null, T = R ? R.length - 1 : 0;
+    for (let j = 0; j < size; j++) {
+      for (let i = 0; i < size; i++) {
+        const idx = j * size + i;
+        let x = (i + 0.5) / size, y = (j + 0.5) / size;
+        if (shape === 'sq') {
+          if (warp > 0) { const wx = warpX(x, y), wy = warpY(x, y); x += warp * wx; y += warp * wy; }
+          const v = Math.cos(n * Math.PI * x) * Math.cos(m * Math.PI * y) + s * Math.cos(m * Math.PI * x) * Math.cos(n * Math.PI * y);
+          f[idx] = v; inside[idx] = 1;
+        } else {
+          let u = x * 2 - 1, w = y * 2 - 1;
+          if (u * u + w * w > 1) continue;
+          inside[idx] = 1;
+          if (warp > 0) { const wx = warpX(x, y), wy = warpY(x, y); u += 2 * warp * wx; w += 2 * warp * wy; }
+          const r = Math.min(1, Math.sqrt(u * u + w * w)), th = Math.atan2(w, u);
+          const rr = r * T, i0 = Math.floor(rr), fr = rr - i0;
+          const rad = R[i0] + (R[Math.min(T, i0 + 1)] - R[i0]) * fr;
+          f[idx] = rad * Math.cos(n * th + Math.PI / 2 * (n % 2 ? 1 : 0) * 0);
+        }
+        const a = Math.abs(f[idx]); if (a > max) max = a;
+      }
+    }
+    if (max > 1e-6) for (let k = 0; k < f.length; k++) f[k] /= max;
+    return { f, inside, max, size };
+  }
+
+  // ---------- colores desde los tokens ----------
+  let C = {};
+  function hex(v) { v = v.trim(); return [parseInt(v.slice(1, 3), 16), parseInt(v.slice(3, 5), 16), parseInt(v.slice(5, 7), 16)]; }
+  function readTokens() {
+    const cs = getComputedStyle(document.documentElement);
+    ['paper', 'plate', 'ink', 'rule', 'brass', 'pos', 'neg', 'sea-deep', 'sea-shallow', 'sand', 'grass', 'hill', 'peak']
+      .forEach(k => C[k] = hex(cs.getPropertyValue('--' + k)));
+  }
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
+
+  // ---------- pintar ----------
+  function paint(F, img, style, opts) {
+    const { f, inside, size } = F, d = img.data;
+    let thr = 0;
+    if (style === 'isla') {
+      const sample = [];
+      for (let k = 0; k < f.length; k += 3) if (inside[k]) sample.push(Math.abs(f[k]));
+      sample.sort((a, b) => a - b);
+      thr = sample[Math.floor(sample.length * opts.water / 100)] || 0;
+    }
+    for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+      const k = j * size + i, p = k * 4;
+      let col;
+      if (!inside[k]) col = C.paper;
+      else {
+        const v = f[k], a = Math.abs(v);
+        if (style === 'lamina') {
+          const t = clamp01((opts.eps - a) / (opts.eps * 0.45));
+          col = mix(C.plate, C.ink, t);
+        } else if (style === 'lineas' || style === 'fase') {
+          const il = Math.max(1, i - 1), ir = Math.min(size - 1, i + 1), jt = Math.max(1, j - 1), jb = Math.min(size - 1, j + 1);
+          const gx = (f[j * size + ir] - f[j * size + il]) / (ir - il), gy = (f[jb * size + i] - f[jt * size + i]) / (jb - jt);
+          const gm = Math.hypot(gx, gy) + 1e-6, dist = a / gm;
+          const ink = clamp01(1.3 - dist);
+          const base = style === 'fase' ? mix(C.plate, v > 0 ? C.pos : C.neg, Math.pow(a, 0.7) * 0.85) : C.plate;
+          col = mix(base, C.ink, ink);
+        } else if (style === 'isla') {
+          if (a < thr) col = mix(C['sea-deep'], C['sea-shallow'], Math.pow(a / (thr || 1), 1.5));
+          else {
+            const t = (a - thr) / (1 - thr + 1e-6);
+            col = t < 0.08 ? C.sand : t < 0.55 ? mix(C.grass, C.hill, (t - 0.08) / 0.47) : mix(C.hill, C.peak, (t - 0.55) / 0.45);
+          }
+        } else col = C.plate;
+      }
+      d[p] = col[0]; d[p + 1] = col[1]; d[p + 2] = col[2]; d[p + 3] = 255;
+    }
+  }
+  function frame(c2, size, shape) {
+    c2.strokeStyle = 'rgb(' + C.ink.join(',') + ')'; c2.lineWidth = Math.max(1, size / 220);
+    c2.beginPath();
+    if (shape === 'ci') c2.arc(size / 2, size / 2, size / 2 - c2.lineWidth / 2, 0, Math.PI * 2);
+    else c2.rect(c2.lineWidth / 2, c2.lineWidth / 2, size - c2.lineWidth, size - c2.lineWidth);
+    c2.stroke();
+  }
+
+  // ---------- arena ----------
+  const NG = 14000; let gx = new Float32Array(NG), gy = new Float32Array(NG), sandRAF = 0, field = null;
+  function pour() {
+    for (let k = 0; k < NG; k++) {
+      let x, y;
+      do { x = Math.random(); y = Math.random(); } while (state.shape === 'ci' && (x * 2 - 1) ** 2 + (y * 2 - 1) ** 2 > 1);
+      gx[k] = x; gy[k] = y;
+    }
+  }
+  const sandImg = ctx.createImageData(G, G);
+  function sandStep() {
+    const { f, inside } = field;
+    for (let sub = 0; sub < 2; sub++) for (let k = 0; k < NG; k++) {
+      const i = Math.min(G - 1, gx[k] * G | 0), j = Math.min(G - 1, gy[k] * G | 0);
+      const a = Math.abs(f[j * G + i]);
+      const step = 0.028 * a * a + 0.0004;
+      let nx = gx[k] + (Math.random() - 0.5) * step, ny = gy[k] + (Math.random() - 0.5) * step;
+      if (state.shape === 'sq') { nx = nx < 0 ? -nx : nx > 1 ? 2 - nx : nx; ny = ny < 0 ? -ny : ny > 1 ? 2 - ny : ny; }
+      else if ((nx * 2 - 1) ** 2 + (ny * 2 - 1) ** 2 > 1) { nx = gx[k]; ny = gy[k]; }
+      gx[k] = nx; gy[k] = ny;
+    }
+    const d = sandImg.data;
+    for (let k = 0; k < inside.length; k++) { const p = k * 4, c = inside[k] ? C.plate : C.paper; d[p] = c[0]; d[p + 1] = c[1]; d[p + 2] = c[2]; d[p + 3] = 255; }
+    for (let k = 0; k < NG; k++) {
+      const i = gx[k] * G | 0, j = gy[k] * G | 0;
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+        const ii = Math.min(G - 1, i + dx), jj = Math.min(G - 1, j + dy), p = (jj * G + ii) * 4;
+        d[p] = C.ink[0]; d[p + 1] = C.ink[1]; d[p + 2] = C.ink[2];
+      }
+    }
+    ctx.putImageData(sandImg, 0, 0); frame(ctx, G, state.shape);
+    sandRAF = requestAnimationFrame(sandStep);
+  }
+
+  // ---------- UI ----------
+  let modes = [];
+  const mainImg = ctx.createImageData(G, G);
+  function render() {
+    cancelAnimationFrame(sandRAF); sandRAF = 0;
+    field = computeField(state.shape, state.n, state.m, state.s, state.warp, G);
+    $('warn').textContent = field.max < 1e-6 ? 'Con n = m y mezcla −1 los dos modos se anulan: la placa no se mueve. Prueba otra mezcla.' : '';
+    if (state.style === 'arena') { sandStep(); }
+    else { paint(field, mainImg, state.style, state); ctx.putImageData(mainImg, 0, 0); frame(ctx, G, state.shape); }
+    caption(); thumbs(); tone();
+  }
+  function caption() {
+    const { n, m, shape } = state, fq = freq(shape, n, m);
+    const idx = modes.findIndex(o => (o.n === n && o.m === m) || (shape === 'sq' && o.n === m && o.m === n));
+    const what = shape === 'ci'
+      ? `Placa circular · ${n} ${n === 1 ? 'diámetro' : 'diámetros'} · ${m} ${m === 1 ? 'círculo' : 'círculos'}`
+      : `Placa cuadrada · n = ${n}, m = ${m} · mezcla ${state.s > 0 ? '+' : ''}${state.s.toFixed(2)}`;
+    $('caption').innerHTML = `Fig. ${idx + 1}. ${what} <span class="mono">≈ ${Math.round(fq)} Hz (${noteName(fq)})</span>`;
+    $('noteOut').textContent = `${idx + 1} de ${modes.length} · ${noteName(fq)}`;
+    if (idx >= 0) $('noteIdx').value = idx;
+  }
+  function thumbs() {
+    const box = $('thumbs'); box.innerHTML = '';
+    const cur = +$('noteIdx').value, start = Math.max(0, Math.min(cur, modes.length - 12));
+    $('tabTitle').textContent = state.shape === 'ci' ? 'Tab. I · placas circulares' : 'Tab. IX · placas cuadradas';
+    const TS = 120;
+    for (let q = start; q < Math.min(modes.length, start + 12); q++) {
+      const o = modes[q];
+      const b = document.createElement('button'); b.className = 'thumb'; b.id = 'thumb-' + q;
+      b.setAttribute('aria-label', `Figura ${q + 1}: n ${o.n}, m ${o.m}`);
+      if (q === cur) b.setAttribute('aria-current', 'true');
+      const cv = document.createElement('canvas'); cv.width = TS; cv.height = TS;
+      const c2 = cv.getContext('2d'), img = c2.createImageData(TS, TS);
+      const F = computeField(state.shape, o.n, o.m, state.shape === 'sq' ? state.s : 1, state.warp, TS);
+      paint(F, img, 'lamina', { eps: Math.max(state.eps, 0.07) }); c2.putImageData(img, 0, 0); frame(c2, TS, state.shape);
+      const sp = document.createElement('span'); sp.textContent = (q + 1) + '.';
+      b.append(sp, cv);
+      b.addEventListener('click', () => { state.n = o.n; state.m = o.m; syncInputs(); render(); });
+      box.append(b);
+    }
+  }
+  function syncInputs() {
+    const ci = state.shape === 'ci';
+    $('m').max = ci ? 3 : 8;
+    if (state.m > +$('m').max) state.m = +$('m').max;
+    if (!validMode(state.shape, state.n, state.m)) state.m = 1;
+    $('n').value = state.n; $('m').value = state.m; $('s').value = state.s;
+    $('nOut').textContent = state.n; $('mOut').textContent = state.m;
+    $('sOut').textContent = (state.s > 0 ? '+' : '') + state.s.toFixed(2);
+    $('nLabel').textContent = ci ? 'n · diámetros' : 'n · ondas a lo ancho';
+    $('mLabel').textContent = ci ? 'm · círculos' : 'm · ondas a lo alto';
+    $('mixGroup').hidden = ci;
+    $('epsGroup').hidden = state.style !== 'lamina';
+    $('waterGroup').hidden = state.style !== 'isla';
+    $('sandGroup').hidden = state.style !== 'arena';
+    $('noteIdx').max = modes.length - 1;
+  }
+  function setShape(v) {
+    state.shape = v; modes = modeList(v);
+    if (v === 'ci') { state.n = 3; state.m = 1; } else { state.n = 1; state.m = 4; state.s = 1; }
+    [...$('shapeSeg').children].forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v));
+    pour(); syncInputs(); render();
+  }
+  $('shapeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setShape(b.dataset.v); });
+  $('styleSeg').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    state.style = b.dataset.v;
+    [...$('styleSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (state.style === 'arena') pour();
+    syncInputs(); render();
+  });
+  $('n').addEventListener('input', e => { state.n = +e.target.value; syncInputs(); render(); });
+  $('m').addEventListener('input', e => { state.m = +e.target.value; syncInputs(); render(); });
+  $('s').addEventListener('input', e => { state.s = +e.target.value; syncInputs(); render(); });
+  $('noteIdx').addEventListener('input', e => { const o = modes[+e.target.value]; state.n = o.n; state.m = o.m; syncInputs(); render(); });
+  $('eps').addEventListener('input', e => { state.eps = +e.target.value; $('epsOut').textContent = state.eps.toFixed(2); render(); });
+  $('water').addEventListener('input', e => { state.water = +e.target.value; $('waterOut').textContent = state.water + ' %'; render(); });
+  $('warp').addEventListener('input', e => { state.warp = +e.target.value; $('warpOut').textContent = state.warp.toFixed(3); render(); });
+  $('pour').addEventListener('click', () => { pour(); });
+
+  // ---------- sonido ----------
+  let actx = null, osc = null, gain = null;
+  function tone() {
+    if (!osc) return;
+    const fq = Math.min(6000, Math.max(30, freq(state.shape, state.n, state.m)));
+    osc.frequency.setTargetAtTime(fq, actx.currentTime, 0.03);
+  }
+  $('listen').addEventListener('click', () => {
+    const btn = $('listen');
+    if (osc) {
+      gain.gain.setTargetAtTime(0, actx.currentTime, 0.05);
+      const o = osc; setTimeout(() => o.stop(), 300); osc = null;
+      btn.textContent = '▶ Escuchar'; btn.setAttribute('aria-pressed', 'false'); return;
+    }
+    try {
+      actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+      osc = actx.createOscillator(); gain = actx.createGain();
+      osc.type = 'sine'; gain.gain.value = 0;
+      osc.connect(gain).connect(actx.destination); osc.start();
+      gain.gain.setTargetAtTime(0.12, actx.currentTime, 0.05);
+      tone(); btn.textContent = '■ Parar'; btn.setAttribute('aria-pressed', 'true');
+    } catch (err) { $('warn').textContent = 'Este navegador no deja reproducir sonido aquí.'; }
+  });
+
+  // ---------- tema ----------
+  function retheme() { readTokens(); render(); }
+  try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', retheme); } catch (e) {}
+  new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  readTokens(); modes = modeList(state.shape); pour(); syncInputs(); render();
+})();
+</script>
