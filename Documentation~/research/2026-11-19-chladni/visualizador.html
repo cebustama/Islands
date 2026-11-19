@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: una lámina grabada de 1787 como mesa de trabajo; la placa a la izquierda, los mandos a la derecha, la «Tab.» de figuras debajo. */
+/* Layout: una lámina grabada de 1787 como mesa de trabajo; la placa fija a la izquierda, las tres capas y los mandos a la derecha, la «Tab.» de figuras debajo. */
 :root {
   --paper: #e8e5dd;
   --plate: #f1eee7;
@@ -41,38 +41,53 @@ body {
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   padding-block: 24px 48px;
 }
-.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 28px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 28px; }
 header { display: grid; gap: 4px; border-bottom: 1px solid var(--rule); padding-bottom: 14px; }
 .eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
 h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(32px, 6vw, 52px); line-height: 1.05; margin: 0; text-wrap: balance; }
-.lede { margin: 0; max-width: 62ch; color: var(--muted); }
-.stage { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; align-items: start; }
-@media (max-width: 760px) { .stage { grid-template-columns: 1fr; } }
-figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+.lede { margin: 0; max-width: 64ch; color: var(--muted); }
+.stage { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 800px) { .stage { grid-template-columns: 1fr; } }
+figure { margin: 0; display: grid; gap: 8px; min-width: 0; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+@media (max-width: 800px) { figure { position: static; } }
 .canvasbox { position: relative; width: 100%; max-width: 560px; aspect-ratio: 1; }
-#plate { width: 100%; height: 100%; display: block; image-rendering: auto; touch-action: none; }
+#plate { width: 100%; height: 100%; display: block; touch-action: none; }
 figcaption { font-family: var(--font-display); font-style: italic; font-size: 17px; }
-figcaption .mono { font-family: var(--font-mono); font-style: normal; font-size: 13px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px 14px; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.chip { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid var(--ink); }
+.cents { color: var(--muted); }
 .warn { font-size: 13px; color: var(--pos); min-height: 1.2em; }
 .panel { display: grid; gap: 18px; min-width: 0; }
 .group { display: grid; gap: 8px; }
 .label { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
 .label output { color: var(--ink); letter-spacing: 0; text-transform: none; font-size: 13px; font-variant-numeric: tabular-nums; }
-.seg { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--ink); width: fit-content; max-width: 100%; }
-.seg button { font: 500 13px var(--font-body); background: transparent; color: var(--ink); border: 0; border-right: 1px solid var(--ink); padding: 7px 12px; cursor: pointer; }
+.seg { display: flex; flex-wrap: wrap; border: 1px solid var(--ink); width: fit-content; max-width: 100%; }
+.seg button { font: 500 13px var(--font-body); background: transparent; color: var(--ink); border: 0; border-right: 1px solid var(--ink); padding: 7px 11px; cursor: pointer; }
 .seg button:last-child { border-right: 0; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
-.seg button:focus-visible, .btn:focus-visible, input:focus-visible, .thumb:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 input[type=range] { width: 100%; accent-color: var(--brass); }
 .btn { font: 500 14px var(--font-body); background: transparent; color: var(--ink); border: 1px solid var(--ink); padding: 8px 14px; cursor: pointer; }
 .btn.primary { background: var(--brass); border-color: var(--brass); color: var(--paper); }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-.note { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+.note { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+.layers { display: grid; gap: 10px; }
+.layer { border: 1px solid var(--rule); background: var(--plate); padding: 10px 12px 12px; display: grid; gap: 8px; border-left: 6px solid var(--lc, var(--ink)); }
+.layer.active { border-color: var(--ink); border-left-color: var(--lc, var(--ink)); }
+.layer.off > :not(.lhead) { opacity: .45; }
+.lhead { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.lname { font: 500 14px var(--font-body); background: none; border: 0; padding: 0; color: var(--ink); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.layer.active .lname { text-decoration: none; font-weight: 600; }
+.lhead label { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; }
+.lhead input[type=color] { width: 30px; height: 24px; border: 1px solid var(--ink); padding: 0; background: none; cursor: pointer; }
+.lfreq { margin-left: auto; font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
 .tab { display: grid; gap: 12px; border-top: 1px solid var(--rule); padding-top: 18px; }
 .tab h2 { font-family: var(--font-display); font-weight: 400; font-style: italic; font-size: 26px; margin: 0; }
 .tab p { margin: 0; color: var(--muted); font-size: 14px; }
 .thumbs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; border: 1px solid var(--ink); padding: 14px; background: var(--plate); }
-@media (max-width: 760px) { .thumbs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 800px) { .thumbs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .thumb { display: grid; gap: 2px; background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink); text-align: left; }
 .thumb span { font-family: var(--font-display); font-size: 14px; }
 .thumb canvas { width: 100%; aspect-ratio: 1; display: block; }
@@ -83,20 +98,20 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
 .texts p { margin: 0; font-size: 14.5px; max-width: 62ch; }
 .formula { font-family: var(--font-mono); font-size: 13px; background: var(--plate); border: 1px solid var(--rule); padding: 8px 10px; overflow-x: auto; white-space: nowrap; }
 .foot { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 12px; }
-@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 </style>
 
 <div class="wrap">
   <header>
     <div class="eyebrow">Prototipo · Islands Lab · después de Chladni, 1787</div>
     <h1>Placas de Chladni</h1>
-    <p class="lede">Cada nota hace vibrar la placa de una forma. La arena se queda donde la placa no se mueve y dibuja la figura. Cambia la placa, los números del modo y la vista.</p>
+    <p class="lede">Cada nota hace vibrar la placa de una forma. Con tres capas puedes tocar un acorde y ver sus tres figuras encima, o lo que haría la arena si las tres notas sonaran a la vez.</p>
   </header>
 
   <div class="stage">
     <figure>
       <div class="canvasbox"><canvas id="plate" width="440" height="440" aria-label="Figura de la placa"></canvas></div>
       <figcaption id="caption">—</figcaption>
+      <div class="chips" id="chips"></div>
       <div class="warn" id="warn"></div>
     </figure>
 
@@ -110,22 +125,36 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
       </div>
 
       <div class="group">
-        <div class="label"><span>Subir la nota</span><output id="noteOut">—</output></div>
-        <input type="range" id="noteIdx" min="0" max="10" step="1" value="0" aria-label="Modo ordenado por frecuencia">
-        <div class="row">
-          <button class="btn primary" id="listen" aria-pressed="false">▶ Escuchar</button>
-          <span class="note">Tono aproximado; empieza al pulsar.</span>
+        <div class="label"><span>Acorde sobre la capa 1</span><span id="chordName"></span></div>
+        <div class="seg" id="chordSeg">
+          <button id="ch-maj" data-v="maj">Mayor</button>
+          <button id="ch-min" data-v="min">Menor</button>
+          <button id="ch-p5" data-v="p5">Quinta</button>
+          <button id="ch-sus4" data-v="sus4">Sus4</button>
+          <button id="ch-dim" data-v="dim">Dism.</button>
+          <button id="ch-aug" data-v="aug">Aum.</button>
         </div>
+        <span class="note">Elige para las capas 2 y 3 el modo de la placa más cercano a cada nota del acorde.</span>
       </div>
 
       <div class="group">
-        <div class="label"><span id="nLabel">n</span><output id="nOut">0</output></div>
-        <input type="range" id="n" min="0" max="8" step="1" value="1">
-        <div class="label"><span id="mLabel">m</span><output id="mOut">0</output></div>
-        <input type="range" id="m" min="0" max="8" step="1" value="4">
-        <div id="mixGroup" class="group">
-          <div class="label"><span>Mezcla de los dos modos</span><output id="sOut">+1</output></div>
-          <input type="range" id="s" min="-1" max="1" step="0.05" value="1">
+        <div class="row">
+          <button class="btn primary" id="listen" aria-pressed="false">▶ Escuchar</button>
+          <div class="seg" id="tuneSeg" aria-label="Cómo suena">
+            <button id="tune-plate" data-v="plate" aria-pressed="true">Notas de la placa</button>
+            <button id="tune-ideal" data-v="ideal" aria-pressed="false">Afinado</button>
+          </div>
+        </div>
+        <span class="note">«Notas de la placa» suena con lo que la placa puede dar, desafinado incluido; «Afinado», con el acorde exacto.</span>
+      </div>
+
+      <div class="layers" id="layers"></div>
+
+      <div class="group">
+        <div class="label">Las capas</div>
+        <div class="seg" id="combSeg">
+          <button id="comb-sup" data-v="sup" aria-pressed="true">Superpuestas</button>
+          <button id="comb-comb" data-v="comb" aria-pressed="false">Juntas (arena real)</button>
         </div>
       </div>
 
@@ -138,18 +167,19 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
           <button id="st-fase" data-v="fase" aria-pressed="false">Fase</button>
           <button id="st-isla" data-v="isla" aria-pressed="false">Isla</button>
         </div>
+        <span class="note" id="styleNote"></span>
       </div>
 
       <div class="group" id="epsGroup">
         <div class="label"><span>Cuánta arena</span><output id="epsOut">0.06</output></div>
-        <input type="range" id="eps" min="0.01" max="0.25" step="0.01" value="0.06">
+        <input type="range" id="eps" min="0.01" max="0.3" step="0.01" value="0.06">
       </div>
       <div class="group" id="waterGroup" hidden>
         <div class="label"><span>Agua (por porcentaje)</span><output id="waterOut">45 %</output></div>
         <input type="range" id="water" min="10" max="85" step="1" value="45">
       </div>
       <div class="group" id="sandGroup" hidden>
-        <div class="row"><button class="btn" id="pour">Echar arena de nuevo</button><span class="note" id="grains">14 000 granos</span></div>
+        <div class="row"><button class="btn" id="pour">Echar arena de nuevo</button><span class="note">14 000 granos</span></div>
       </div>
       <div class="group">
         <div class="label"><span>Deformar con ruido</span><output id="warpOut">0</output></div>
@@ -160,7 +190,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
 
   <section class="tab">
     <h2 id="tabTitle">Tab. I</h2>
-    <p>Las doce figuras siguientes, de la nota actual hacia arriba. Toca una para verla grande.</p>
+    <p id="tabNote">Las doce figuras siguientes a la capa que editas. Toca una para ponérsela.</p>
     <div class="thumbs" id="thumbs"></div>
   </section>
 
@@ -170,14 +200,19 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
       <p>Chladni echaba arena sobre una placa y la frotaba con un arco de violín. A ciertas notas la placa resuena: unas zonas suben y bajan mucho y unas líneas no se mueven. La arena salta de lo que vibra y se queda en lo quieto. En la vista <em>Arena</em>, cada grano salta según cuánto se mueve la placa bajo él; nadie le dice adónde ir, y aun así llega a la figura.</p>
     </section>
     <section>
+      <h3>Un acorde en la placa</h3>
+      <p>Si suenan tres notas, la placa hace los tres movimientos a la vez. Como las frecuencias son distintas, la arena siente la suma de las tres energías y solo se queda donde las tres están quietas: los cruces de sus líneas. Por eso, en <em>Juntas</em>, el acorde se deshace en puntos. <em>Superpuestas</em> es el dibujo teórico: cada figura en su color.</p>
+    </section>
+    <section>
+      <h3>Por qué desafina</h3>
+      <p>Una cuerda da armónicos a 1, 2, 3, 4… veces su nota, y de ahí salen los acordes. Una placa no: sus notas van como n² + m² o (m + 2n)², y casi nunca caen en la proporción 4 : 5 : 6 de una tríada mayor. Los cents al lado de cada nota dicen cuánto se aleja; 100 cents son un semitono. Las campanas tienen el mismo problema, y los fundidores las afinan rebajando el metal.</p>
+    </section>
+    <section>
       <h3>Las fórmulas</h3>
       <div class="formula">cuadrada: cos(nπx)·cos(mπy) + s·cos(mπx)·cos(nπy)</div>
       <div class="formula">circular: J<sub>n</sub>(k·r)·cos(nθ), con k el cero m-ésimo de J<sub>n</sub>′</div>
-      <p>Son la aproximación de membrana. La placa real obedece a ∇⁴w = λw, sin solución cerrada para el cuadrado libre (Ritz la calculó en 1909). Las estrellas negras salen solas: cerca del centro la placa se mueve como rⁿ, casi nada.</p>
-    </section>
-    <section>
-      <h3>La ley de Chladni</h3>
-      <p>En la placa circular, la frecuencia crece como (m + 2n)²: los diámetros suben la nota el doble que los círculos. Aquí la usamos para estimar el tono de la circular; en la cuadrada, n² + m². Sirven para oír el orden de las notas, no la afinación de una placa de verdad.</p>
+      <div class="formula">juntas: √( (f₁² + f₂² + f₃²) / 3 )</div>
+      <p>Aproximación de membrana; la placa real obedece a ∇⁴w = λw. El tono es aproximado: en la circular sale de la ley de Chladni, f ∝ (m + 2n)².</p>
     </section>
     <section>
       <h3>Quién lo explicó</h3>
@@ -185,7 +220,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     </section>
     <section>
       <h3>Para Islands</h3>
-      <p>Una figura es un campo f(x, y), como un ruido. Las líneas son |f| &lt; ε, el mismo umbral que el agua de NoiseLab, y la vista <em>Isla</em> usa el corte por porcentaje: los lóbulos que vibran se vuelven islas y las líneas, canales. «Deformar» rompe la simetría para que no parezca artificial.</p>
+      <p>Una figura es un campo f(x, y), como un ruido. Las líneas son |f| &lt; ε, el mismo umbral que el agua de NoiseLab, y la vista <em>Isla</em> usa el corte por porcentaje sobre las capas juntas: un acorde da un archipiélago distinto de cada nota sola.</p>
     </section>
   </div>
   <p class="foot">Textos ✦ IA. Láminas originales: Ernst Chladni, <em>Entdeckungen über die Theorie des Klanges</em> (Leipzig, 1787), dominio público. Nota de investigación en Islands: <code>Documentation~/research/2026-11-19-chladni.md</code>.</p>
@@ -198,7 +233,9 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   const ctx = canvas.getContext('2d');
   const $ = id => document.getElementById(id);
 
-  const state = { shape: 'sq', n: 1, m: 4, s: 1, style: 'lamina', eps: 0.06, water: 45, warp: 0 };
+  const state = { shape: 'sq', style: 'lamina', comb: 'sup', tune: 'plate', eps: 0.06, water: 45, warp: 0, active: 0, chord: null };
+  const DEFAULT_COLORS = ['#c4513a', '#2f7fb5', '#c99a2e'];
+  const layers = [0, 1, 2].map(i => ({ on: i === 0, n: 3, m: 4, s: 1, color: DEFAULT_COLORS[i], alpha: 0.85, target: null }));
 
   // ---------- Bessel ----------
   function besselJ(n, x) {
@@ -213,15 +250,15 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   const zeroCache = {};
   function derivZeros(n) {
     if (zeroCache[n]) return zeroCache[n];
-    const zs = []; let x0 = 0.05, y0 = dJ(n, x0);
-    for (let x = 0.15; x < 60 && zs.length < 8; x += 0.1) {
+    const zs = []; let y0 = dJ(n, 0.05);
+    for (let x = 0.15; x < 70 && zs.length < 8; x += 0.1) {
       const y = dJ(n, x);
-      if (y0 === 0 || y0 * y < 0) {
+      if (y0 * y < 0) {
         let a = x - 0.1, b = x, fa = y0;
         for (let k = 0; k < 40; k++) { const c = (a + b) / 2, fc = dJ(n, c); if (fa * fc <= 0) b = c; else { a = c; fa = fc; } }
         zs.push((a + b) / 2);
       }
-      x0 = x; y0 = y;
+      y0 = y;
     }
     return (zeroCache[n] = zs);
   }
@@ -249,58 +286,88 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   const warpX = (x, y) => vnoise(x * 3 + 11, y * 3, 1) + 0.5 * vnoise(x * 7, y * 7 + 5, 2);
   const warpY = (x, y) => vnoise(x * 3, y * 3 + 17, 3) + 0.5 * vnoise(x * 7 + 9, y * 7, 4);
 
+  // ---------- coordenadas (con la deformación), cacheadas ----------
+  const coordCache = new Map();
+  function coords(shape, warp, size) {
+    const key = shape + '|' + warp + '|' + size;
+    if (coordCache.has(key)) return coordCache.get(key);
+    const A = new Float32Array(size * size), B = new Float32Array(size * size), inside = new Uint8Array(size * size);
+    for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
+      const k = j * size + i; let x = (i + 0.5) / size, y = (j + 0.5) / size;
+      if (shape === 'sq') {
+        if (warp > 0) { const wx = warpX(x, y), wy = warpY(x, y); x += warp * wx; y += warp * wy; }
+        A[k] = x; B[k] = y; inside[k] = 1;
+      } else {
+        let u = x * 2 - 1, w = y * 2 - 1;
+        if (u * u + w * w > 1) continue;
+        inside[k] = 1;
+        if (warp > 0) { const wx = warpX(x, y), wy = warpY(x, y); u += 2 * warp * wx; w += 2 * warp * wy; }
+        A[k] = Math.min(1, Math.sqrt(u * u + w * w)); B[k] = Math.atan2(w, u);
+      }
+    }
+    const c = { A, B, inside, size };
+    if (coordCache.size > 12) coordCache.clear();
+    coordCache.set(key, c); return c;
+  }
+  const fieldCache = new Map();
+  function field(shape, n, m, s, warp, size) {
+    const key = [shape, n, m, shape === 'sq' ? s : 0, warp, size].join('|');
+    if (fieldCache.has(key)) return fieldCache.get(key);
+    const { A, B, inside } = coords(shape, warp, size);
+    const f = new Float32Array(size * size); let max = 0;
+    const R = shape === 'ci' ? radial(n, m) : null, T = R ? R.length - 1 : 0;
+    const P = Math.PI;
+    for (let k = 0; k < f.length; k++) {
+      if (!inside[k]) continue;
+      let v;
+      if (shape === 'sq') { const x = A[k], y = B[k]; v = Math.cos(n * P * x) * Math.cos(m * P * y) + s * Math.cos(m * P * x) * Math.cos(n * P * y); }
+      else { const rr = A[k] * T, i0 = rr | 0, fr = rr - i0; v = (R[i0] + (R[Math.min(T, i0 + 1)] - R[i0]) * fr) * Math.cos(n * B[k]); }
+      f[k] = v; const a = Math.abs(v); if (a > max) max = a;
+    }
+    if (max > 1e-6) for (let k = 0; k < f.length; k++) f[k] /= max;
+    const F = { f, inside, max, size };
+    if (fieldCache.size > 60) fieldCache.clear();
+    fieldCache.set(key, F); return F;
+  }
+  const layerField = (L, size) => field(state.shape, L.n, L.m, L.s, state.warp, size);
+
   // ---------- modos y notas ----------
-  function validMode(shape, n, m) {
-    if (shape === 'sq') return !(n === 0 && m === 0);
-    return !(n === 0 && m === 0);
-  }
-  function freq(shape, n, m) {
-    return shape === 'sq' ? 40 * (n * n + m * m) : 20 * Math.pow(m + 2 * n, 2);
-  }
+  const validMode = (shape, n, m) => !(n === 0 && m === 0);
+  const MAXN = { sq: 10, ci: 9 }, MAXM = { sq: 10, ci: 4 };
+  const freq = (shape, n, m) => shape === 'sq' ? 16 * (n * n + m * m) : 8 * Math.pow(m + 2 * n, 2);
   function modeList(shape) {
     const out = [];
-    if (shape === 'sq') { for (let n = 0; n <= 8; n++) for (let m = n; m <= 8; m++) if (validMode(shape, n, m)) out.push({ n, m }); }
-    else { for (let n = 0; n <= 8; n++) for (let m = 0; m <= 3; m++) if (validMode(shape, n, m)) out.push({ n, m }); }
+    for (let n = 0; n <= MAXN[shape]; n++) for (let m = (shape === 'sq' ? n : 0); m <= MAXM[shape]; m++) if (validMode(shape, n, m)) out.push({ n, m });
     out.sort((a, b) => freq(shape, a.n, a.m) - freq(shape, b.n, b.m) || a.n - b.n);
     return out;
   }
+  let modes = modeList(state.shape);
   const NOTES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
-  function noteName(f) {
-    const midi = Math.round(69 + 12 * Math.log2(f / 440));
-    return NOTES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
-  }
+  function noteName(f) { const midi = Math.round(69 + 12 * Math.log2(f / 440)); return NOTES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1); }
+  const modeIndex = L => modes.findIndex(o => (o.n === L.n && o.m === L.m) || (state.shape === 'sq' && o.n === L.m && o.m === L.n));
+  const plateFreq = L => freq(state.shape, L.n, L.m);
+  const targetFreq = L => L.target == null ? null : plateFreq(layers[0]) * Math.pow(2, L.target / 12);
 
-  // ---------- campo ----------
-  function computeField(shape, n, m, s, warp, size) {
-    const f = new Float32Array(size * size), inside = new Uint8Array(size * size);
-    let max = 0;
-    const R = shape === 'ci' ? radial(n, m) : null, T = R ? R.length - 1 : 0;
-    for (let j = 0; j < size; j++) {
-      for (let i = 0; i < size; i++) {
-        const idx = j * size + i;
-        let x = (i + 0.5) / size, y = (j + 0.5) / size;
-        if (shape === 'sq') {
-          if (warp > 0) { const wx = warpX(x, y), wy = warpY(x, y); x += warp * wx; y += warp * wy; }
-          const v = Math.cos(n * Math.PI * x) * Math.cos(m * Math.PI * y) + s * Math.cos(m * Math.PI * x) * Math.cos(n * Math.PI * y);
-          f[idx] = v; inside[idx] = 1;
-        } else {
-          let u = x * 2 - 1, w = y * 2 - 1;
-          if (u * u + w * w > 1) continue;
-          inside[idx] = 1;
-          if (warp > 0) { const wx = warpX(x, y), wy = warpY(x, y); u += 2 * warp * wx; w += 2 * warp * wy; }
-          const r = Math.min(1, Math.sqrt(u * u + w * w)), th = Math.atan2(w, u);
-          const rr = r * T, i0 = Math.floor(rr), fr = rr - i0;
-          const rad = R[i0] + (R[Math.min(T, i0 + 1)] - R[i0]) * fr;
-          f[idx] = rad * Math.cos(n * th + Math.PI / 2 * (n % 2 ? 1 : 0) * 0);
-        }
-        const a = Math.abs(f[idx]); if (a > max) max = a;
-      }
+  const CHORDS = { maj: ['Mayor', 4, 7], min: ['Menor', 3, 7], p5: ['Quinta y octava', 7, 12], sus4: ['Sus4', 5, 7], dim: ['Disminuido', 3, 6], aug: ['Aumentado', 4, 8] };
+  function nearestMode(fq, avoid) {
+    let best = null, bd = Infinity;
+    for (const o of modes) {
+      if (avoid && o.n === avoid.n && o.m === avoid.m) continue;
+      const d = Math.abs(Math.log2(freq(state.shape, o.n, o.m) / fq));
+      if (d < bd - 1e-9) { bd = d; best = o; }
     }
-    if (max > 1e-6) for (let k = 0; k < f.length; k++) f[k] /= max;
-    return { f, inside, max, size };
+    return best;
   }
+  function applyChord(key) {
+    state.chord = key; const [, a, b] = CHORDS[key], root = plateFreq(layers[0]);
+    [a, b].forEach((semi, q) => {
+      const L = layers[q + 1], o = nearestMode(root * Math.pow(2, semi / 12), layers[0]);
+      L.n = o.n; L.m = o.m; L.on = true; L.target = semi; L.s = layers[0].s;
+    });
+  }
+  function reapplyChord() { if (state.chord) applyChord(state.chord); }
 
-  // ---------- colores desde los tokens ----------
+  // ---------- colores ----------
   let C = {};
   function hex(v) { v = v.trim(); return [parseInt(v.slice(1, 3), 16), parseInt(v.slice(3, 5), 16), parseInt(v.slice(5, 7), 16)]; }
   function readTokens() {
@@ -311,42 +378,62 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
   const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 
-  // ---------- pintar ----------
-  function paint(F, img, style, opts) {
-    const { f, inside, size } = F, d = img.data;
-    let thr = 0;
-    if (style === 'isla') {
-      const sample = [];
-      for (let k = 0; k < f.length; k += 3) if (inside[k]) sample.push(Math.abs(f[k]));
-      sample.sort((a, b) => a - b);
-      thr = sample[Math.floor(sample.length * opts.water / 100)] || 0;
+  // ---------- tinta de una figura en un píxel ----------
+  function inkLamina(a, eps) { return clamp01((eps - a) / (eps * 0.45)); }
+  function inkLines(f, i, j, size) {
+    const k = j * size + i, il = Math.max(0, i - 1), ir = Math.min(size - 1, i + 1), jt = Math.max(0, j - 1), jb = Math.min(size - 1, j + 1);
+    const gx = (f[j * size + ir] - f[j * size + il]) / Math.max(1, ir - il), gy = (f[jb * size + i] - f[jt * size + i]) / Math.max(1, jb - jt);
+    return clamp01(1.3 - Math.abs(f[k]) / (Math.hypot(gx, gy) + 1e-6));
+  }
+
+  // campo de las capas juntas: amplitud rms
+  function combined(size) {
+    const act = layers.filter(L => L.on), Fs = act.map(L => layerField(L, size));
+    const n = size * size, a = new Float32Array(n), sum = new Float32Array(n);
+    let smax = 0;
+    for (let k = 0; k < n; k++) {
+      let e = 0, s = 0; for (const F of Fs) { const v = F.f[k]; e += v * v; s += v; }
+      a[k] = Math.sqrt(e / Fs.length); sum[k] = s; const as = Math.abs(s); if (as > smax) smax = as;
     }
+    if (smax > 1e-6) for (let k = 0; k < n; k++) sum[k] /= smax;
+    return { a, sum, inside: coords(state.shape, state.warp, size).inside };
+  }
+
+  function paintMain(img) {
+    const d = img.data, size = G, inside = coords(state.shape, state.warp, size).inside;
+    const style = state.style, useComb = state.comb === 'comb' || style === 'isla';
+    let CB = null, thr = 0;
+    if (useComb || style === 'fase') CB = combined(size);
+    if (style === 'isla') {
+      const sample = []; for (let k = 0; k < CB.a.length; k += 3) if (inside[k]) sample.push(CB.a[k]);
+      sample.sort((x, y) => x - y); thr = sample[Math.floor(sample.length * state.water / 100)] || 0;
+    }
+    const act = layers.filter(L => L.on).map(L => ({ F: layerField(L, size), col: hex(L.color), al: L.alpha }));
     for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
-      const k = j * size + i, p = k * 4;
-      let col;
+      const k = j * size + i, p = k * 4; let col;
       if (!inside[k]) col = C.paper;
-      else {
-        const v = f[k], a = Math.abs(v);
-        if (style === 'lamina') {
-          const t = clamp01((opts.eps - a) / (opts.eps * 0.45));
-          col = mix(C.plate, C.ink, t);
-        } else if (style === 'lineas' || style === 'fase') {
-          const il = Math.max(1, i - 1), ir = Math.min(size - 1, i + 1), jt = Math.max(1, j - 1), jb = Math.min(size - 1, j + 1);
-          const gx = (f[j * size + ir] - f[j * size + il]) / (ir - il), gy = (f[jb * size + i] - f[jt * size + i]) / (jb - jt);
-          const gm = Math.hypot(gx, gy) + 1e-6, dist = a / gm;
-          const ink = clamp01(1.3 - dist);
-          const base = style === 'fase' ? mix(C.plate, v > 0 ? C.pos : C.neg, Math.pow(a, 0.7) * 0.85) : C.plate;
-          col = mix(base, C.ink, ink);
-        } else if (style === 'isla') {
-          if (a < thr) col = mix(C['sea-deep'], C['sea-shallow'], Math.pow(a / (thr || 1), 1.5));
-          else {
-            const t = (a - thr) / (1 - thr + 1e-6);
-            col = t < 0.08 ? C.sand : t < 0.55 ? mix(C.grass, C.hill, (t - 0.08) / 0.47) : mix(C.hill, C.peak, (t - 0.55) / 0.45);
-          }
-        } else col = C.plate;
+      else if (style === 'isla') {
+        const a = CB.a[k];
+        if (a < thr) col = mix(C['sea-deep'], C['sea-shallow'], Math.pow(a / (thr || 1), 1.5));
+        else { const t = (a - thr) / (1 - thr + 1e-6); col = t < 0.08 ? C.sand : t < 0.55 ? mix(C.grass, C.hill, (t - 0.08) / 0.47) : mix(C.hill, C.peak, (t - 0.55) / 0.45); }
+      } else if (style === 'fase') {
+        const v = CB.sum[k]; col = mix(C.plate, v > 0 ? C.pos : C.neg, Math.pow(Math.abs(v), 0.7) * 0.85);
+        col = mix(col, C.ink, clamp01(1.3 - Math.abs(v) / (gradAt(CB.sum, i, j, size) + 1e-6)));
+      } else if (useComb) {
+        col = mix(C.plate, C.ink, inkLamina(CB.a[k], state.eps * (style === 'lineas' ? 0.6 : 1)));
+      } else {
+        col = C.plate;
+        for (const Lr of act) {
+          const t = style === 'lineas' ? inkLines(Lr.F.f, i, j, size) : inkLamina(Math.abs(Lr.F.f[k]), state.eps);
+          if (t > 0) col = mix(col, Lr.col, t * Lr.al);
+        }
       }
       d[p] = col[0]; d[p + 1] = col[1]; d[p + 2] = col[2]; d[p + 3] = 255;
     }
+  }
+  function gradAt(f, i, j, size) {
+    const il = Math.max(0, i - 1), ir = Math.min(size - 1, i + 1), jt = Math.max(0, j - 1), jb = Math.min(size - 1, j + 1);
+    return Math.hypot((f[j * size + ir] - f[j * size + il]) / Math.max(1, ir - il), (f[jb * size + i] - f[jt * size + i]) / Math.max(1, jb - jt));
   }
   function frame(c2, size, shape) {
     c2.strokeStyle = 'rgb(' + C.ink.join(',') + ')'; c2.lineWidth = Math.max(1, size / 220);
@@ -356,8 +443,8 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     c2.stroke();
   }
 
-  // ---------- arena ----------
-  const NG = 14000; let gx = new Float32Array(NG), gy = new Float32Array(NG), sandRAF = 0, field = null;
+  // ---------- arena (siempre con las capas juntas: es la física) ----------
+  const NG = 14000, gx = new Float32Array(NG), gy = new Float32Array(NG); let sandRAF = 0, sandA = null;
   function pour() {
     for (let k = 0; k < NG; k++) {
       let x, y;
@@ -367,11 +454,10 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   }
   const sandImg = ctx.createImageData(G, G);
   function sandStep() {
-    const { f, inside } = field;
+    const a = sandA.a, inside = sandA.inside;
     for (let sub = 0; sub < 2; sub++) for (let k = 0; k < NG; k++) {
       const i = Math.min(G - 1, gx[k] * G | 0), j = Math.min(G - 1, gy[k] * G | 0);
-      const a = Math.abs(f[j * G + i]);
-      const step = 0.028 * a * a + 0.0004;
+      const v = a[j * G + i], step = 0.028 * v * v + 0.0004;
       let nx = gx[k] + (Math.random() - 0.5) * step, ny = gy[k] + (Math.random() - 0.5) * step;
       if (state.shape === 'sq') { nx = nx < 0 ? -nx : nx > 1 ? 2 - nx : nx; ny = ny < 0 ? -ny : ny > 1 ? 2 - ny : ny; }
       else if ((nx * 2 - 1) ** 2 + (ny * 2 - 1) ** 2 > 1) { nx = gx[k]; ny = gy[k]; }
@@ -382,7 +468,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     for (let k = 0; k < NG; k++) {
       const i = gx[k] * G | 0, j = gy[k] * G | 0;
       for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-        const ii = Math.min(G - 1, i + dx), jj = Math.min(G - 1, j + dy), p = (jj * G + ii) * 4;
+        const p = (Math.min(G - 1, j + dy) * G + Math.min(G - 1, i + dx)) * 4;
         d[p] = C.ink[0]; d[p + 1] = C.ink[1]; d[p + 2] = C.ink[2];
       }
     }
@@ -390,106 +476,179 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     sandRAF = requestAnimationFrame(sandStep);
   }
 
-  // ---------- UI ----------
-  let modes = [];
+  // ---------- capas: interfaz ----------
+  function buildLayers() {
+    const box = $('layers'); box.innerHTML = '';
+    layers.forEach((L, i) => {
+      const el = document.createElement('div'); el.className = 'layer'; el.id = 'layer-' + i;
+      el.innerHTML = `
+        <div class="lhead">
+          <button class="lname" id="l${i}-name">Capa ${i + 1}</button>
+          ${i ? `<label><input type="checkbox" id="l${i}-on"> activa</label>` : ''}
+          <label>color <input type="color" id="l${i}-color"></label>
+          <span class="lfreq" id="l${i}-freq"></span>
+        </div>
+        <div class="group">
+          <div class="label"><span>Nota</span><output id="l${i}-noteOut"></output></div>
+          <input type="range" id="l${i}-note" min="0" max="10" step="1" aria-label="Nota de la capa ${i + 1}">
+        </div>
+        <div class="two">
+          <div class="group"><div class="label"><span id="l${i}-nl">n</span><output id="l${i}-nOut"></output></div><input type="range" id="l${i}-n" min="0" max="10" step="1"></div>
+          <div class="group"><div class="label"><span id="l${i}-ml">m</span><output id="l${i}-mOut"></output></div><input type="range" id="l${i}-m" min="0" max="10" step="1"></div>
+          <div class="group" id="l${i}-sg"><div class="label"><span>Mezcla</span><output id="l${i}-sOut"></output></div><input type="range" id="l${i}-s" min="-1" max="1" step="0.05"></div>
+          <div class="group"><div class="label"><span>Opacidad</span><output id="l${i}-aOut"></output></div><input type="range" id="l${i}-a" min="0.1" max="1" step="0.05"></div>
+        </div>`;
+      box.append(el);
+      const manual = () => { if (i) L.target = null; else reapplyChord(); if (i) state.chord = state.chord; };
+      $(`l${i}-name`).addEventListener('click', () => { state.active = i; syncInputs(); thumbs(); });
+      if (i) $(`l${i}-on`).addEventListener('change', e => { L.on = e.target.checked; state.active = i; syncInputs(); render(); });
+      $(`l${i}-color`).addEventListener('input', e => { L.color = e.target.value; syncInputs(); render(true); });
+      $(`l${i}-a`).addEventListener('input', e => { L.alpha = +e.target.value; syncInputs(); render(true); });
+      $(`l${i}-note`).addEventListener('input', e => { const o = modes[+e.target.value]; L.n = o.n; L.m = o.m; state.active = i; manual(); syncInputs(); render(); });
+      $(`l${i}-n`).addEventListener('input', e => { L.n = +e.target.value; fixMode(L); state.active = i; manual(); syncInputs(); render(); });
+      $(`l${i}-m`).addEventListener('input', e => { L.m = +e.target.value; fixMode(L); state.active = i; manual(); syncInputs(); render(); });
+      $(`l${i}-s`).addEventListener('input', e => { L.s = +e.target.value; state.active = i; syncInputs(); render(); });
+    });
+  }
+  function fixMode(L) {
+    L.n = Math.min(L.n, MAXN[state.shape]); L.m = Math.min(L.m, MAXM[state.shape]);
+    if (!validMode(state.shape, L.n, L.m)) L.m = 1;
+  }
+  const sgn = v => (v > 0 ? '+' : '') + v.toFixed(2);
+  function syncInputs() {
+    const ci = state.shape === 'ci';
+    layers.forEach((L, i) => {
+      const el = $('layer-' + i);
+      el.classList.toggle('active', state.active === i); el.classList.toggle('off', !L.on);
+      el.style.setProperty('--lc', L.color);
+      $(`l${i}-name`).setAttribute('aria-pressed', state.active === i);
+      if (i) $(`l${i}-on`).checked = L.on;
+      $(`l${i}-color`).value = L.color;
+      $(`l${i}-n`).max = MAXN[state.shape]; $(`l${i}-m`).max = MAXM[state.shape];
+      $(`l${i}-n`).value = L.n; $(`l${i}-m`).value = L.m; $(`l${i}-s`).value = L.s; $(`l${i}-a`).value = L.alpha;
+      $(`l${i}-note`).max = modes.length - 1; const idx = modeIndex(L); $(`l${i}-note`).value = Math.max(0, idx);
+      $(`l${i}-nOut`).textContent = L.n; $(`l${i}-mOut`).textContent = L.m;
+      $(`l${i}-sOut`).textContent = sgn(L.s); $(`l${i}-aOut`).textContent = Math.round(L.alpha * 100) + ' %';
+      $(`l${i}-nl`).textContent = ci ? 'n · diámetros' : 'n · a lo ancho';
+      $(`l${i}-ml`).textContent = ci ? 'm · círculos' : 'm · a lo alto';
+      $(`l${i}-sg`).hidden = ci;
+      const fq = plateFreq(L);
+      $(`l${i}-noteOut`).textContent = `${idx + 1} de ${modes.length}`;
+      $(`l${i}-freq`).textContent = `${noteName(fq)} · ${Math.round(fq)} Hz`;
+    });
+    $('epsGroup').hidden = !(state.style === 'lamina' || (state.style === 'lineas' && state.comb === 'comb'));
+    $('waterGroup').hidden = state.style !== 'isla';
+    $('sandGroup').hidden = state.style !== 'arena';
+    [...$('chordSeg').children].forEach(b => b.setAttribute('aria-pressed', b.dataset.v === state.chord));
+    $('chordName').textContent = state.chord ? CHORDS[state.chord][0] : '';
+    const notes = { arena: 'La arena siempre siente las capas juntas.', isla: 'La isla usa las capas juntas.', fase: 'Fase: la suma de las capas en un instante.' };
+    $('styleNote').textContent = notes[state.style] || '';
+  }
+
+  // ---------- pintar todo ----------
   const mainImg = ctx.createImageData(G, G);
-  function render() {
+  function render(lightOnly) {
     cancelAnimationFrame(sandRAF); sandRAF = 0;
-    field = computeField(state.shape, state.n, state.m, state.s, state.warp, G);
-    $('warn').textContent = field.max < 1e-6 ? 'Con n = m y mezcla −1 los dos modos se anulan: la placa no se mueve. Prueba otra mezcla.' : '';
-    if (state.style === 'arena') { sandStep(); }
-    else { paint(field, mainImg, state.style, state); ctx.putImageData(mainImg, 0, 0); frame(ctx, G, state.shape); }
-    caption(); thumbs(); tone();
+    const dead = layers.filter(L => L.on && layerField(L, G).max < 1e-6).length;
+    $('warn').textContent = dead ? 'Con n = m y mezcla −1 los dos modos se anulan: esa capa no se mueve. Prueba otra mezcla.' : '';
+    if (state.style === 'arena') { sandA = combined(G); sandStep(); }
+    else { paintMain(mainImg); ctx.putImageData(mainImg, 0, 0); frame(ctx, G, state.shape); }
+    caption(); if (!lightOnly) thumbs(); tone();
   }
   function caption() {
-    const { n, m, shape } = state, fq = freq(shape, n, m);
-    const idx = modes.findIndex(o => (o.n === n && o.m === m) || (shape === 'sq' && o.n === m && o.m === n));
-    const what = shape === 'ci'
-      ? `Placa circular · ${n} ${n === 1 ? 'diámetro' : 'diámetros'} · ${m} ${m === 1 ? 'círculo' : 'círculos'}`
-      : `Placa cuadrada · n = ${n}, m = ${m} · mezcla ${state.s > 0 ? '+' : ''}${state.s.toFixed(2)}`;
-    $('caption').innerHTML = `Fig. ${idx + 1}. ${what} <span class="mono">≈ ${Math.round(fq)} Hz (${noteName(fq)})</span>`;
-    $('noteOut').textContent = `${idx + 1} de ${modes.length} · ${noteName(fq)}`;
-    if (idx >= 0) $('noteIdx').value = idx;
+    const act = layers.filter(L => L.on);
+    const shapeName = state.shape === 'ci' ? 'Placa circular' : 'Placa cuadrada';
+    $('caption').textContent = act.length > 1
+      ? `${shapeName} · ${state.chord ? 'acorde ' + CHORDS[state.chord][0].toLowerCase() : act.length + ' capas'} · ${state.comb === 'comb' ? 'juntas' : 'superpuestas'}`
+      : `${shapeName} · una nota`;
+    $('chips').innerHTML = layers.map((L, i) => {
+      if (!L.on) return '';
+      const fq = plateFreq(L), t = targetFreq(L);
+      const cents = t ? Math.round(1200 * Math.log2(fq / t)) : null;
+      const desc = state.shape === 'ci' ? `${L.n}d ${L.m}c` : `${L.n},${L.m}`;
+      return `<span class="chip"><span class="dot" style="background:${L.color}"></span>${noteName(fq)} ${Math.round(fq)} Hz <span class="cents">(${desc}${cents != null ? `, ${cents >= 0 ? '+' : ''}${cents} ¢` : ''})</span></span>`;
+    }).join('');
   }
   function thumbs() {
     const box = $('thumbs'); box.innerHTML = '';
-    const cur = +$('noteIdx').value, start = Math.max(0, Math.min(cur, modes.length - 12));
-    $('tabTitle').textContent = state.shape === 'ci' ? 'Tab. I · placas circulares' : 'Tab. IX · placas cuadradas';
-    const TS = 120;
+    const L = layers[state.active], cur = Math.max(0, modeIndex(L)), start = Math.max(0, Math.min(cur, modes.length - 12));
+    $('tabTitle').textContent = (state.shape === 'ci' ? 'Tab. I · placas circulares' : 'Tab. IX · placas cuadradas');
+    $('tabNote').textContent = `Las doce figuras desde la nota de la capa ${state.active + 1}. Toca una para ponérsela.`;
+    const TS = 120, col = hex(L.color);
     for (let q = start; q < Math.min(modes.length, start + 12); q++) {
       const o = modes[q];
       const b = document.createElement('button'); b.className = 'thumb'; b.id = 'thumb-' + q;
       b.setAttribute('aria-label', `Figura ${q + 1}: n ${o.n}, m ${o.m}`);
       if (q === cur) b.setAttribute('aria-current', 'true');
       const cv = document.createElement('canvas'); cv.width = TS; cv.height = TS;
-      const c2 = cv.getContext('2d'), img = c2.createImageData(TS, TS);
-      const F = computeField(state.shape, o.n, o.m, state.shape === 'sq' ? state.s : 1, state.warp, TS);
-      paint(F, img, 'lamina', { eps: Math.max(state.eps, 0.07) }); c2.putImageData(img, 0, 0); frame(c2, TS, state.shape);
+      const c2 = cv.getContext('2d'), img = c2.createImageData(TS, TS), d = img.data;
+      const F = field(state.shape, o.n, o.m, L.s, state.warp, TS);
+      const eps = Math.max(state.eps, 0.07);
+      for (let k = 0; k < F.f.length; k++) {
+        const p = k * 4, c = !F.inside[k] ? C.plate : mix(C.plate, col, inkLamina(Math.abs(F.f[k]), eps));
+        d[p] = c[0]; d[p + 1] = c[1]; d[p + 2] = c[2]; d[p + 3] = 255;
+      }
+      c2.putImageData(img, 0, 0); frame(c2, TS, state.shape);
       const sp = document.createElement('span'); sp.textContent = (q + 1) + '.';
       b.append(sp, cv);
-      b.addEventListener('click', () => { state.n = o.n; state.m = o.m; syncInputs(); render(); });
+      b.addEventListener('click', () => {
+        L.n = o.n; L.m = o.m;
+        if (state.active) L.target = null; else reapplyChord();
+        syncInputs(); render();
+      });
       box.append(b);
     }
   }
-  function syncInputs() {
-    const ci = state.shape === 'ci';
-    $('m').max = ci ? 3 : 8;
-    if (state.m > +$('m').max) state.m = +$('m').max;
-    if (!validMode(state.shape, state.n, state.m)) state.m = 1;
-    $('n').value = state.n; $('m').value = state.m; $('s').value = state.s;
-    $('nOut').textContent = state.n; $('mOut').textContent = state.m;
-    $('sOut').textContent = (state.s > 0 ? '+' : '') + state.s.toFixed(2);
-    $('nLabel').textContent = ci ? 'n · diámetros' : 'n · ondas a lo ancho';
-    $('mLabel').textContent = ci ? 'm · círculos' : 'm · ondas a lo alto';
-    $('mixGroup').hidden = ci;
-    $('epsGroup').hidden = state.style !== 'lamina';
-    $('waterGroup').hidden = state.style !== 'isla';
-    $('sandGroup').hidden = state.style !== 'arena';
-    $('noteIdx').max = modes.length - 1;
-  }
+
+  // ---------- mandos generales ----------
   function setShape(v) {
     state.shape = v; modes = modeList(v);
-    if (v === 'ci') { state.n = 3; state.m = 1; } else { state.n = 1; state.m = 4; state.s = 1; }
+    layers.forEach(L => { if (v === 'ci') { L.n = 4; L.m = 0; } else { L.n = 3; L.m = 4; L.s = 1; } });
     [...$('shapeSeg').children].forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v));
-    pour(); syncInputs(); render();
+    reapplyChord(); pour(); syncInputs(); render();
   }
   $('shapeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setShape(b.dataset.v); });
-  $('styleSeg').addEventListener('click', e => {
+  $('chordSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; applyChord(b.dataset.v); syncInputs(); render(); });
+  const segHandler = (id, key, after) => $(id).addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    state.style = b.dataset.v;
-    [...$('styleSeg').children].forEach(x => x.setAttribute('aria-pressed', x === b));
-    if (state.style === 'arena') pour();
-    syncInputs(); render();
+    state[key] = b.dataset.v; [...$(id).children].forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (after) after(); syncInputs(); render(key === 'tune');
   });
-  $('n').addEventListener('input', e => { state.n = +e.target.value; syncInputs(); render(); });
-  $('m').addEventListener('input', e => { state.m = +e.target.value; syncInputs(); render(); });
-  $('s').addEventListener('input', e => { state.s = +e.target.value; syncInputs(); render(); });
-  $('noteIdx').addEventListener('input', e => { const o = modes[+e.target.value]; state.n = o.n; state.m = o.m; syncInputs(); render(); });
+  segHandler('styleSeg', 'style', () => { if (state.style === 'arena') pour(); });
+  segHandler('combSeg', 'comb');
+  segHandler('tuneSeg', 'tune');
   $('eps').addEventListener('input', e => { state.eps = +e.target.value; $('epsOut').textContent = state.eps.toFixed(2); render(); });
-  $('water').addEventListener('input', e => { state.water = +e.target.value; $('waterOut').textContent = state.water + ' %'; render(); });
+  $('water').addEventListener('input', e => { state.water = +e.target.value; $('waterOut').textContent = state.water + ' %'; render(true); });
   $('warp').addEventListener('input', e => { state.warp = +e.target.value; $('warpOut').textContent = state.warp.toFixed(3); render(); });
-  $('pour').addEventListener('click', () => { pour(); });
+  $('pour').addEventListener('click', pour);
 
-  // ---------- sonido ----------
-  let actx = null, osc = null, gain = null;
+  // ---------- sonido: un oscilador por capa ----------
+  let actx = null, voices = null;
   function tone() {
-    if (!osc) return;
-    const fq = Math.min(6000, Math.max(30, freq(state.shape, state.n, state.m)));
-    osc.frequency.setTargetAtTime(fq, actx.currentTime, 0.03);
+    if (!voices) return;
+    layers.forEach((L, i) => {
+      const v = voices[i];
+      let fq = state.tune === 'ideal' && L.target != null ? targetFreq(L) : plateFreq(L);
+      fq = Math.min(6000, Math.max(30, fq));
+      v.osc.frequency.setTargetAtTime(fq, actx.currentTime, 0.03);
+      v.gain.gain.setTargetAtTime(L.on ? 0.07 * L.alpha : 0, actx.currentTime, 0.05);
+    });
   }
   $('listen').addEventListener('click', () => {
     const btn = $('listen');
-    if (osc) {
-      gain.gain.setTargetAtTime(0, actx.currentTime, 0.05);
-      const o = osc; setTimeout(() => o.stop(), 300); osc = null;
+    if (voices) {
+      const vs = voices; voices = null;
+      vs.forEach(v => v.gain.gain.setTargetAtTime(0, actx.currentTime, 0.05));
+      setTimeout(() => vs.forEach(v => v.osc.stop()), 300);
       btn.textContent = '▶ Escuchar'; btn.setAttribute('aria-pressed', 'false'); return;
     }
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
-      osc = actx.createOscillator(); gain = actx.createGain();
-      osc.type = 'sine'; gain.gain.value = 0;
-      osc.connect(gain).connect(actx.destination); osc.start();
-      gain.gain.setTargetAtTime(0.12, actx.currentTime, 0.05);
+      voices = layers.map(() => {
+        const osc = actx.createOscillator(), gain = actx.createGain();
+        osc.type = 'sine'; gain.gain.value = 0; osc.connect(gain).connect(actx.destination); osc.start();
+        return { osc, gain };
+      });
       tone(); btn.textContent = '■ Parar'; btn.setAttribute('aria-pressed', 'true');
     } catch (err) { $('warn').textContent = 'Este navegador no deja reproducir sonido aquí.'; }
   });
@@ -499,6 +658,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', retheme); } catch (e) {}
   new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-  readTokens(); modes = modeList(state.shape); pour(); syncInputs(); render();
+  // ---------- inicio: un acorde mayor sobre (3, 4) ----------
+  readTokens(); buildLayers(); applyChord('maj'); pour(); syncInputs(); render();
 })();
 </script>
