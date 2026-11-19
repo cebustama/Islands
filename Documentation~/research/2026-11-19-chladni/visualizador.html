@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: una lámina grabada de 1787 como mesa de trabajo; la placa fija a la izquierda, las tres capas y los mandos a la derecha, la «Tab.» de figuras debajo. */
+/* Layout: una lámina grabada de 1787 como mesa de trabajo; la placa fija a la izquierda, progresión, capas y mandos a la derecha, la «Tab.» de figuras debajo. */
 :root {
   --paper: #e8e5dd;
   --plate: #f1eee7;
@@ -60,6 +60,8 @@ figcaption { font-family: var(--font-display); font-style: italic; font-size: 17
 .warn { font-size: 13px; color: var(--pos); min-height: 1.2em; }
 .panel { display: grid; gap: 18px; min-width: 0; }
 .group { display: grid; gap: 8px; }
+.box { border: 1px solid var(--ink); padding: 12px; display: grid; gap: 10px; }
+.boxtitle { font-family: var(--font-display); font-size: 20px; margin: 0; }
 .label { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
 .label output { color: var(--ink); letter-spacing: 0; text-transform: none; font-size: 13px; font-variant-numeric: tabular-nums; }
 .seg { display: flex; flex-wrap: wrap; border: 1px solid var(--ink); width: fit-content; max-width: 100%; }
@@ -68,10 +70,16 @@ figcaption { font-family: var(--font-display); font-style: italic; font-size: 17
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
 input[type=range] { width: 100%; accent-color: var(--brass); }
+input[type=text] { font: 500 15px var(--font-mono); background: var(--plate); color: var(--ink); border: 1px solid var(--ink); padding: 8px 10px; width: 100%; min-width: 0; }
 .btn { font: 500 14px var(--font-body); background: transparent; color: var(--ink); border: 1px solid var(--ink); padding: 8px 14px; cursor: pointer; }
 .btn.primary { background: var(--brass); border-color: var(--brass); color: var(--paper); }
+.btn.small { font-size: 12.5px; padding: 5px 9px; }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .note { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.progchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.progchips button { font: 500 14px var(--font-mono); background: var(--plate); color: var(--ink); border: 1px solid var(--rule); padding: 4px 10px; cursor: pointer; }
+.progchips button[aria-current="true"] { border-color: var(--brass); background: var(--brass); color: var(--paper); }
 .layers { display: grid; gap: 10px; }
 .layer { border: 1px solid var(--rule); background: var(--plate); padding: 10px 12px 12px; display: grid; gap: 8px; border-left: 6px solid var(--lc, var(--ink)); }
 .layer.active { border-color: var(--ink); border-left-color: var(--lc, var(--ink)); }
@@ -104,7 +112,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   <header>
     <div class="eyebrow">Prototipo · Islands Lab · después de Chladni, 1787</div>
     <h1>Placas de Chladni</h1>
-    <p class="lede">Cada nota hace vibrar la placa de una forma. Con tres capas puedes tocar un acorde y ver sus tres figuras encima, o lo que haría la arena si las tres notas sonaran a la vez.</p>
+    <p class="lede">Cada nota hace vibrar la placa de una forma. Con tres capas tocas un acorde; con una progresión, la placa pasa de un acorde a otro y la figura se transforma en el tiempo que elijas.</p>
   </header>
 
   <div class="stage">
@@ -124,6 +132,43 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
         </div>
       </div>
 
+      <div class="box">
+        <h2 class="boxtitle">Progresión</h2>
+        <input type="text" id="prog" value="Am A Dm E" aria-label="Acordes de la progresión" spellcheck="false" autocomplete="off">
+        <div class="row">
+          <button class="btn small" id="pre-latino" data-p="Am A Dm E">Giro latino</button>
+          <button class="btn small" id="pre-andaluza" data-p="Am G F E">Andaluza</button>
+          <button class="btn small" id="pre-pop" data-p="C G Am F">I–V–vi–IV</button>
+          <button class="btn small" id="pre-251" data-p="Dm G C C">ii–V–I</button>
+          <button class="btn small" id="pre-blues" data-p="A A D A E D A E">Blues</button>
+        </div>
+        <span class="note">Nombres de acordes separados por espacios: C, Am, F#, Bb, Bdim, Caug, Dsus4, E5. Las séptimas se tocan como tríada (hay tres capas).</span>
+        <div class="progchips" id="progChips"></div>
+        <div class="group">
+          <div class="label"><span>Segundos por acorde</span><output id="secOut">2.0 s</output></div>
+          <input type="range" id="sec" min="0.5" max="8" step="0.25" value="2">
+        </div>
+        <div class="row">
+          <span class="note">Octava de la raíz</span>
+          <div class="seg" id="octSeg">
+            <button id="oct-4" data-v="4" aria-pressed="false">4</button>
+            <button id="oct-5" data-v="5" aria-pressed="true">5</button>
+            <button id="oct-6" data-v="6" aria-pressed="false">6</button>
+          </div>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="playProg" aria-pressed="false">▶ Tocar la progresión</button>
+          <span class="note" id="progMsg"></span>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="label"><span>Transición entre figuras</span><output id="morphOut">1.0 s</output></div>
+        <label class="check"><input type="checkbox" id="morph" checked> Fundir una figura en la siguiente</label>
+        <input type="range" id="morphDur" min="0.1" max="6" step="0.1" value="1" aria-label="Duración de la transición">
+        <span class="note">Mezcla el campo viejo con el nuevo (lerp) y el sonido se desliza al mismo tiempo.</span>
+      </div>
+
       <div class="group">
         <div class="label"><span>Acorde sobre la capa 1</span><span id="chordName"></span></div>
         <div class="seg" id="chordSeg">
@@ -134,12 +179,11 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
           <button id="ch-dim" data-v="dim">Dism.</button>
           <button id="ch-aug" data-v="aug">Aum.</button>
         </div>
-        <span class="note">Elige para las capas 2 y 3 el modo de la placa más cercano a cada nota del acorde.</span>
       </div>
 
       <div class="group">
         <div class="row">
-          <button class="btn primary" id="listen" aria-pressed="false">▶ Escuchar</button>
+          <button class="btn" id="listen" aria-pressed="false">▶ Escuchar</button>
           <div class="seg" id="tuneSeg" aria-label="Cómo suena">
             <button id="tune-plate" data-v="plate" aria-pressed="true">Notas de la placa</button>
             <button id="tune-ideal" data-v="ideal" aria-pressed="false">Afinado</button>
@@ -204,8 +248,12 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
       <p>Si suenan tres notas, la placa hace los tres movimientos a la vez. Como las frecuencias son distintas, la arena siente la suma de las tres energías y solo se queda donde las tres están quietas: los cruces de sus líneas. Por eso, en <em>Juntas</em>, el acorde se deshace en puntos. <em>Superpuestas</em> es el dibujo teórico: cada figura en su color.</p>
     </section>
     <section>
+      <h3>La transición</h3>
+      <p>Entre dos figuras no hay figuras intermedias de verdad: los modos son números enteros. Lo que ves es una mezcla de los dos campos, (1 − t)·f₁ + t·f₂, que la placa haría si una nota se apagara mientras la otra entra. Las líneas se doblan, se parten y se vuelven a unir. Con la vista <em>Arena</em>, los granos migran de una figura a la otra.</p>
+    </section>
+    <section>
       <h3>Por qué desafina</h3>
-      <p>Una cuerda da armónicos a 1, 2, 3, 4… veces su nota, y de ahí salen los acordes. Una placa no: sus notas van como n² + m² o (m + 2n)², y casi nunca caen en la proporción 4 : 5 : 6 de una tríada mayor. Los cents al lado de cada nota dicen cuánto se aleja; 100 cents son un semitono. Las campanas tienen el mismo problema, y los fundidores las afinan rebajando el metal.</p>
+      <p>Una cuerda da armónicos a 1, 2, 3, 4… veces su nota, y de ahí salen los acordes. Una placa no: sus notas van como n² + m² o (m + 2n)², y casi nunca caen en la proporción 4 : 5 : 6 de una tríada mayor. Los cents al lado de cada nota dicen cuánto se aleja; 100 cents son un semitono. La placa circular desafina mucho más que la cuadrada: tiene pocas notas.</p>
     </section>
     <section>
       <h3>Las fórmulas</h3>
@@ -220,7 +268,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     </section>
     <section>
       <h3>Para Islands</h3>
-      <p>Una figura es un campo f(x, y), como un ruido. Las líneas son |f| &lt; ε, el mismo umbral que el agua de NoiseLab, y la vista <em>Isla</em> usa el corte por porcentaje sobre las capas juntas: un acorde da un archipiélago distinto de cada nota sola.</p>
+      <p>Una figura es un campo f(x, y), como un ruido. Las líneas son |f| &lt; ε, el mismo umbral que el agua de NoiseLab, y la vista <em>Isla</em> usa el corte por porcentaje sobre las capas juntas. Con una progresión y la transición, el archipiélago cambia con la música.</p>
     </section>
   </div>
   <p class="foot">Textos ✦ IA. Láminas originales: Ernst Chladni, <em>Entdeckungen über die Theorie des Klanges</em> (Leipzig, 1787), dominio público. Nota de investigación en Islands: <code>Documentation~/research/2026-11-19-chladni.md</code>.</p>
@@ -228,14 +276,15 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
 
 <script>
 (() => {
-  const G = 440;
+  const G = 440, N2 = G * G;
   const canvas = document.getElementById('plate');
   const ctx = canvas.getContext('2d');
   const $ = id => document.getElementById(id);
 
-  const state = { shape: 'sq', style: 'lamina', comb: 'sup', tune: 'plate', eps: 0.06, water: 45, warp: 0, active: 0, chord: null };
+  const state = { shape: 'sq', style: 'lamina', comb: 'sup', tune: 'plate', eps: 0.06, water: 45, warp: 0, active: 0, chord: null,
+                  morph: true, morphDur: 1, oct: 5, sec: 2 };
   const DEFAULT_COLORS = ['#c4513a', '#2f7fb5', '#c99a2e'];
-  const layers = [0, 1, 2].map(i => ({ on: i === 0, n: 3, m: 4, s: 1, color: DEFAULT_COLORS[i], alpha: 0.85, target: null }));
+  const layers = [0, 1, 2].map(i => ({ on: i === 0, n: 3, m: 4, s: 1, color: DEFAULT_COLORS[i], alpha: 0.85, ideal: null }));
 
   // ---------- Bessel ----------
   function besselJ(n, x) {
@@ -286,7 +335,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   const warpX = (x, y) => vnoise(x * 3 + 11, y * 3, 1) + 0.5 * vnoise(x * 7, y * 7 + 5, 2);
   const warpY = (x, y) => vnoise(x * 3, y * 3 + 17, 3) + 0.5 * vnoise(x * 7 + 9, y * 7, 4);
 
-  // ---------- coordenadas (con la deformación), cacheadas ----------
+  // ---------- coordenadas (con la deformación) y campos, cacheados ----------
   const coordCache = new Map();
   function coords(shape, warp, size) {
     const key = shape + '|' + warp + '|' + size;
@@ -326,7 +375,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     }
     if (max > 1e-6) for (let k = 0; k < f.length; k++) f[k] /= max;
     const F = { f, inside, max, size };
-    if (fieldCache.size > 60) fieldCache.clear();
+    if (fieldCache.size > 80) fieldCache.clear();
     fieldCache.set(key, F); return F;
   }
   const layerField = (L, size) => field(state.shape, L.n, L.m, L.s, state.warp, size);
@@ -346,9 +395,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   function noteName(f) { const midi = Math.round(69 + 12 * Math.log2(f / 440)); return NOTES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1); }
   const modeIndex = L => modes.findIndex(o => (o.n === L.n && o.m === L.m) || (state.shape === 'sq' && o.n === L.m && o.m === L.n));
   const plateFreq = L => freq(state.shape, L.n, L.m);
-  const targetFreq = L => L.target == null ? null : plateFreq(layers[0]) * Math.pow(2, L.target / 12);
 
-  const CHORDS = { maj: ['Mayor', 4, 7], min: ['Menor', 3, 7], p5: ['Quinta y octava', 7, 12], sus4: ['Sus4', 5, 7], dim: ['Disminuido', 3, 6], aug: ['Aumentado', 4, 8] };
   function nearestMode(fq, avoid) {
     let best = null, bd = Infinity;
     for (const o of modes) {
@@ -358,14 +405,86 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     }
     return best;
   }
+  const CHORDS = { maj: ['Mayor', 0, 4, 7], min: ['Menor', 0, 3, 7], p5: ['Quinta y octava', 0, 7, 12], sus4: ['Sus4', 0, 5, 7], dim: ['Disminuido', 0, 3, 6], aug: ['Aumentado', 0, 4, 8] };
   function applyChord(key) {
-    state.chord = key; const [, a, b] = CHORDS[key], root = plateFreq(layers[0]);
+    state.chord = key; const [, , a, b] = CHORDS[key], root = plateFreq(layers[0]);
+    layers[0].ideal = null;
     [a, b].forEach((semi, q) => {
-      const L = layers[q + 1], o = nearestMode(root * Math.pow(2, semi / 12), layers[0]);
-      L.n = o.n; L.m = o.m; L.on = true; L.target = semi; L.s = layers[0].s;
+      const L = layers[q + 1], fq = root * Math.pow(2, semi / 12), o = nearestMode(fq, layers[0]);
+      L.n = o.n; L.m = o.m; L.on = true; L.ideal = fq; L.s = layers[0].s;
     });
   }
   function reapplyChord() { if (state.chord) applyChord(state.chord); }
+
+  // ---------- progresión ----------
+  const PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  function parseChord(tok) {
+    const m = /^([A-Ga-g])([#♯b♭]?)(.*)$/.exec(tok);
+    if (!m) return null;
+    let pc = PC[m[1].toUpperCase()]; if (m[2] === '#' || m[2] === '♯') pc++; if (m[2] === 'b' || m[2] === '♭') pc--;
+    const rest = m[3];
+    let q = 'maj', seventh = /7|9|11|13/.test(rest);
+    if (/^(m7b5|ø)/.test(rest) || /^(dim|°|o)/.test(rest)) q = 'dim';
+    else if (/^(aug|\+)/.test(rest)) q = 'aug';
+    else if (/^sus/.test(rest)) q = 'sus4';
+    else if (/^5$/.test(rest)) q = 'p5';
+    else if (/^(m(?!aj)|min|-)/.test(rest)) q = 'min';
+    else if (rest && !/^(maj|M|Δ)?\d*$/.test(rest)) return null;
+    return { name: tok, pc: ((pc % 12) + 12) % 12, q, seventh };
+  }
+  let prog = [], progIdx = -1, progTimer = 0, progPlaying = false;
+  function parseProg() {
+    const toks = $('prog').value.split(/[\s|,–—]+/).filter(Boolean);
+    const bad = []; prog = [];
+    toks.forEach(t => { const c = parseChord(t); if (c) prog.push(c); else bad.push(t); });
+    $('progMsg').textContent = bad.length ? `No entiendo: ${bad.join(', ')}` : (prog.some(c => c.seventh) ? 'Séptimas tocadas como tríada.' : '');
+    if (progIdx >= prog.length) progIdx = -1;
+    drawProgChips();
+  }
+  function drawProgChips() {
+    const box = $('progChips'); box.innerHTML = '';
+    prog.forEach((c, i) => {
+      const b = document.createElement('button'); b.id = 'pc-' + i; b.textContent = c.name;
+      if (i === progIdx) b.setAttribute('aria-current', 'true');
+      b.addEventListener('click', () => { goToChord(i); });
+      box.append(b);
+    });
+  }
+  function applyProgChord(c) {
+    const ints = CHORDS[c.q].slice(1);
+    const rootF = 440 * Math.pow(2, (c.pc - 9) / 12 + (state.oct - 4));
+    const used = [];
+    ints.forEach((semi, i) => {
+      const fq = rootF * Math.pow(2, semi / 12), L = layers[i];
+      const o = nearestMode(fq, i ? used[i - 1] : null);
+      L.n = o.n; L.m = o.m; L.on = true; L.ideal = fq; used.push(o);
+      if (i) L.s = layers[0].s;
+    });
+    state.chord = null;
+  }
+  function goToChord(i) {
+    if (!prog.length) return;
+    progIdx = i; applyProgChord(prog[i]); drawProgChips(); syncInputs(); render();
+  }
+  function stepProg() {
+    if (!progPlaying || !prog.length) return;
+    goToChord((progIdx + 1) % prog.length);
+    progTimer = setTimeout(stepProg, state.sec * 1000);
+  }
+  function stopProg() {
+    progPlaying = false; clearTimeout(progTimer);
+    $('playProg').textContent = '▶ Tocar la progresión'; $('playProg').setAttribute('aria-pressed', 'false');
+  }
+  $('playProg').addEventListener('click', () => {
+    if (progPlaying) { stopProg(); return; }
+    parseProg(); if (!prog.length) return;
+    progPlaying = true; $('playProg').textContent = '■ Parar la progresión'; $('playProg').setAttribute('aria-pressed', 'true');
+    if (!voices) startSound();
+    progIdx = progIdx < 0 ? -1 : progIdx - 1; stepProg();
+  });
+  $('prog').addEventListener('input', parseProg);
+  document.querySelectorAll('[data-p]').forEach(b => b.addEventListener('click', () => { $('prog').value = b.dataset.p; progIdx = -1; parseProg(); if (!progPlaying) goToChord(0); }));
+  $('sec').addEventListener('input', e => { state.sec = +e.target.value; $('secOut').textContent = state.sec.toFixed(1) + ' s'; });
 
   // ---------- colores ----------
   let C = {};
@@ -378,37 +497,55 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
   const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
 
-  // ---------- tinta de una figura en un píxel ----------
-  function inkLamina(a, eps) { return clamp01((eps - a) / (eps * 0.45)); }
-  function inkLines(f, i, j, size) {
-    const k = j * size + i, il = Math.max(0, i - 1), ir = Math.min(size - 1, i + 1), jt = Math.max(0, j - 1), jb = Math.min(size - 1, j + 1);
-    const gx = (f[j * size + ir] - f[j * size + il]) / Math.max(1, ir - il), gy = (f[jb * size + i] - f[jt * size + i]) / Math.max(1, jb - jt);
-    return clamp01(1.3 - Math.abs(f[k]) / (Math.hypot(gx, gy) + 1e-6));
+  // ---------- lo que se ve: campos mostrados por capa, con transición ----------
+  const disp = layers.map(() => ({ f: new Float32Array(N2), w: 0 }));
+  let anim = null;
+  function snapTargets() {
+    layers.forEach((L, i) => { disp[i].f.set(layerField(L, G).f); disp[i].w = L.on ? 1 : 0; });
   }
-
-  // campo de las capas juntas: amplitud rms
-  function combined(size) {
-    const act = layers.filter(L => L.on), Fs = act.map(L => layerField(L, size));
-    const n = size * size, a = new Float32Array(n), sum = new Float32Array(n);
-    let smax = 0;
-    for (let k = 0; k < n; k++) {
-      let e = 0, s = 0; for (const F of Fs) { const v = F.f[k]; e += v * v; s += v; }
-      a[k] = Math.sqrt(e / Fs.length); sum[k] = s; const as = Math.abs(s); if (as > smax) smax = as;
+  function startMorph() {
+    const from = disp.map(d => ({ f: d.f.slice(), w: d.w }));
+    const to = layers.map(L => ({ f: layerField(L, G).f, w: L.on ? 1 : 0 }));
+    anim = { from, to, t0: performance.now(), dur: state.morphDur * 1000 };
+  }
+  function blendDisp(e) {
+    for (let i = 0; i < disp.length; i++) {
+      const a = anim.from[i].f, b = anim.to[i].f, d = disp[i].f;
+      let max = 0;
+      for (let k = 0; k < N2; k++) { const v = a[k] + (b[k] - a[k]) * e; d[k] = v; const av = v < 0 ? -v : v; if (av > max) max = av; }
+      if (max > 1e-6 && max < 0.999) { const inv = 1 / max; for (let k = 0; k < N2; k++) d[k] *= inv; }
+      disp[i].w = anim.from[i].w + (anim.to[i].w - anim.from[i].w) * e;
     }
-    if (smax > 1e-6) for (let k = 0; k < n; k++) sum[k] /= smax;
-    return { a, sum, inside: coords(state.shape, state.warp, size).inside };
   }
 
-  function paintMain(img) {
-    const d = img.data, size = G, inside = coords(state.shape, state.warp, size).inside;
+  // ---------- pintar ----------
+  function inkLamina(a, eps) { return clamp01((eps - a) / (eps * 0.45)); }
+  function gradAt(f, i, j, size) {
+    const il = Math.max(0, i - 1), ir = Math.min(size - 1, i + 1), jt = Math.max(0, j - 1), jb = Math.min(size - 1, j + 1);
+    return Math.hypot((f[j * size + ir] - f[j * size + il]) / Math.max(1, ir - il), (f[jb * size + i] - f[jt * size + i]) / Math.max(1, jb - jt));
+  }
+  function combined() {
+    const a = new Float32Array(N2), sum = new Float32Array(N2);
+    const act = disp.filter(d => d.w > 0.001), W = act.reduce((s, d) => s + d.w, 0) || 1;
+    let smax = 0;
+    for (let k = 0; k < N2; k++) {
+      let e = 0, s = 0; for (const d of act) { const v = d.f[k]; e += d.w * v * v; s += d.w * v; }
+      a[k] = Math.sqrt(e / W); sum[k] = s; const as = s < 0 ? -s : s; if (as > smax) smax = as;
+    }
+    if (smax > 1e-6) for (let k = 0; k < N2; k++) sum[k] /= smax;
+    return { a, sum };
+  }
+  const mainImg = ctx.createImageData(G, G);
+  function paintMain() {
+    const d = mainImg.data, size = G, inside = coords(state.shape, state.warp, size).inside;
     const style = state.style, useComb = state.comb === 'comb' || style === 'isla';
     let CB = null, thr = 0;
-    if (useComb || style === 'fase') CB = combined(size);
+    if (useComb || style === 'fase') CB = combined();
     if (style === 'isla') {
-      const sample = []; for (let k = 0; k < CB.a.length; k += 3) if (inside[k]) sample.push(CB.a[k]);
+      const sample = []; for (let k = 0; k < N2; k += 3) if (inside[k]) sample.push(CB.a[k]);
       sample.sort((x, y) => x - y); thr = sample[Math.floor(sample.length * state.water / 100)] || 0;
     }
-    const act = layers.filter(L => L.on).map(L => ({ F: layerField(L, size), col: hex(L.color), al: L.alpha }));
+    const act = disp.map((dd, i) => ({ f: dd.f, w: dd.w, col: hex(layers[i].color), al: layers[i].alpha })).filter(x => x.w > 0.001);
     for (let j = 0; j < size; j++) for (let i = 0; i < size; i++) {
       const k = j * size + i, p = k * 4; let col;
       if (!inside[k]) col = C.paper;
@@ -424,16 +561,14 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
       } else {
         col = C.plate;
         for (const Lr of act) {
-          const t = style === 'lineas' ? inkLines(Lr.F.f, i, j, size) : inkLamina(Math.abs(Lr.F.f[k]), state.eps);
-          if (t > 0) col = mix(col, Lr.col, t * Lr.al);
+          const v = Lr.f[k], av = v < 0 ? -v : v;
+          const t = style === 'lineas' ? clamp01(1.3 - av / (gradAt(Lr.f, i, j, size) + 1e-6)) : inkLamina(av, state.eps);
+          if (t > 0) col = mix(col, Lr.col, t * Lr.al * Lr.w);
         }
       }
       d[p] = col[0]; d[p + 1] = col[1]; d[p + 2] = col[2]; d[p + 3] = 255;
     }
-  }
-  function gradAt(f, i, j, size) {
-    const il = Math.max(0, i - 1), ir = Math.min(size - 1, i + 1), jt = Math.max(0, j - 1), jb = Math.min(size - 1, j + 1);
-    return Math.hypot((f[j * size + ir] - f[j * size + il]) / Math.max(1, ir - il), (f[jb * size + i] - f[jt * size + i]) / Math.max(1, jb - jt));
+    ctx.putImageData(mainImg, 0, 0); frame(ctx, G, state.shape);
   }
   function frame(c2, size, shape) {
     c2.strokeStyle = 'rgb(' + C.ink.join(',') + ')'; c2.lineWidth = Math.max(1, size / 220);
@@ -444,7 +579,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
   }
 
   // ---------- arena (siempre con las capas juntas: es la física) ----------
-  const NG = 14000, gx = new Float32Array(NG), gy = new Float32Array(NG); let sandRAF = 0, sandA = null;
+  const NG = 14000, gx = new Float32Array(NG), gy = new Float32Array(NG); let sandA = null;
   function pour() {
     for (let k = 0; k < NG; k++) {
       let x, y;
@@ -453,8 +588,9 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     }
   }
   const sandImg = ctx.createImageData(G, G);
-  function sandStep() {
-    const a = sandA.a, inside = sandA.inside;
+  function paintSand() {
+    if (!sandA || anim) sandA = combined().a;
+    const a = sandA, inside = coords(state.shape, state.warp, G).inside;
     for (let sub = 0; sub < 2; sub++) for (let k = 0; k < NG; k++) {
       const i = Math.min(G - 1, gx[k] * G | 0), j = Math.min(G - 1, gy[k] * G | 0);
       const v = a[j * G + i], step = 0.028 * v * v + 0.0004;
@@ -464,7 +600,7 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
       gx[k] = nx; gy[k] = ny;
     }
     const d = sandImg.data;
-    for (let k = 0; k < inside.length; k++) { const p = k * 4, c = inside[k] ? C.plate : C.paper; d[p] = c[0]; d[p + 1] = c[1]; d[p + 2] = c[2]; d[p + 3] = 255; }
+    for (let k = 0; k < N2; k++) { const p = k * 4, c = inside[k] ? C.plate : C.paper; d[p] = c[0]; d[p + 1] = c[1]; d[p + 2] = c[2]; d[p + 3] = 255; }
     for (let k = 0; k < NG; k++) {
       const i = gx[k] * G | 0, j = gy[k] * G | 0;
       for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
@@ -473,7 +609,31 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
       }
     }
     ctx.putImageData(sandImg, 0, 0); frame(ctx, G, state.shape);
-    sandRAF = requestAnimationFrame(sandStep);
+  }
+
+  // ---------- bucle de dibujo ----------
+  let raf = 0;
+  function loop(now) {
+    raf = 0; let again = false;
+    if (anim) {
+      const t = clamp01((now - anim.t0) / anim.dur), e = t * t * (3 - 2 * t);
+      blendDisp(e);
+      if (t < 1) again = true; else { anim = null; sandA = null; }
+    }
+    if (state.style === 'arena') { paintSand(); again = true; } else paintMain();
+    if (again) raf = requestAnimationFrame(loop);
+  }
+  const kick = () => { if (!raf) raf = requestAnimationFrame(loop); };
+
+  // render: instant = sin transición; light = no rehacer miniaturas
+  function render(opts = {}) {
+    const dead = layers.filter(L => L.on && layerField(L, G).max < 1e-6).length;
+    $('warn').textContent = dead ? 'Con n = m y mezcla −1 los dos modos se anulan: esa capa no se mueve. Prueba otra mezcla.' : '';
+    if (opts.instant || !state.morph) { anim = null; snapTargets(); }
+    else startMorph();
+    sandA = null;
+    caption(); if (!opts.light) thumbs(); tone(!opts.instant && state.morph);
+    kick();
   }
 
   // ---------- capas: interfaz ----------
@@ -499,14 +659,14 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
           <div class="group"><div class="label"><span>Opacidad</span><output id="l${i}-aOut"></output></div><input type="range" id="l${i}-a" min="0.1" max="1" step="0.05"></div>
         </div>`;
       box.append(el);
-      const manual = () => { if (i) L.target = null; else reapplyChord(); if (i) state.chord = state.chord; };
+      const manual = () => { state.active = i; if (progPlaying) stopProg(); progIdx = -1; drawProgChips(); if (i) L.ideal = null; else reapplyChord(); };
       $(`l${i}-name`).addEventListener('click', () => { state.active = i; syncInputs(); thumbs(); });
-      if (i) $(`l${i}-on`).addEventListener('change', e => { L.on = e.target.checked; state.active = i; syncInputs(); render(); });
-      $(`l${i}-color`).addEventListener('input', e => { L.color = e.target.value; syncInputs(); render(true); });
-      $(`l${i}-a`).addEventListener('input', e => { L.alpha = +e.target.value; syncInputs(); render(true); });
-      $(`l${i}-note`).addEventListener('input', e => { const o = modes[+e.target.value]; L.n = o.n; L.m = o.m; state.active = i; manual(); syncInputs(); render(); });
-      $(`l${i}-n`).addEventListener('input', e => { L.n = +e.target.value; fixMode(L); state.active = i; manual(); syncInputs(); render(); });
-      $(`l${i}-m`).addEventListener('input', e => { L.m = +e.target.value; fixMode(L); state.active = i; manual(); syncInputs(); render(); });
+      if (i) $(`l${i}-on`).addEventListener('change', e => { L.on = e.target.checked; state.active = i; syncInputs(); render({ light: true }); });
+      $(`l${i}-color`).addEventListener('input', e => { L.color = e.target.value; syncInputs(); caption(); kick(); thumbs(); });
+      $(`l${i}-a`).addEventListener('input', e => { L.alpha = +e.target.value; syncInputs(); kick(); tone(false); });
+      $(`l${i}-note`).addEventListener('input', e => { const o = modes[+e.target.value]; L.n = o.n; L.m = o.m; manual(); syncInputs(); render(); });
+      $(`l${i}-n`).addEventListener('input', e => { L.n = +e.target.value; fixMode(L); manual(); syncInputs(); render(); });
+      $(`l${i}-m`).addEventListener('input', e => { L.m = +e.target.value; fixMode(L); manual(); syncInputs(); render(); });
       $(`l${i}-s`).addEventListener('input', e => { L.s = +e.target.value; state.active = i; syncInputs(); render(); });
     });
   }
@@ -544,29 +704,20 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     const notes = { arena: 'La arena siempre siente las capas juntas.', isla: 'La isla usa las capas juntas.', fase: 'Fase: la suma de las capas en un instante.' };
     $('styleNote').textContent = notes[state.style] || '';
   }
-
-  // ---------- pintar todo ----------
-  const mainImg = ctx.createImageData(G, G);
-  function render(lightOnly) {
-    cancelAnimationFrame(sandRAF); sandRAF = 0;
-    const dead = layers.filter(L => L.on && layerField(L, G).max < 1e-6).length;
-    $('warn').textContent = dead ? 'Con n = m y mezcla −1 los dos modos se anulan: esa capa no se mueve. Prueba otra mezcla.' : '';
-    if (state.style === 'arena') { sandA = combined(G); sandStep(); }
-    else { paintMain(mainImg); ctx.putImageData(mainImg, 0, 0); frame(ctx, G, state.shape); }
-    caption(); if (!lightOnly) thumbs(); tone();
-  }
   function caption() {
     const act = layers.filter(L => L.on);
     const shapeName = state.shape === 'ci' ? 'Placa circular' : 'Placa cuadrada';
-    $('caption').textContent = act.length > 1
-      ? `${shapeName} · ${state.chord ? 'acorde ' + CHORDS[state.chord][0].toLowerCase() : act.length + ' capas'} · ${state.comb === 'comb' ? 'juntas' : 'superpuestas'}`
-      : `${shapeName} · una nota`;
-    $('chips').innerHTML = layers.map((L, i) => {
+    const what = progIdx >= 0 && prog[progIdx] ? prog[progIdx].name
+      : state.chord ? 'acorde ' + CHORDS[state.chord][0].toLowerCase()
+      : act.length > 1 ? act.length + ' capas' : 'una nota';
+    $('caption').textContent = `${shapeName} · ${what}${act.length > 1 ? ' · ' + (state.comb === 'comb' ? 'juntas' : 'superpuestas') : ''}`;
+    $('chips').innerHTML = layers.map(L => {
       if (!L.on) return '';
-      const fq = plateFreq(L), t = targetFreq(L);
+      const fq = plateFreq(L), t = L.ideal;
       const cents = t ? Math.round(1200 * Math.log2(fq / t)) : null;
       const desc = state.shape === 'ci' ? `${L.n}d ${L.m}c` : `${L.n},${L.m}`;
-      return `<span class="chip"><span class="dot" style="background:${L.color}"></span>${noteName(fq)} ${Math.round(fq)} Hz <span class="cents">(${desc}${cents != null ? `, ${cents >= 0 ? '+' : ''}${cents} ¢` : ''})</span></span>`;
+      const label = t ? `${noteName(t)} → ${Math.round(fq)} Hz` : `${noteName(fq)} ${Math.round(fq)} Hz`;
+      return `<span class="chip"><span class="dot" style="background:${L.color}"></span>${label} <span class="cents">(${desc}${cents != null ? `, ${cents >= 0 ? '+' : ''}${cents} ¢` : ''})</span></span>`;
     }).join('');
   }
   function thumbs() {
@@ -593,7 +744,8 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
       b.append(sp, cv);
       b.addEventListener('click', () => {
         L.n = o.n; L.m = o.m;
-        if (state.active) L.target = null; else reapplyChord();
+        if (progPlaying) stopProg(); progIdx = -1; drawProgChips();
+        if (state.active) L.ideal = null; else reapplyChord();
         syncInputs(); render();
       });
       box.append(b);
@@ -605,43 +757,46 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
     state.shape = v; modes = modeList(v);
     layers.forEach(L => { if (v === 'ci') { L.n = 4; L.m = 0; } else { L.n = 3; L.m = 4; L.s = 1; } });
     [...$('shapeSeg').children].forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v));
-    reapplyChord(); pour(); syncInputs(); render();
+    if (progIdx >= 0 && prog[progIdx]) applyProgChord(prog[progIdx]); else reapplyChord();
+    pour(); syncInputs(); render({ instant: true });
   }
   $('shapeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (b) setShape(b.dataset.v); });
-  $('chordSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; applyChord(b.dataset.v); syncInputs(); render(); });
-  const segHandler = (id, key, after) => $(id).addEventListener('click', e => {
+  $('chordSeg').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    state[key] = b.dataset.v; [...$(id).children].forEach(x => x.setAttribute('aria-pressed', x === b));
-    if (after) after(); syncInputs(); render(key === 'tune');
+    if (progPlaying) stopProg(); progIdx = -1; drawProgChips();
+    applyChord(b.dataset.v); syncInputs(); render();
   });
-  segHandler('styleSeg', 'style', () => { if (state.style === 'arena') pour(); });
-  segHandler('combSeg', 'comb');
-  segHandler('tuneSeg', 'tune');
-  $('eps').addEventListener('input', e => { state.eps = +e.target.value; $('epsOut').textContent = state.eps.toFixed(2); render(); });
-  $('water').addEventListener('input', e => { state.water = +e.target.value; $('waterOut').textContent = state.water + ' %'; render(true); });
-  $('warp').addEventListener('input', e => { state.warp = +e.target.value; $('warpOut').textContent = state.warp.toFixed(3); render(); });
+  const segHandler = (id, key, after, opts) => $(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    state[key] = key === 'oct' ? +b.dataset.v : b.dataset.v;
+    [...$(id).children].forEach(x => x.setAttribute('aria-pressed', x === b));
+    if (after) after(); syncInputs(); render(opts);
+  });
+  segHandler('styleSeg', 'style', () => { if (state.style === 'arena') pour(); }, { instant: true, light: true });
+  segHandler('combSeg', 'comb', null, { instant: true, light: true });
+  segHandler('tuneSeg', 'tune', null, { instant: true, light: true });
+  segHandler('octSeg', 'oct', () => { if (progIdx >= 0 && prog[progIdx]) applyProgChord(prog[progIdx]); });
+  $('morph').addEventListener('change', e => { state.morph = e.target.checked; $('morphDur').disabled = !state.morph; });
+  $('morphDur').addEventListener('input', e => { state.morphDur = +e.target.value; $('morphOut').textContent = state.morphDur.toFixed(1) + ' s'; });
+  $('eps').addEventListener('input', e => { state.eps = +e.target.value; $('epsOut').textContent = state.eps.toFixed(2); kick(); thumbs(); });
+  $('water').addEventListener('input', e => { state.water = +e.target.value; $('waterOut').textContent = state.water + ' %'; kick(); });
+  $('warp').addEventListener('input', e => { state.warp = +e.target.value; $('warpOut').textContent = state.warp.toFixed(3); render({ instant: true }); });
   $('pour').addEventListener('click', pour);
 
-  // ---------- sonido: un oscilador por capa ----------
+  // ---------- sonido: un oscilador por capa, con deslizamiento ----------
   let actx = null, voices = null;
-  function tone() {
+  function tone(glide) {
     if (!voices) return;
+    const tc = glide ? Math.max(0.03, state.morphDur / 4) : 0.03;
     layers.forEach((L, i) => {
       const v = voices[i];
-      let fq = state.tune === 'ideal' && L.target != null ? targetFreq(L) : plateFreq(L);
+      let fq = state.tune === 'ideal' && L.ideal != null ? L.ideal : plateFreq(L);
       fq = Math.min(6000, Math.max(30, fq));
-      v.osc.frequency.setTargetAtTime(fq, actx.currentTime, 0.03);
-      v.gain.gain.setTargetAtTime(L.on ? 0.07 * L.alpha : 0, actx.currentTime, 0.05);
+      v.osc.frequency.setTargetAtTime(fq, actx.currentTime, tc);
+      v.gain.gain.setTargetAtTime(L.on ? 0.07 * L.alpha : 0, actx.currentTime, glide ? tc : 0.05);
     });
   }
-  $('listen').addEventListener('click', () => {
-    const btn = $('listen');
-    if (voices) {
-      const vs = voices; voices = null;
-      vs.forEach(v => v.gain.gain.setTargetAtTime(0, actx.currentTime, 0.05));
-      setTimeout(() => vs.forEach(v => v.osc.stop()), 300);
-      btn.textContent = '▶ Escuchar'; btn.setAttribute('aria-pressed', 'false'); return;
-    }
+  function startSound() {
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
       voices = layers.map(() => {
@@ -649,16 +804,25 @@ input[type=range] { width: 100%; accent-color: var(--brass); }
         osc.type = 'sine'; gain.gain.value = 0; osc.connect(gain).connect(actx.destination); osc.start();
         return { osc, gain };
       });
-      tone(); btn.textContent = '■ Parar'; btn.setAttribute('aria-pressed', 'true');
-    } catch (err) { $('warn').textContent = 'Este navegador no deja reproducir sonido aquí.'; }
-  });
+      tone(false); $('listen').textContent = '■ Parar el sonido'; $('listen').setAttribute('aria-pressed', 'true');
+    } catch (err) { voices = null; $('warn').textContent = 'Este navegador no deja reproducir sonido aquí.'; }
+  }
+  function stopSound() {
+    const vs = voices; voices = null;
+    vs.forEach(v => v.gain.gain.setTargetAtTime(0, actx.currentTime, 0.05));
+    setTimeout(() => vs.forEach(v => v.osc.stop()), 300);
+    $('listen').textContent = '▶ Escuchar'; $('listen').setAttribute('aria-pressed', 'false');
+  }
+  $('listen').addEventListener('click', () => { if (voices) stopSound(); else startSound(); });
 
   // ---------- tema ----------
-  function retheme() { readTokens(); render(); }
+  function retheme() { readTokens(); kick(); thumbs(); caption(); }
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', retheme); } catch (e) {}
   new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-  // ---------- inicio: un acorde mayor sobre (3, 4) ----------
-  readTokens(); buildLayers(); applyChord('maj'); pour(); syncInputs(); render();
+  // ---------- inicio: el giro latino, en su primer acorde ----------
+  readTokens(); buildLayers(); parseProg(); pour();
+  if (prog.length) { progIdx = 0; applyProgChord(prog[0]); drawProgChips(); } else applyChord('maj');
+  syncInputs(); render({ instant: true });
 })();
 </script>
