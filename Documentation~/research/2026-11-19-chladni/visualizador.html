@@ -34,6 +34,7 @@
   --brass: #d3a45e; --pos: #e07a5f; --neg: #6aa6cf; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--paper); color: var(--ink);
   font-family: var(--font-body); font-size: 15px; line-height: 1.55;
@@ -105,6 +106,10 @@ input[type=text] { font: 500 15px var(--font-mono); background: var(--plate); co
 .texts h3 { font-family: var(--font-display); font-weight: 400; font-size: 21px; margin: 0; }
 .texts p { margin: 0; font-size: 14.5px; max-width: 62ch; }
 .formula { font-family: var(--font-mono); font-size: 13px; background: var(--plate); border: 1px solid var(--rule); padding: 8px 10px; overflow-x: auto; white-space: nowrap; }
+.liss { display: grid; gap: 22px; border-top: 1px solid var(--ink); padding-top: 22px; }
+.lisshead { display: grid; gap: 4px; }
+.liss h2 { font-family: var(--font-display); font-weight: 400; font-size: clamp(28px, 5vw, 42px); line-height: 1.1; margin: 0; }
+#lcv { width: 100%; height: 100%; display: block; }
 .foot { font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 12px; }
 </style>
 
@@ -112,7 +117,7 @@ input[type=text] { font: 500 15px var(--font-mono); background: var(--plate); co
   <header>
     <div class="eyebrow">Prototipo · Islands Lab · después de Chladni, 1787</div>
     <h1>Placas de Chladni</h1>
-    <p class="lede">Cada nota hace vibrar la placa de una forma. Con tres capas tocas un acorde; con una progresión, la placa pasa de un acorde a otro y la figura se transforma en el tiempo que elijas.</p>
+    <p class="lede">Cada nota hace vibrar la placa de una forma. Con tres capas tocas un acorde; con una progresión, la placa pasa de un acorde a otro y la figura se transforma en el tiempo que elijas. Más abajo, las mismas notas como figuras de Lissajous, en 3D y en un armonógrafo.</p>
   </header>
 
   <div class="stage">
@@ -186,10 +191,11 @@ input[type=text] { font: 500 15px var(--font-mono); background: var(--plate); co
           <button class="btn" id="listen" aria-pressed="false">▶ Escuchar</button>
           <div class="seg" id="tuneSeg" aria-label="Cómo suena">
             <button id="tune-plate" data-v="plate" aria-pressed="true">Notas de la placa</button>
-            <button id="tune-ideal" data-v="ideal" aria-pressed="false">Afinado</button>
+            <button id="tune-ideal" data-v="ideal" aria-pressed="false">Temperado</button>
+            <button id="tune-just" data-v="just" aria-pressed="false">Justo</button>
           </div>
         </div>
-        <span class="note">«Notas de la placa» suena con lo que la placa puede dar, desafinado incluido; «Afinado», con el acorde exacto.</span>
+        <span class="note">«Notas de la placa» suena con lo que la placa puede dar, desafinado incluido; «Temperado», con el acorde del piano; «Justo», con razones exactas.</span>
       </div>
 
       <div class="layers" id="layers"></div>
@@ -271,6 +277,109 @@ input[type=text] { font: 500 15px var(--font-mono); background: var(--plate); co
       <p>Una figura es un campo f(x, y), como un ruido. Las líneas son |f| &lt; ε, el mismo umbral que el agua de NoiseLab, y la vista <em>Isla</em> usa el corte por porcentaje sobre las capas juntas. Con una progresión y la transición, el archipiélago cambia con la música.</p>
     </section>
   </div>
+
+  <section class="liss" id="liss">
+    <div class="lisshead">
+      <div class="eyebrow">II · después de Lissajous, 1857, y del armonógrafo</div>
+      <h2>Lissajous y armonógrafo</h2>
+      <p class="lede">Las mismas notas de las capas, sin placa. Cada nota mueve un punto en una dirección, y el punto dibuja las dos a la vez. Si la progresión suena, la figura cambia con ella.</p>
+    </div>
+    <div class="stage">
+      <figure>
+        <div class="canvasbox"><canvas id="lcv" width="440" height="440" aria-label="Figura de Lissajous de las capas"></canvas></div>
+        <figcaption id="lcap">—</figcaption>
+        <div class="chips" id="lchips"></div>
+      </figure>
+      <div class="panel">
+        <div class="group">
+          <div class="label">Vista</div>
+          <div class="seg" id="lvSeg">
+            <button id="lv-2d" data-v="2d" aria-pressed="true">Lissajous</button>
+            <button id="lv-3d" data-v="3d" aria-pressed="false">3D</button>
+            <button id="lv-hg" data-v="hg" aria-pressed="false">Armonógrafo</button>
+          </div>
+        </div>
+        <div class="group">
+          <div class="label">Afinación</div>
+          <div class="seg" id="ltuneSeg">
+            <button id="lt-plate" data-v="plate" aria-pressed="true">Notas de la placa</button>
+            <button id="lt-ideal" data-v="ideal" aria-pressed="false">Temperado</button>
+            <button id="lt-just" data-v="just" aria-pressed="false">Justo</button>
+          </div>
+          <span class="note">La misma que la del sonido de arriba. «Justo» usa razones exactas: 6/5, 5/4, 4/3, 3/2, 8/5 (y 7/5 para el tritono).</span>
+        </div>
+        <div class="group" id="lpairGroup">
+          <div class="label">Qué capas</div>
+          <div class="seg" id="lpairSeg">
+            <button id="lp-01" data-v="01" aria-pressed="true">1 y 2</button>
+            <button id="lp-02" data-v="02" aria-pressed="false">1 y 3</button>
+            <button id="lp-12" data-v="12" aria-pressed="false">2 y 3</button>
+          </div>
+        </div>
+        <div class="group">
+          <div class="label"><span>Fase δ</span><output id="ldOut">0.50 π</output></div>
+          <input type="range" id="ldelta" min="0" max="1" step="0.01" value="0.5" aria-label="Fase entre las dos vibraciones">
+        </div>
+        <div class="group" id="lspeedGroup">
+          <div class="label">Velocidad del giro</div>
+          <div class="seg" id="lspeedSeg">
+            <button id="ls-1" data-v="1" aria-pressed="false">Real</button>
+            <button id="ls-01" data-v="0.1" aria-pressed="true">×1/10</button>
+            <button id="ls-001" data-v="0.01" aria-pressed="false">×1/100</button>
+            <button id="ls-0" data-v="0" aria-pressed="false">Quieta</button>
+          </div>
+          <span class="note">Si las notas no forman una razón exacta, la figura gira: una vuelta por cada batido.</span>
+        </div>
+        <div class="group" id="lwavesGroup"><label class="check"><input type="checkbox" id="lwaves" checked> Mostrar las dos ondas</label></div>
+        <div class="group" id="lshadowGroup" hidden>
+          <label class="check"><input type="checkbox" id="lshadows" checked> Sombras en las paredes</label>
+          <span class="note">Arrastra la figura para girarla.</span>
+        </div>
+        <div class="group" id="ldampGroup" hidden>
+          <div class="label"><span>Rozamiento</span><output id="ldampOut">0.0040</output></div>
+          <input type="range" id="ldamp" min="0.001" max="0.02" step="0.0005" value="0.004" aria-label="Rozamiento de los péndulos">
+          <div class="row"><button class="btn" id="lrelease">Soltar los péndulos</button><span class="note">x, y y papel: las capas activas, en orden.</span></div>
+        </div>
+        <div class="row"><button class="btn" id="listen2" aria-pressed="false">▶ Escuchar</button></div>
+      </div>
+    </div>
+
+    <div class="texts">
+      <section>
+        <h3>Dos vibraciones, un punto</h3>
+        <p>Una nota mueve el punto de lado a lado; otra, de arriba abajo. Jules Lissajous lo hacía con luz: un espejo pegado a cada diapasón, los dos en ángulo recto, y un rayo que rebotaba en ambos. Por la persistencia de la visión se veía la curva entera. Aquí las notas son las de las capas: lo que suena es lo que se dibuja.</p>
+      </section>
+      <section>
+        <h3>Contar la razón</h3>
+        <p>Los puntos dorados son donde la curva toca el borde. Cuenta los del lado derecho y los de arriba: esa es la razón entre las dos notas. Con las ondas a la vista se ve cómo se construye a mano: cada punto de la curva toma su x de una onda y su y de la otra. La fase δ abre o pliega la figura sin cambiar la razón.</p>
+      </section>
+      <section>
+        <h3>La afinación se ve</h3>
+        <p>Con <em>Justo</em>, una quinta es 3 : 2 exacto y la figura se queda quieta. Con <em>Temperado</em> es 2<sup>7/12</sup> ≈ 1,4983: casi la misma figura, pero gira, una vuelta por cada batido que se oye. Así se comprobaban los diapasones: hasta que la figura dejaba de girar. La tercera del piano está a 14 ¢ de 5 : 4 y gira mucho más rápido que la quinta. Las notas de la placa son razones de números grandes: se ven como una figura sencilla que gira deprisa.</p>
+      </section>
+      <section>
+        <h3>Tres notas, tres dimensiones</h3>
+        <p>Con la tríada, cada nota mueve un eje. La curva vive en el espacio y cada pared recibe su sombra, que es una Lissajous plana de dos notas. Con ciertas razones y fases la curva forma un nudo: son los nudos de Lissajous (Bogle, Hearst, Jones y Stoilov, 1994). El trébol no puede ser uno de ellos.</p>
+      </section>
+      <section>
+        <h3>El armonógrafo</h3>
+        <p>Lo mismo con péndulos, que van tan despacio que la figura se ve crecer. La frecuencia de un péndulo va como 1/√largo: para una quinta, los largos van en 4 : 9. El roce los frena, así que cada vaivén es más pequeño y la figura se enrolla hacia el centro. Con tres capas, la tercera mueve el papel en círculos, como en los armonógrafos de tres péndulos. Hugh Blackburn lo estudió hacia 1844; los de salón se pusieron de moda en los años 1870.</p>
+      </section>
+      <section>
+        <h3>La misma matemática en otras partes</h3>
+        <p>Una nave en torno al punto L2 sigue una órbita de Lissajous: dos periodos casi iguales, y la curva nunca se cierra. Unos espejos diminutos barren un láser con dos frecuencias sin divisor común para llenar la pantalla (Hwang et al., 2017). En reología se dibuja el esfuerzo frente a la deformación: una elipse limpia indica un material lineal.</p>
+      </section>
+      <section>
+        <h3>Las fórmulas</h3>
+        <div class="formula">x = sin(p·τ + δ + ψ(t)),  y = sin(q·τ)</div>
+        <div class="formula">ψ(t) = 2π·(f₁ − p·f₂/q)·t  →  gira |q·f₁ − p·f₂| veces por segundo</div>
+        <div class="formula">armonógrafo: x = Σ Aᵢ·sin(ωᵢ·τ + φᵢ)·e<sup>−d·τ</sup></div>
+        <div class="formula">péndulo: f = √(g / L) / 2π</div>
+        <p>p : q es la razón de enteros pequeños (hasta 16) más cercana a las dos notas; ψ es lo que la figura se desplaza porque la razón real no es exacta.</p>
+      </section>
+    </div>
+  </section>
+
   <p class="foot">Textos ✦ IA. Láminas originales: Ernst Chladni, <em>Entdeckungen über die Theorie des Klanges</em> (Leipzig, 1787), dominio público. Nota de investigación en Islands: <code>Documentation~/research/2026-11-19-chladni.md</code>.</p>
 </div>
 
@@ -774,7 +883,12 @@ input[type=text] { font: 500 15px var(--font-mono); background: var(--plate); co
   });
   segHandler('styleSeg', 'style', () => { if (state.style === 'arena') pour(); }, { instant: true, light: true });
   segHandler('combSeg', 'comb', null, { instant: true, light: true });
-  segHandler('tuneSeg', 'tune', null, { instant: true, light: true });
+  function setTune(v) {
+    state.tune = v;
+    ['tuneSeg', 'ltuneSeg'].forEach(id => [...$(id).children].forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v)));
+    tone(false);
+  }
+  ['tuneSeg', 'ltuneSeg'].forEach(id => $(id).addEventListener('click', e => { const b = e.target.closest('button'); if (b) setTune(b.dataset.v); }));
   segHandler('octSeg', 'oct', () => { if (progIdx >= 0 && prog[progIdx]) applyProgChord(prog[progIdx]); });
   $('morph').addEventListener('change', e => { state.morph = e.target.checked; $('morphDur').disabled = !state.morph; });
   $('morphDur').addEventListener('input', e => { state.morphDur = +e.target.value; $('morphOut').textContent = state.morphDur.toFixed(1) + ' s'; });
@@ -790,7 +904,7 @@ input[type=text] { font: 500 15px var(--font-mono); background: var(--plate); co
     const tc = glide ? Math.max(0.03, state.morphDur / 4) : 0.03;
     layers.forEach((L, i) => {
       const v = voices[i];
-      let fq = state.tune === 'ideal' && L.ideal != null ? L.ideal : plateFreq(L);
+      let fq = soundFreq(i);
       fq = Math.min(6000, Math.max(30, fq));
       v.osc.frequency.setTargetAtTime(fq, actx.currentTime, tc);
       v.gain.gain.setTargetAtTime(L.on ? 0.07 * L.alpha : 0, actx.currentTime, glide ? tc : 0.05);
@@ -804,19 +918,219 @@ input[type=text] { font: 500 15px var(--font-mono); background: var(--plate); co
         osc.type = 'sine'; gain.gain.value = 0; osc.connect(gain).connect(actx.destination); osc.start();
         return { osc, gain };
       });
-      tone(false); $('listen').textContent = '■ Parar el sonido'; $('listen').setAttribute('aria-pressed', 'true');
+      tone(false); listenUI(true);
     } catch (err) { voices = null; $('warn').textContent = 'Este navegador no deja reproducir sonido aquí.'; }
   }
   function stopSound() {
     const vs = voices; voices = null;
     vs.forEach(v => v.gain.gain.setTargetAtTime(0, actx.currentTime, 0.05));
     setTimeout(() => vs.forEach(v => v.osc.stop()), 300);
-    $('listen').textContent = '▶ Escuchar'; $('listen').setAttribute('aria-pressed', 'false');
+    listenUI(false);
   }
-  $('listen').addEventListener('click', () => { if (voices) stopSound(); else startSound(); });
+  function listenUI(on) {
+    ['listen', 'listen2'].forEach(id => { $(id).textContent = on ? '■ Parar el sonido' : '▶ Escuchar'; $(id).setAttribute('aria-pressed', on); });
+  }
+  ['listen', 'listen2'].forEach(id => $(id).addEventListener('click', () => { if (voices) stopSound(); else startSound(); }));
+
+  // ---------- II. Lissajous, 3D y armonógrafo: las mismas notas, sin placa ----------
+  const JUST = { 0: 1, 3: 6 / 5, 4: 5 / 4, 5: 4 / 3, 6: 7 / 5, 7: 3 / 2, 8: 8 / 5, 12: 2 };
+  const rootRef = () => layers[0].ideal != null ? layers[0].ideal : plateFreq(layers[0]);
+  // la frecuencia que suena y que se dibuja, según la afinación elegida
+  function soundFreq(i) {
+    const L = layers[i];
+    if (state.tune === 'plate' || (i > 0 && L.ideal == null)) return plateFreq(L);
+    if (i === 0) return rootRef();
+    if (state.tune === 'ideal') return L.ideal;
+    const r = rootRef(), s = Math.round(12 * Math.log2(L.ideal / r));
+    return r * (JUST[s] || Math.pow(2, s / 12));
+  }
+  const gcd = (a, b) => b ? gcd(b, a % b) : a;
+  // razón de enteros pequeños más cercana; premia la sencillez (1,5 ¢ por cada unidad del mayor)
+  function approx(fs) {
+    const fmin = Math.min(...fs); let best = null;
+    for (let b = 1; b <= 16; b++) {
+      const u = fmin / b, ns = fs.map(f => Math.max(1, Math.round(f / u)));
+      if (Math.max(...ns) > 16) break;
+      if (ns.reduce(gcd) > 1) continue;
+      const err = Math.max(...fs.map((f, k) => Math.abs(1200 * Math.log2(f / (ns[k] * u)))));
+      const score = err + 1.5 * Math.max(...ns);
+      if (!best || score < best.score) best = { ns, u, err, score };
+    }
+    return best;
+  }
+  // cuánto se ha desplazado cada vibración respecto de la razón exacta tras t segundos
+  const drift = (fs, ap, t) => fs.map((f, k) => 2 * Math.PI * (f - ap.ns[k] * ap.u) * t);
+
+  const lcv = $('lcv'), lctx = lcv.getContext('2d'), LW = 440, TAU = 2 * Math.PI;
+  const ls = { view: '2d', pair: '01', delta: 0.5, speed: 0.1, waves: true, shadows: true, damp: 0.004, rotY: 0.6, drag: null, dragged: false };
+  let lt = 0, lLast = 0, lRaf = 0, lVisible = true, tauDot = 0;
+  const rgb = (c, a = 1) => `rgba(${c.map(v => Math.round(v)).join(',')},${a})`;
+  const activeIdx = () => layers.map((L, i) => L.on ? i : -1).filter(i => i >= 0);
+  const lcache = {};
+  const setHTML = (id, h) => { if (lcache[id] !== h) { lcache[id] = h; $(id).innerHTML = h; } };
+  const dot = (c, x, y, r) => { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); };
+  function path(c, N, fn, color, width, T = TAU) {
+    c.strokeStyle = color; c.lineWidth = width; c.lineJoin = 'round'; c.beginPath();
+    for (let k = 0; k <= N; k++) { const p = fn(T * k / N); if (k) c.lineTo(p[0], p[1]); else c.moveTo(p[0], p[1]); }
+    c.stroke();
+  }
+  const chip = (i, f) => `<span class="chip"><span class="dot" style="background:${layers[i].color}"></span>${noteName(f)} ${f.toFixed(1)} Hz</span>`;
+  const speedTxt = () => ls.speed === 0 ? ' (aquí, quieta)' : ls.speed < 1 ? ` (aquí, ×1/${Math.round(1 / ls.speed)})` : '';
+  function lmsg(t) {
+    lctx.fillStyle = rgb(C.ink, 0.7); lctx.font = '15px "IBM Plex Sans", system-ui, sans-serif'; lctx.textAlign = 'center';
+    lctx.fillText(t, LW / 2, LW / 2); lctx.textAlign = 'left';
+    setHTML('lcap', '—'); setHTML('lchips', '');
+  }
+
+  function draw2D() {
+    const c = lctx, [i, j] = ls.pair.split('').map(Number);
+    if (!layers[i].on || !layers[j].on) return lmsg(`Activa la capa ${layers[i].on ? j + 1 : i + 1} para ver esta pareja.`);
+    const fs = [soundFreq(i), soundFreq(j)], ap = approx(fs);
+    if (!ap) return lmsg('Las dos notas están demasiado lejos.');
+    const [p, q] = ap.ns, ps = drift(fs, ap, lt), d = ls.delta * Math.PI;
+    const m = 16, S = ls.waves ? 300 : LW - 2 * m, h = S / 2 - 7, cx = m + S / 2, cy = m + S / 2;
+    const X = t => cx + h * Math.sin(p * t + d + ps[0]), Y = t => cy - h * Math.sin(q * t + ps[1]);
+    c.strokeStyle = rgb(C.rule); c.lineWidth = 1; c.strokeRect(cx - h, cy - h, 2 * h, 2 * h);
+    path(c, 1400, t => [X(t), Y(t)], layers[i].color, 2);
+    c.fillStyle = rgb(C.brass);
+    for (let k = 0; k < q; k++) dot(c, X((Math.PI / 2 - ps[1] + TAU * k) / q), cy - h, 4);
+    for (let k = 0; k < p; k++) dot(c, cx + h, Y((Math.PI / 2 - d - ps[0] + TAU * k) / p), 4);
+    const px = X(tauDot), py = Y(tauDot);
+    if (ls.waves) {
+      const top = m + S + 12, left = m + S + 12, H = LW - top - 6, W = LW - left - 6;
+      path(c, 500, t => [X(t), top + H * t / TAU], layers[i].color, 1.25);
+      path(c, 500, t => [left + W * t / TAU, Y(t)], layers[j].color, 1.25);
+      const wy = top + H * tauDot / TAU, wx = left + W * tauDot / TAU;
+      c.setLineDash([3, 4]); c.strokeStyle = rgb(C.ink, 0.45); c.lineWidth = 1;
+      c.beginPath(); c.moveTo(px, py); c.lineTo(px, wy); c.moveTo(px, py); c.lineTo(wx, py); c.stroke(); c.setLineDash([]);
+      c.fillStyle = rgb(C.ink); dot(c, px, wy, 3); dot(c, wx, py, 3);
+      c.fillStyle = rgb(C.ink, 0.65); c.font = '12px "IBM Plex Mono", ui-monospace, monospace';
+      c.fillText(`↓ x: capa ${i + 1}`, left, top + 16); c.fillText(`→ y: capa ${j + 1}`, left, top + 34);
+    }
+    c.fillStyle = rgb(C.ink); dot(c, px, py, 4.5);
+    const beat = Math.abs(q * fs[0] - p * fs[1]);
+    setHTML('lcap', `${p} : ${q} · toca el borde derecho ${p} ${p === 1 ? 'vez' : 'veces'} y el de arriba ${q}`);
+    setHTML('lchips', chip(i, fs[0]) + chip(j, fs[1]) + `<span class="chip cents">${beat < 0.005 ? 'razón exacta: no gira'
+      : `a ${ap.err.toFixed(1)} ¢ de ${p}:${q} · gira ${beat.toFixed(2)} veces por segundo${speedTxt()}`}</span>`);
+  }
+
+  function draw3D() {
+    const c = lctx;
+    if (!layers[1].on || !layers[2].on) return lmsg('La vista 3D necesita las tres capas activas.');
+    const fs = [0, 1, 2].map(soundFreq), ap = approx(fs);
+    if (!ap) return lmsg('Las notas están demasiado lejos.');
+    const ns = ap.ns, ps = drift(fs, ap, lt), d = ls.delta * Math.PI;
+    const ct = Math.cos(ls.rotY), st = Math.sin(ls.rotY), tl = 0.45, ctl = Math.cos(tl), stl = Math.sin(tl), R = LW * 0.23, D = 4.5;
+    const pr = (x, y, z) => {
+      const x1 = x * ct + z * st, z1 = -x * st + z * ct, y2 = y * ctl - z1 * stl, z2 = y * stl + z1 * ctl, k = D / (D - z2);
+      return [LW / 2 + R * k * x1, LW / 2 + 10 - R * k * y2, z2];
+    };
+    const P = t => [Math.sin(ns[0] * t + d + ps[0]), Math.sin(ns[1] * t + ps[1]), Math.sin(ns[2] * t + ps[2])];
+    const depth = (x, y, z) => pr(x, y, z)[2];
+    const sx = depth(1, 0, 0) < depth(-1, 0, 0) ? 1 : -1, sz = depth(0, 0, 1) < depth(0, 0, -1) ? 1 : -1, sy = -1;
+    c.strokeStyle = rgb(C.rule); c.lineWidth = 1; c.beginPath();
+    const seg = (A, B) => { c.moveTo(A[0], A[1]); c.lineTo(B[0], B[1]); };
+    for (const a of [-1, 1]) for (const b of [-1, 1]) { seg(pr(-1, a, b), pr(1, a, b)); seg(pr(a, -1, b), pr(a, 1, b)); seg(pr(a, b, -1), pr(a, b, 1)); }
+    c.stroke();
+    const N = 1500, mixL = (a, b) => rgb(mix(hex(layers[a].color), hex(layers[b].color), 0.5), 0.6);
+    if (ls.shadows) {
+      path(c, N, t => { const v = P(t); return pr(sx, v[1], v[2]); }, mixL(1, 2), 1.25);
+      path(c, N, t => { const v = P(t); return pr(v[0], sy, v[2]); }, mixL(0, 2), 1.25);
+      path(c, N, t => { const v = P(t); return pr(v[0], v[1], sz); }, mixL(0, 1), 1.25);
+    }
+    const pts = []; for (let k = 0; k <= N; k++) { const v = P(TAU * k / N); pts.push(pr(v[0], v[1], v[2])); }
+    c.lineWidth = 2.2; c.lineCap = 'round';
+    for (let k = 0; k < N; k += 10) {
+      const e = Math.min(N, k + 10); let z = 0;
+      c.beginPath(); c.moveTo(pts[k][0], pts[k][1]);
+      for (let r = k + 1; r <= e; r++) { c.lineTo(pts[r][0], pts[r][1]); z += pts[r][2]; }
+      c.strokeStyle = rgb(C.ink, 0.25 + 0.75 * clamp01((z / (e - k) + 1.6) / 3.2)); c.stroke();
+    }
+    c.lineCap = 'butt';
+    const v = P(tauDot), pd = pr(v[0], v[1], v[2]); c.fillStyle = rgb(C.brass); dot(c, pd[0], pd[1], 5);
+    const beats = [[0, 1], [0, 2], [1, 2]].map(([a, b]) => Math.abs(ns[b] * fs[a] - ns[a] * fs[b]));
+    setHTML('lcap', `${ns.join(' : ')} · cada pared, una pareja de notas`);
+    setHTML('lchips', fs.map((f, i) => chip(i, f)).join('') + `<span class="chip cents">${Math.max(...beats) < 0.005 ? 'razón exacta: no gira'
+      : `a ${ap.err.toFixed(1)} ¢ de ${ns.join(':')} · giros por segundo: ${beats.map(b => b.toFixed(2)).join(' · ')}${speedTxt()}`}</span>`);
+  }
+
+  // armonógrafo: se dibuja poco a poco en un lienzo aparte y se vuelve a soltar si cambian las notas
+  const hg = { key: '', pts: null, n: 0, drawn: 0, t0: 0, cv: document.createElement('canvas') };
+  hg.cv.width = hg.cv.height = LW; const hctx = hg.cv.getContext('2d');
+  function hgBuild(now) {
+    const act = activeIdx(); hg.pts = null;
+    if (act.length < 2) return;
+    const fs = act.map(soundFreq), fmin = Math.min(...fs), w = fs.map(f => f / fmin);
+    const dmp = ls.damp, d = ls.delta * Math.PI, three = act.length === 3;
+    const A = three ? 0.6 : 0.92, B = 0.32, Tm = 5 / dmp, Rr = LW / 2 - 14;
+    const n = Math.min(90000, Math.ceil(Tm * 10 * Math.max(...w)));
+    const pts = new Float32Array(2 * (n + 1));
+    for (let k = 0; k <= n; k++) {
+      const t = Tm * k / n, e = Math.exp(-dmp * t);
+      let x = A * Math.sin(w[0] * t + d) * e, y = A * Math.sin(w[1] * t) * e;
+      if (three) { const e2 = Math.exp(-0.8 * dmp * t); x += B * Math.cos(w[2] * t) * e2; y += B * Math.sin(w[2] * t) * e2; }
+      pts[2 * k] = LW / 2 + Rr * x; pts[2 * k + 1] = LW / 2 - Rr * y;
+    }
+    Object.assign(hg, { pts, n, drawn: 0, t0: now, fs, act, w });
+    hctx.fillStyle = rgb(C.plate); hctx.fillRect(0, 0, LW, LW);
+  }
+  function drawHG(now) {
+    const act = activeIdx(), key = act.join('') + '|' + act.map(i => soundFreq(i).toFixed(4)).join('|') + '|' + ls.damp + '|' + ls.delta;
+    if (key !== hg.key) { hg.key = key; hgBuild(now); }
+    if (!hg.pts) return lmsg('El armonógrafo necesita al menos dos capas activas.');
+    const target = Math.floor(hg.n * clamp01((now - hg.t0) / 6000));
+    if (target > hg.drawn) {
+      hctx.strokeStyle = rgb(C.ink, 0.75); hctx.lineWidth = 0.9; hctx.lineJoin = 'round'; hctx.beginPath();
+      hctx.moveTo(hg.pts[2 * hg.drawn], hg.pts[2 * hg.drawn + 1]);
+      for (let k = hg.drawn + 1; k <= target; k++) hctx.lineTo(hg.pts[2 * k], hg.pts[2 * k + 1]);
+      hctx.stroke(); hg.drawn = target;
+    }
+    lctx.drawImage(hg.cv, 0, 0);
+    lctx.fillStyle = rgb(C.brass); dot(lctx, hg.pts[2 * hg.drawn], hg.pts[2 * hg.drawn + 1], 4);
+    const roles = ['x', 'y', 'papel'], ap = approx(hg.fs);
+    setHTML('lcap', `Armonógrafo de ${hg.act.length} péndulos${ap ? ' · casi ' + ap.ns.join(' : ') : ''}`);
+    setHTML('lchips', hg.act.map((i, k) => `<span class="chip"><span class="dot" style="background:${layers[i].color}"></span>${roles[k]}: ${noteName(hg.fs[k])} · ${(24.85 / (hg.w[k] * hg.w[k])).toFixed(1)} cm</span>`).join('')
+      + '<span class="chip cents">largos si el más lento oscila una vez por segundo</span>');
+  }
+
+  function lloop(now) {
+    lRaf = 0;
+    const dt = lLast ? Math.min(0.1, (now - lLast) / 1000) : 0; lLast = now;
+    lt += dt * ls.speed; tauDot = (tauDot + dt * 0.45) % TAU;
+    if (ls.view === '3d' && !ls.dragged) ls.rotY += dt * 0.3;
+    lctx.fillStyle = rgb(C.plate); lctx.fillRect(0, 0, LW, LW);
+    if (ls.view === '2d') draw2D(); else if (ls.view === '3d') draw3D(); else drawHG(now);
+    if (lVisible) lRaf = requestAnimationFrame(lloop); else lLast = 0;
+  }
+  try {
+    new IntersectionObserver(es => { lVisible = es[0].isIntersecting; if (lVisible && !lRaf) lRaf = requestAnimationFrame(lloop); }).observe(lcv);
+  } catch (e) { lVisible = true; }
+  function lsync() {
+    $('lpairGroup').hidden = ls.view !== '2d'; $('lwavesGroup').hidden = ls.view !== '2d';
+    $('lshadowGroup').hidden = ls.view !== '3d'; $('ldampGroup').hidden = ls.view !== 'hg'; $('lspeedGroup').hidden = ls.view === 'hg';
+    lcv.style.touchAction = ls.view === '3d' ? 'none' : 'auto';
+  }
+  function lseg(id, fn) {
+    $(id).addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      [...$(id).children].forEach(x => x.setAttribute('aria-pressed', x === b)); fn(b.dataset.v); lsync();
+    });
+  }
+  lseg('lvSeg', v => { ls.view = v; if (v === 'hg') hg.key = ''; });
+  lseg('lpairSeg', v => { ls.pair = v; });
+  lseg('lspeedSeg', v => { ls.speed = +v; });
+  $('ldelta').addEventListener('input', e => { ls.delta = +e.target.value; $('ldOut').textContent = ls.delta.toFixed(2) + ' π'; });
+  $('ldamp').addEventListener('input', e => { ls.damp = +e.target.value; $('ldampOut').textContent = ls.damp.toFixed(4); });
+  $('lwaves').addEventListener('change', e => { ls.waves = e.target.checked; });
+  $('lshadows').addEventListener('change', e => { ls.shadows = e.target.checked; });
+  $('lrelease').addEventListener('click', () => { hg.key = ''; });
+  lcv.addEventListener('pointerdown', e => { if (ls.view !== '3d') return; ls.drag = e.clientX; ls.dragged = true; lcv.setPointerCapture(e.pointerId); });
+  lcv.addEventListener('pointermove', e => { if (ls.drag == null) return; ls.rotY += (e.clientX - ls.drag) * 0.01; ls.drag = e.clientX; });
+  ['pointerup', 'pointercancel'].forEach(t => lcv.addEventListener(t, () => { ls.drag = null; }));
+  lsync(); if (!lRaf) lRaf = requestAnimationFrame(lloop);
 
   // ---------- tema ----------
-  function retheme() { readTokens(); kick(); thumbs(); caption(); }
+  function retheme() { readTokens(); kick(); thumbs(); caption(); hg.key = ''; }
   try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', retheme); } catch (e) {}
   new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
