@@ -34,6 +34,7 @@ Familias por cómo llegan a la pantalla. «Encaje» dice cuánto se parece a lo 
 | Glifos / ASCII | Un carácter o tile de un color por celda | *Dwarf Fortress*; tiles de salt_pilgrim (mundo-islas, 2026-11-13) | Alto | Nuevo |
 | Hexágonos | Celdas hexagonales con color por bioma | *Civilization* (desde la V) | Medio | Nuevo |
 | Costa suave (marching squares) | Contorno interpolado en lugar de escalones | Mapas vectoriales | Medio | Nuevo |
+| Corrientes en trazos (LIC + curl noise) | Textura de trazos que sigue el campo de corrientes o de viento (*line integral convolution*, Cabral y Leedom 1993); color por *Sea temp* y brillo por la velocidad (\|∇ψ\|); remolinos falsos con *curl noise* sumado a ψ (sin divergencia), más fuertes en corrientes de borde oeste y frentes térmicos; animable desplazando la fase del ruido | «One Ocean, One Year» (Aaron J. Becker, mapped.earth, 2026; en `research/2026-11-capturas.md`); *Perpetual Ocean* (NASA SVS, 2012) | Alto: ψ, velocidad y *Sea temp* ya existen (v6 2a/2b); la LIC en Burst cuesta unos 2 M de muestras a 256². Los remolinos son decoración, no física: declararlo | Nuevo |
 
 ### B. 2.5D por software (píxeles, sin malla)
 

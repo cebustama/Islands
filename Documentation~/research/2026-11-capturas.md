@@ -2,6 +2,27 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-19 · «One Ocean, One Year»: ocean currents as streaks
+- **Type and origin:** image (screenshot) + link (Instagram reel, https://www.instagram.com/reel/Df79KxphZMx/), by Aaron J. Becker, mapped.earth, dated 4 May 2026. The reel was not opened (Instagram asks for login); this note is built from the screenshot. Private reference copy in [`referencias-visuales/nuevas/2026-11-19-corrientes-spilhaus/`](../../../referencias-visuales/nuevas/2026-11-19-corrientes-spilhaus/).
+- **What Claudio said:** «Me gusta mucho esta imagen, los colores y la forma en que muestra el movimiento de las corrientes, qué tan factible es incorporar algo así a los mundos de NoiseLabs?»
+- **What it is:** the world ocean in the Spilhaus projection (ocean whole, continents cut). Colour = sea surface temperature (0–30 °C, violet → red); brightness = current speed. The texture is made of streaks along the flow with dense mesoscale eddies. The technique looks like LIC (line integral convolution) or particle trails over real ocean data; inferred from the look, not checked.
+- 💡 **Use here — feasibility in NoiseLab:**
+
+  | Piece of the image | In NoiseLab today | Effort |
+  | --- | --- | --- |
+  | Current field | Stommel on a coarse grid (v6 2a), *Gyres* colour from ψ | Done |
+  | Colour = SST | *Sea temp* with upwelling (2b) | Done |
+  | Brightness = speed | \|∇ψ\| by finite differences | Trivial |
+  | Streak texture | — | **New:** LIC in Burst; 256² × ~30 steps each way ≈ 2 M samples, a few ms on the S22 |
+  | Animation (reel) | Clouds already animate | Medium: shift the LIC noise phase or advect the texture |
+  | **The eddies** | Stommel gives smooth gyres | **The hard part:** fake them with curl noise added to ψ (stays divergence-free, fits the ψ-as-scalar choice in `../planning/active/Fluids_Module_Design.md`), stronger in western boundary currents and thermal fronts. Decoration, not physics: say so. |
+  | Spilhaus projection | Flat map (World ×16) | Not applicable until there is a planet |
+
+  The same LIC works for the wind. With it, the west-coast upwelling (Humboldt) would *show* as a slow blue tongue along the coast, as off South America in the image (`../../../_comun/conexiones.md`, 2026-11-04). Added as a row in family A of [`NoiseLab_Views_Catalog.md`](../planning/exploration/NoiseLab_Views_Catalog.md).
+- **To go deeper:** Cabral & Leedom, «Imaging Vector Fields Using Line Integral Convolution», SIGGRAPH 1993; *Perpetual Ocean* (NASA SVS, 2012, ECCO2 data); Bridson et al., «Curl-Noise for Procedural Fluid Flow», SIGGRAPH 2007.
+- **Connects with:** web (Islands Lab candidate: the pretty result first, then how it works), referencias-visuales.
+- **Status:** seed; after v6 with the other views, or as an optional step when closing 2c. Not a new front.
+
 ## 2026-11-17 · The Pebas System: a Miocene mega-wetland as a test case for H1
 - **Type and origin:** link (Instagram, @egm_bizarros, 2026-10-02: https://www.instagram.com/p/Dd-DAEKsoTN/), a map of western Amazonia ~14 Ma labelled «Pebas system», Northern and Central Andes, Guyana Craton, Purus Arch, East Venezuela Basin and «Atlantic-Proto Caribbean». Read in Chrome (caption and comments).
 - **What Claudio said:** «Me interesa sobretodo para el motor de Islands PCG y NoiseLab».
