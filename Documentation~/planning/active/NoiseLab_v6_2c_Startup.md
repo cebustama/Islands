@@ -4,26 +4,25 @@ Fecha: 2026-11-17. Rama: `main`. Sigue a `NoiseLab_v6_Startup.md` («Progreso»,
 al diseño en `Fluids_Module_Design.md` («Subpasos» y «Añadido el 2026-11-17») y a la fila O4 de
 `NoiseLab_Migration_Matrix.md`.
 
-## Estado al 2026-11-20 (leer primero)
-- **Paso 1 hecho y commiteado** (`9fd00fb`): anomalía del mar en el clima, Biomes en ×4/×16; probado en el editor y el S22.
-- **Paso 2 implementado, sin commit** (`NoiseLab.cs` modificado): término de temperatura
-  `+ seaW·anom/(1 + cd/seaReach)` en `ClimateManaged` y `ViewClimateJob` (también en `BigBiomes`), perillas
-  «Sea → coast temp» (0.5) y «Sea reach» (10 celdas ≈ 50 km) en `OceanSliders`, `cl=` con 10 valores
-  (los códigos de 8 valores siguen valiendo: peso 0, alcance 10), línea «land temp from the sea» en el resumen.
-  Suite 415/415 por el puente (2026-11-18 17:20). **Probado por Claudio el 2026-11-20:** Burst check del clima
-  max |Δ| 1.19E-07 y 0.000 % de biomas cambiados; prueba de borde con margen, 0.02 %. En la costa de la receta
-  (mar casi normal, −0.22 °C) el efecto es ~0, como debe ser. En una costa fría (lat 20–31°N, mar −9.3 °C), con
-  peso 1 y alcance 30, la tierra se enfría hasta −0.334 (más que una banda de bioma) en 21.905 celdas. Lo que se ve:
-  la costa pasa a un verde oscuro (bosque frío), porque la humedad todavía no baja; el desierto llega con el paso 3.
-- **Receta oficial: océano profundo** (`c=-1:-1.4,0:-1,0.1:-0.3,0.2:0.25,0.5:0.4,1:0.7/...`). La curva C poco
-  profunda (`0:-0.4`) deja asomar el detalle de picos (PV hasta +0.6) como archipiélago.
-- **Roadmap PL-16** (huecos del modelo de clima) escrito, sin commit.
-- **Idea de Claudio (2026-11-20): barra de escala** en la vista y en ×4/×16 («100 km»), como la que dibujó a mano
-  sobre una captura. Una celda del mapa de 256 ≈ 4,9 km (vista ≈ 1250 km); en ×4/×16, multiplicar por la escala.
-  Largo «redondo» (1-2-5 × 10ⁿ km) de ~1/5 del ancho, en la esquina superior izquierda, solo dibujo (no toca el
-  clima ni el código NL1). Pequeña: entra antes del paso 3 o junto con él.
-- Siguiente: paso 3 (humedad: `coastalMoistureBonus·exp(k·ΔT)`, pickUp por celda, flujo, BigBiomes, `cl=` 11.º valor),
-  luego paso 4 (Burst check, prueba de borde, S22, antes/después) y cierre.
+## Estado al 2026-11-20, noche (leer primero)
+- **Paso 1** en `9fd00fb`; **paso 2** en `eb98ede` (subido). **Barra de escala** en `7a9f7ff` (vista, foco, ×4/×16; 1-2-5 × 10ⁿ km, ~1/5 del ancho; probada por Claudio).
+- **Paso 3 hecho (humedad):** el mar pone un techo a la humedad del aire, `min(1, e^(k·ΔT))` con `k = peso · 0,07/°C`
+  (Clausius–Clapeyron): sobre un mar frío el aire va hacia ese techo en vez de hacia 1, en el barrido (`WindField`/`WindJob`),
+  en el flujo (techo por bloque con la anomalía media de su mar, `FlowMaskJob` → `FlowAirJob`) y en `BigBiomes`; el extra
+  de la costa se multiplica por `e^(k·ΔT)`. Perilla «Sea → coast moisture» (0–5, **por defecto 3**) en `OceanSliders`;
+  `cl=` con 11 valores (los viejos leen 0, mismos bits). Resumen del océano: «coast land moisture … mean».
+  **Medido por Claudio** (costa fría, lat 25–36°N, mar −7,55 °C de media): humedad de la costa 0,947 (peso 0) → 0,678 (1)
+  → 0,350 (3); con 1 queda una franja de bosque, con 3 estepa o desierto hasta la orilla. El 3 es calibración: suple el
+  aire que baja en los subtrópicos, que el modelo no tiene (PL-16, punto 8).
+- **Pegado de códigos robusto:** `ApplyCode` quita espacios y saltos de línea y avisa «NOT READ, left at default: …» si una
+  parte (curvas, ruidos, clima, viento) no se lee. Causa de las «mil islitas» recurrentes: un `c=` roto caía sin aviso a la
+  curva C por defecto (poco profunda). Confirmado por Claudio: con el pegado nuevo, costas limpias.
+- Suite 415/415 por el puente (2026-11-20 20:12).
+- **Falta, paso 4:** Burst check del clima (0 % de biomas distintos), prueba de borde (≈ 0 %), S22, y mirar en ×16 que las
+  costas con mar cálido no se llenen de selva con el peso 3. Luego cierre: O4 validada en la matriz, v6 completa.
+
+### Receta oficial completa (océano profundo; usar esta, cambiando solo los campos que la prueba necesita)
+`NL1;t=simplex/simplex;s=88775;f=8;o=1;l=2;g=0.5;w=%71;x=0.343;y=2.185;pal=mapa;b=50,30,20/4,30,30,16,12,8;q=w;h=s;n1=simplex/perlin,0.15,4,2,0.5;n2=simplex/perlin,3,3,2,0.5;n3=simplex/perlin,8,4,2,0.5;c=-1:-1,0:-1,0.1:-0.3,0.2:0.25,0.5:0.4,1:0.7/-1:1,-0.2:0.6,0.3:0.15,1:0.05/-1:-0.3,-0.3:-0.05,0.2:0.1,0.6:0.45,1:0.6;k=z;n4=simplex/perlin,2,4,2,0.5;n5=simplex/perlin,3,4,2,0.5;cl=0.8,0.5,0.5,0.1,0.05,0.7,0.17,0.3,0.5,10,3;wd=300,0.6,0.6,0.01,0.05;wf=0.5,200;oc=0.25,1.56,0.5;sh=0.8;ct=0.05;ov=contours:0.45;v=2:map,moisture`
 
 ## Objetivo
 Que el clima de la tierra lea la temperatura del mar de la 2b: una costa con mar frío

@@ -1714,5 +1714,6 @@ vegetation — recalibrating vegetation densities for those biomes would change 
 5. **Temperature by real altitude, not rank**: the lapse uses the height rank, so any continent interior is cold. Revisit together with the curve C recipe.  
 6. **Rivers** (PL-14, H1): green corridors through dry land (the Nile); local, not broad.  
 7. **Continentality**: interiors with wider seasonal range (only matters if seasons enter).  
+8. **Subtropical subsidence and the inversion** (added 2026-11-20, 2c step 3): sinking dry air around 15–30° and the inversion that keeps the sea's moisture in a low layer dry the real Atacama and Namib more than the cold sea alone. Not simulated; for now *Sea → coast moisture* stands in for it (default 3, where 1 is the Clausius–Clapeyron rate). Goes with item 1 (the dry belt at ~30°); when it enters, lower that default.  
 **Source:** this entry; screenshots in the 2c session (2026-11-18).  
 **Status:** Recorded idea, after NoiseLab v6. Order and scope undecided; 1 and 4 look smallest, 2 touches the wind model, 3 the air transport.
