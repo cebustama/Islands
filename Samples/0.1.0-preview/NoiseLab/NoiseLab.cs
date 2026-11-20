@@ -171,6 +171,9 @@ public class NoiseLab : MonoBehaviour
 
     const float LatitudeSpan = 8f;   // view widths from the equator to a pole
     const float CoastUnits = 256f;   // coast distance unit: one cell of a 256 map
+    // 2c UI: km across one view width. 90° of latitude over LatitudeSpan views, 111.2 km a degree:
+    // about 1251 km, so a cell of a 256 map is about 4.9 km. Only for the scale bar.
+    const float KmPerView = 90f / LatitudeSpan * 111.2f;
 
     const int WorldSamples = 128;   // reference grid, WorldSamples² points
     const float WorldSpan = 16f;    // ... spread over 16 × 16 view widths around the origin
@@ -2494,6 +2497,7 @@ public class NoiseLab : MonoBehaviour
                       $"the view outlined; {bigMs:0} ms" + (bigColour == BigColour.Biomes ? $" (climate {bigClimateMs:0} ms)" : "");
         DrawRect(new Rect(r.x, r.y, Mathf.Min(8.5f * name.Length + 8f, r.width), 22f), new Color(0f, 0f, 0f, 0.5f));
         GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
+        DrawScaleBar(r, r.y + 26f, KmPerView * bigScale);
 
         // The sliders first: a slider uses its own mouse-up, so releasing it never closes.
         DrawRect(panel, new Color(0f, 0f, 0f, 0.35f));
@@ -3937,6 +3941,7 @@ public class NoiseLab : MonoBehaviour
         string name = $"{ShowNames[(int)Effective(focusPanel)]}  (right click or double tap: back)";
         DrawRect(new Rect(r.x, r.y, 8.5f * name.Length + 8f, 22f), new Color(0f, 0f, 0f, 0.5f));
         GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
+        DrawScaleBar(r, r.y + 26f, KmPerView);
         if (colouring == Colouring.Biomes && wind) DrawWindArrow(new Vector2(r.xMax - 34f, r.y + 34f));
         DrawLatitude(r.x, r.yMax);
     }
@@ -4880,6 +4885,7 @@ public class NoiseLab : MonoBehaviour
                 DrawRect(new Rect(r.x, r.y, 9f * name.Length + 8f, 22f), new Color(0f, 0f, 0f, 0.5f));
                 GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
             }
+            DrawScaleBar(r, r.y + (viewCount > 1 ? 26f : 4f), KmPerView);
         }
         // The wind arrow goes in the top-right panel.
         if (colouring == Colouring.Biomes && wind) DrawWindArrow(new Vector2(left + gridWidth - 34f, top + 34f));
@@ -4938,6 +4944,34 @@ public class NoiseLab : MonoBehaviour
         }
         GUI.matrix = baseMatrix;
         GUI.Label(new Rect(centre.x - 26f, centre.y + 26f, 80f, 20f), WindName());
+    }
+
+    // 2c UI: the longest round length (1, 2 or 5 × 10^n km) that fits in a fifth of the width.
+    static float ScaleBarKm(float widthKm)
+    {
+        float target = widthKm / 5f;
+        float p = Mathf.Pow(10f, Mathf.Floor(Mathf.Log10(target)));
+        if (5f * p <= target) return 5f * p;
+        if (2f * p <= target) return 2f * p;
+        return p;
+    }
+
+    // 2c UI: scale bar in the top-left corner of a picture that is widthKm across. Drawing only.
+    void DrawScaleBar(Rect picture, float top, float widthKm)
+    {
+        float km = ScaleBarKm(widthKm);
+        float length = picture.width * km / widthKm;
+        string text = $"{km:0} km";
+        var box = new Rect(picture.x, top, Mathf.Max(length, 8.5f * text.Length) + 16f, 36f);
+        DrawRect(box, new Color(0f, 0f, 0f, 0.5f));
+        GUI.Label(new Rect(box.x + 4f, box.y + 1f, box.width - 4f, 22f), new GUIContent(text,
+            "Scale: one view is about 1250 km across (a cell of a 256 map ≈ 4.9 km), ×4 and ×16 multiply it. " +
+            "The world is flat: a view measures the same at the equator and near the poles, so this is not a map projection of the Earth."));
+        float x = box.x + 8f, y = box.y + 27f;
+        var white = Color.white;
+        DrawRect(new Rect(x, y, length, 3f), white);
+        DrawRect(new Rect(x, y - 6f, 2f, 9f), white);
+        DrawRect(new Rect(x + length - 2f, y - 6f, 2f, 9f), white);
     }
 
     void DrawMarker(Rect plot, float value, Color color) =>
