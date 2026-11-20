@@ -4,6 +4,27 @@ Fecha: 2026-11-17. Rama: `main`. Sigue a `NoiseLab_v6_Startup.md` («Progreso»,
 al diseño en `Fluids_Module_Design.md` («Subpasos» y «Añadido el 2026-11-17») y a la fila O4 de
 `NoiseLab_Migration_Matrix.md`.
 
+## Estado al 2026-11-20 (leer primero)
+- **Paso 1 hecho y commiteado** (`9fd00fb`): anomalía del mar en el clima, Biomes en ×4/×16; probado en el editor y el S22.
+- **Paso 2 implementado, sin commit** (`NoiseLab.cs` modificado): término de temperatura
+  `+ seaW·anom/(1 + cd/seaReach)` en `ClimateManaged` y `ViewClimateJob` (también en `BigBiomes`), perillas
+  «Sea → coast temp» (0.5) y «Sea reach» (10 celdas ≈ 50 km) en `OceanSliders`, `cl=` con 10 valores
+  (los códigos de 8 valores siguen valiendo: peso 0, alcance 10), línea «land temp from the sea» en el resumen.
+  Suite 415/415 por el puente (2026-11-18 17:20). **Probado por Claudio el 2026-11-20:** Burst check del clima
+  max |Δ| 1.19E-07 y 0.000 % de biomas cambiados; prueba de borde con margen, 0.02 %. En la costa de la receta
+  (mar casi normal, −0.22 °C) el efecto es ~0, como debe ser. En una costa fría (lat 20–31°N, mar −9.3 °C), con
+  peso 1 y alcance 30, la tierra se enfría hasta −0.334 (más que una banda de bioma) en 21.905 celdas. Lo que se ve:
+  la costa pasa a un verde oscuro (bosque frío), porque la humedad todavía no baja; el desierto llega con el paso 3.
+- **Receta oficial: océano profundo** (`c=-1:-1.4,0:-1,0.1:-0.3,0.2:0.25,0.5:0.4,1:0.7/...`). La curva C poco
+  profunda (`0:-0.4`) deja asomar el detalle de picos (PV hasta +0.6) como archipiélago.
+- **Roadmap PL-16** (huecos del modelo de clima) escrito, sin commit.
+- **Idea de Claudio (2026-11-20): barra de escala** en la vista y en ×4/×16 («100 km»), como la que dibujó a mano
+  sobre una captura. Una celda del mapa de 256 ≈ 4,9 km (vista ≈ 1250 km); en ×4/×16, multiplicar por la escala.
+  Largo «redondo» (1-2-5 × 10ⁿ km) de ~1/5 del ancho, en la esquina superior izquierda, solo dibujo (no toca el
+  clima ni el código NL1). Pequeña: entra antes del paso 3 o junto con él.
+- Siguiente: paso 3 (humedad: `coastalMoistureBonus·exp(k·ΔT)`, pickUp por celda, flujo, BigBiomes, `cl=` 11.º valor),
+  luego paso 4 (Burst check, prueba de borde, S22, antes/después) y cierre.
+
 ## Objetivo
 Que el clima de la tierra lea la temperatura del mar de la 2b: una costa con mar frío
 (afloramiento, corriente fría) sale **más fresca y más seca**, y una con mar cálido, más

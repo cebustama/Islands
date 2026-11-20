@@ -1702,3 +1702,17 @@ vegetation — recalibrating vegetation densities for those biomes would change 
 **Idea (Claudio):** NoiseLab is the validated restructuring of what the engine offers: ideas are proven there first (editor + S22) and migrate later. A standing record lists every piece NoiseLab has and the engine lacks (relief R1–R5, climate C1–C9, ocean O1–O4, adapters/tools T1–T7), what the engine has that NoiseLab does not yet validate (FV1–FV10), and five structural decisions that block any migration (MD-1 open world vs finite grid, MD-2 window independence, MD-3 quantile reference, MD-4 Burst in core, MD-5 island mask vs continents).  
 **Source:** `Documentation~/planning/active/NoiseLab_Migration_Matrix.md`.  
 **Status:** Record only, kept current as NoiseLab steps close. Not implementation authority; each migration is its own batch with design, tests and goldens. MD-1…MD-5 undecided.
+
+
+### PL-16 — Climate model gaps: why continent interiors are only tundra and desert (NoiseLab, after v6)
+**Date:** 2026-11-18  
+**Observation (Claudio, World ×16 with Biomes colour, 2c step 1):** far from the coast, continents are almost only Tundra (cold, dry) and Temperate Desert (cool, dry), with Grassland in the equatorial band; greens hug the coasts. Cause: moisture only comes from coast distance (decays within a few cells), sea air carried by one wind, and noise; latitude only cools. At ×16 a continent is thousands of cells wide, and its interior is high (curve C) and so cold too. Claudio wants every gap considered for the plan:  
+1. **Rain belts by latitude** (Hadley / Ferrel / polar cells): wet equator (ITCZ), dry ~30°, wet ~50–60° (polar front), dry poles. A latitude term in moisture, like the coast term. Main cause; cheapest.  
+2. **Wind by latitude bands**: trade winds (easterlies) in the tropics, westerlies at mid latitudes, polar easterlies. Carries sea air deep inland from the correct side. Zonal only first; N–S components later (out of scope in 2c).  
+3. **Moisture recycling**: vegetation evaporates and rains again further downwind (Amazon to the Andes). In the air transport, land gives back part of the moisture according to the moisture already there.  
+4. **Aridity, not raw moisture**: Whittaker reads precipitation against temperature; cold land needs less water (taiga with little rain). Biome lookup by `rain − evaporation(temp)` or a temperature-dependent moisture threshold.  
+5. **Temperature by real altitude, not rank**: the lapse uses the height rank, so any continent interior is cold. Revisit together with the curve C recipe.  
+6. **Rivers** (PL-14, H1): green corridors through dry land (the Nile); local, not broad.  
+7. **Continentality**: interiors with wider seasonal range (only matters if seasons enter).  
+**Source:** this entry; screenshots in the 2c session (2026-11-18).  
+**Status:** Recorded idea, after NoiseLab v6. Order and scope undecided; 1 and 4 look smallest, 2 touches the wind model, 3 the air transport.

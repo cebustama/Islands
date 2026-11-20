@@ -165,6 +165,9 @@ public class NoiseLab : MonoBehaviour
     [SerializeField, Range(0.1f, 1f)] float oceanWidth = 0.25f;          // western current width, view widths
     [SerializeField, Range(0.25f, 8f)] float heatMemory = 2f;            // 2b: how far the sea carries its temperature, view widths at the interior speed
     [SerializeField, Range(0f, 1f)] float upwelling = 0.5f;              // 2b step 3: strength of the coastal upwelling
+    [SerializeField, Range(0f, 1f)] float seaTempWeight = 0.5f;          // 2c step 2: the sea's anomaly in the coast's temperature
+    [SerializeField, Range(1f, 40f)] float seaReach = 10f;               // 2c step 2: how far inland the sea's temperature reaches, cells of a 256 map
+    const float SeaAnomScale = 30f; // 2c: °C of sea anomaly that make 1 on the climate's 0–1 scale
 
     const float LatitudeSpan = 8f;   // view widths from the equator to a pole
     const float CoastUnits = 256f;   // coast distance unit: one cell of a 256 map
@@ -1004,6 +1007,9 @@ public class NoiseLab : MonoBehaviour
                 ? math.saturate((float)(LowerBound(source, extValues[i]) - below) / landCount)
                 : 0f;
 
+        // 2c step 2: the sea's anomaly (null with Currents off) shifts the coast like Coast does.
+        float[] sea = extSeaAnom;
+        float seaW = seaTempWeight / SeaAnomScale, seaInv = 1f / seaReach;
         for (int y = 0; y < n; y++)
         {
             float yWorld = offset.y + (y + 0.5f) / n;
@@ -1011,13 +1017,15 @@ public class NoiseLab : MonoBehaviour
             for (int x = 0; x < n; x++)
             {
                 int i = y * n + x;
-                float rank = extRank[(y + mB) * w + x + mL];
+                int e = (y + mB) * w + x + mL;
+                float rank = extRank[e];
                 float cd = coast[i] * toUnits;
 
                 float t = baseTemperature
                         - lapseRate * rank
                         - latitudeEffect * lat
                         + coastModeration / (1f + cd)
+                        + (sea != null ? seaW * sea[e] / (1f + cd * seaInv) : 0f)
                         + tempNoiseAmplitude * 0.5f * tn[i];        // amplitude · (noise01 − 0.5)
                 temp[i] = math.saturate(t);
             }
@@ -1084,6 +1092,8 @@ public class NoiseLab : MonoBehaviour
         // so it gets its own (two parallel jobs may not write the same array).
         var probe = new NativeArray<int>(1, Allocator.TempJob);
         var rankProbe = new NativeArray<int>(1, Allocator.TempJob);
+        bool hasSea = extSeaAnom != null; // 2c step 2
+        var seaA = hasSea ? new NativeArray<float>(extSeaAnom, Allocator.TempJob) : new NativeArray<float>(1, Allocator.TempJob);
         try
         {
             var hRank = new RankJob
@@ -1127,6 +1137,7 @@ public class NoiseLab : MonoBehaviour
             new ViewClimateJob
             {
                 extCoast = dist, extRank = rank, extAir = air, tn = tn, mn = mn,
+                extSea = seaA, sea = hasSea, seaW = seaTempWeight / SeaAnomScale, seaInv = 1f / seaReach,
                 coast = coastV, temp = tempV, moist = moistV, air = airV,
                 n = n, w = w, mL = mL, mB = mB, wind = wind, toUnits = CoastUnits / n,
                 offsetY = offset.y, latitudeSpan = LatitudeSpan, span = 1f,
@@ -1154,7 +1165,7 @@ public class NoiseLab : MonoBehaviour
         {
             heights.Dispose(); sorted.Dispose(); rank.Dispose(); dist.Dispose(); air.Dispose();
             tn.Dispose(); mn.Dispose(); coastV.Dispose(); tempV.Dispose(); moistV.Dispose(); airV.Dispose();
-            probe.Dispose(); rankProbe.Dispose();
+            probe.Dispose(); rankProbe.Dispose(); seaA.Dispose();
         }
     }
 
@@ -2059,22 +2070,31 @@ public class NoiseLab : MonoBehaviour
     // 2c: what the coast of the view reads from the sea. Land within SeaCoastCells (cells of
     // a 256 map) of the sea: how many, the mean anomaly, the coldest and how many under −2 °C.
     const float SeaCoastCells = 4f;
-    int seaCoastLand, seaCoastCold;
-    float seaCoastMean, seaCoastMin;
+    int seaCoastLand, seaCoastCold, seaShiftCells;
+    float seaCoastMean, seaCoastMin, seaShiftMin, seaShiftMax;
 
     void SeaCoastStats()
     {
         seaCoastLand = seaCoastCold = 0;
         seaCoastMean = seaCoastMin = 0f;
+        seaShiftCells = 0;
+        seaShiftMin = seaShiftMax = 0f;
         if (extSeaAnom == null) return;
         int n = sampleN, w = extW;
         float toUnits = CoastUnits / n;
+        float seaW = seaTempWeight / SeaAnomScale, seaInv = 1f / seaReach;
         double sum = 0.0;
         for (int y = 0; y < n; y++)
             for (int x = 0; x < n; x++)
             {
                 int i = y * n + x;
-                if (values[i] < threshold || coast[i] * toUnits > SeaCoastCells) continue;
+                if (values[i] < threshold) continue;
+                // Step 2: the shift the sea gives this land cell's temperature (0.25 = one biome band).
+                float shift = seaW * extSeaAnom[(y + mB) * w + x + mL] / (1f + coast[i] * toUnits * seaInv);
+                seaShiftMin = Mathf.Min(seaShiftMin, shift);
+                seaShiftMax = Mathf.Max(seaShiftMax, shift);
+                if (Mathf.Abs(shift) >= 0.05f) seaShiftCells++;
+                if (coast[i] * toUnits > SeaCoastCells) continue;
                 float a = extSeaAnom[(y + mB) * w + x + mL];
                 sum += a;
                 seaCoastMin = Mathf.Min(seaCoastMin, a);
@@ -2094,7 +2114,7 @@ public class NoiseLab : MonoBehaviour
                $"sea temp: memory {F(heatMemory)}, {r.heatRounds} rounds{(r.heatChange < SeaHeatTolerance ? "" : " NOT SETTLED")}, {r.heatMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.heatState)}), " +
                $"mean |T − T0| {r.heatAnomaly:0.00} °C; upwelling {F(upwelling)}: {r.upCells} coast cells, mean T − T0 {r.upAnomaly:0.00} °C, coldest {r.upColdest:0.00} °C; " +
                $"view {oceanMs:0.0} ms (sampling {seaGridMs:0.0} ms, {GridNoiseJob<Simplex2D<Simplex>>.StateName(oceanSampleState)}; climate grid {extW}×{extH}); " +
-               $"coast land (≤{SeaCoastCells:0} cells): {seaCoastLand}, sea T − T0 mean {seaCoastMean:0.00} °C, coldest {seaCoastMin:0.00} °C, under −2 °C: {seaCoastCold}";
+               $"coast land (≤{SeaCoastCells:0} cells): {seaCoastLand}, sea T − T0 mean {seaCoastMean:0.00} °C, coldest {seaCoastMin:0.00} °C, under −2 °C: {seaCoastCold}; land temp from the sea (weight {F(seaTempWeight)}, reach {seaReach:0}): coldest {seaShiftMin:+0.000;-0.000}, warmest {seaShiftMax:+0.000;-0.000} (0.25 = a biome band), cells ≥ 0.05: {seaShiftCells}";
     }
 
     void OceanControls()
@@ -2135,6 +2155,10 @@ public class NoiseLab : MonoBehaviour
             "How far the sea carries its temperature before it takes the one of its latitude, in view widths at the slow interior speed (a view is about 11° of latitude). Fast currents carry it farther: the west current is many times faster. Low = straight isotherms; high = warm water far toward the poles, cold toward the equator."));
         upwelling = R2(Slider("Upwelling", upwelling, 0f, 1f, "0.00",
             "Cold water rising on the west coast of the continents, where the current runs toward the equator along the coast (Humboldt, Benguela, California). 0 = none; 0.5 = about halfway to 10 °C at the interior speed."));
+        seaTempWeight = R2(Slider("Sea → coast temp", seaTempWeight, 0f, 1f, "0.00",
+            "How much the sea's temperature reaches the land: a coast by a cold sea is cooler, by a warm sea milder, fading inland. It reads how far the sea is from the usual of its latitude (T − T0, 30 °C = the whole temperature scale). 0 = the land ignores the sea."));
+        seaReach = Mathf.Round(Slider("Sea reach", seaReach, 1f, 40f, "0",
+            "How far inland the sea's temperature reaches: at this distance it is half as strong. In cells of a 256 map (about 5 km each); 10 ≈ 50 km, like the cool coastal strip of Peru or California. 1 = fades as fast as Coast."));
     }
 
     static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp", "Temp anomaly", "Biomes" };
@@ -2201,6 +2225,7 @@ public class NoiseLab : MonoBehaviour
         var u = new float[cells];
         var v = new float[cells];
         var field = bigColour != BigColour.Speed ? new float[cells] : null; // psi or temperature
+        var seaAnom = bigColour == BigColour.Biomes && ocean ? new float[cells] : null; // 2c: T − T0 for the land's climate
         var pixels = new Color32[cells];
         for (int x = 0; x < n; x++)
         {
@@ -2221,7 +2246,11 @@ public class NoiseLab : MonoBehaviour
                 if (bigColour == BigColour.Gyres)
                     field[i] = Mathf.Lerp(SampleRegionPsi(r0, wx, wy), SampleRegionPsi(r1, wx, wy), b);
                 else if (bigColour == BigColour.SeaTemp || bigColour == BigColour.Anomaly || bigColour == BigColour.Biomes)
+                {
                     field[i] = Mathf.Lerp(SampleRegionField(r0, r0.temp, wx, wy), SampleRegionField(r1, r1.temp, wx, wy), b);
+                    if (seaAnom != null)
+                        seaAnom[i] = Mathf.Lerp(SampleRegionField(r0, r0.anom, wx, wy), SampleRegionField(r1, r1.anom, wx, wy), b);
+                }
                 else
                     pixels[i] = CurrentColour(heights[i], u[i], v[i]);
             }
@@ -2232,7 +2261,7 @@ public class NoiseLab : MonoBehaviour
         else if (bigColour == BigColour.Biomes)
         {
             AnomalyColours(pixels, n, heights, field, bigOrigin.y, step); // the sea as in Temp anomaly
-            BigBiomes(pixels, heights);
+            BigBiomes(pixels, heights, seaAnom);
         }
         CurrentArrows(pixels, n, n / 32, heights, u, v);
         if (bigPicture == null)
@@ -2335,9 +2364,10 @@ public class NoiseLab : MonoBehaviour
         $"{bigHeightsKey}|{F(threshold)}|{FieldKey(FTemp)}|{FieldKey(FMoist)}|" +
         $"{F(baseTemperature)}|{F(lapseRate)}|{F(latitudeEffect)}|{F(coastModeration)}|{F(tempNoiseAmplitude)}|" +
         $"{F(moistureNoiseAmplitude)}|{F(coastalMoistureBonus)}|{F(coastDecayRate)}|" +
-        $"{wind}|{F(windAngle)}|{F(windStrength)}|{F(windLift)}|{F(windDry)}|{F(windEvaporation)}";
+        $"{wind}|{F(windAngle)}|{F(windStrength)}|{F(windLift)}|{F(windDry)}|{F(windEvaporation)}|" +
+        $"{ocean}|{F(oceanWidth)}|{HeatKey()}|{F(seaTempWeight)}|{F(seaReach)}"; // 2c: the sea reaches the land
 
-    void BigBiomes(Color32[] pixels, float[] heights)
+    void BigBiomes(Color32[] pixels, float[] heights, float[] seaAnom)
     {
         int n = BigN, cells = n * n;
         string key = BigClimateKey();
@@ -2370,6 +2400,8 @@ public class NoiseLab : MonoBehaviour
             var airV = new NativeArray<float>(wind ? cells : 1, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
             var probe = new NativeArray<int>(1, Allocator.TempJob);
             var rankProbe = new NativeArray<int>(1, Allocator.TempJob);
+            bool hasSea = seaAnom != null;
+            var seaA = hasSea ? new NativeArray<float>(seaAnom, Allocator.TempJob) : new NativeArray<float>(1, Allocator.TempJob);
             try
             {
                 var hRank = new RankJob
@@ -2402,6 +2434,7 @@ public class NoiseLab : MonoBehaviour
                 new ViewClimateJob
                 {
                     extCoast = dist, extRank = rank, extAir = air, tn = tn, mn = mn,
+                    extSea = seaA, sea = hasSea, seaW = seaTempWeight / SeaAnomScale, seaInv = 1f / seaReach,
                     coast = coastV, temp = tempV, moist = moistV, air = airV,
                     n = n, w = n, mL = 0, mB = 0, wind = wind, toUnits = toUnits,
                     offsetY = bigOrigin.y, latitudeSpan = LatitudeSpan, span = bigScale,
@@ -2419,7 +2452,7 @@ public class NoiseLab : MonoBehaviour
             {
                 nHeights.Dispose(); sorted.Dispose(); rank.Dispose(); dist.Dispose(); air.Dispose();
                 tn.Dispose(); mn.Dispose(); coastV.Dispose(); tempV.Dispose(); moistV.Dispose(); airV.Dispose();
-                probe.Dispose(); rankProbe.Dispose();
+                probe.Dispose(); rankProbe.Dispose(); seaA.Dispose();
             }
             bigClimateKey = key;
             bigClimateMs = (float)watch.Elapsed.TotalMilliseconds;
@@ -3284,7 +3317,8 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes)
             code += $";k=z;n4={FieldCode(FTemp)};n5={FieldCode(FMoist)};cl=" +
                     string.Join(",", F(baseTemperature), F(lapseRate), F(latitudeEffect), F(coastModeration),
-                                F(tempNoiseAmplitude), F(coastalMoistureBonus), F(coastDecayRate), F(moistureNoiseAmplitude));
+                                F(tempNoiseAmplitude), F(coastalMoistureBonus), F(coastDecayRate), F(moistureNoiseAmplitude),
+                                F(seaTempWeight), F(seaReach)); // 2c: 9th and 10th values
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
@@ -3371,6 +3405,8 @@ public class NoiseLab : MonoBehaviour
         oceanWidth = 0.25f;
         heatMemory = 2f; // 2b: a 2a code (oc= with one value) keeps the default
         upwelling = 0.5f;
+        seaTempWeight = 0.5f;
+        seaReach = 10f;
         // v4: a code without v= opens one panel with the map.
         viewCount = 1;
         DefaultPanels.CopyTo(panelShow, 0);
@@ -3534,9 +3570,9 @@ public class NoiseLab : MonoBehaviour
     void ReadClimate(string text)
     {
         string[] p = text.Split(',');
-        if (p.Length != 8) return;
-        var v = new float[8];
-        for (int i = 0; i < 8; i++) if (!TryF(p[i], out v[i])) return;
+        if (p.Length < 8 || p.Length > 10) return; // 2c: 9th Sea → coast temp, 10th Sea reach; old codes have 8
+        var v = new float[p.Length];
+        for (int i = 0; i < p.Length; i++) if (!TryF(p[i], out v[i])) return;
         baseTemperature = Mathf.Clamp01(v[0]);
         lapseRate = Mathf.Clamp01(v[1]);
         latitudeEffect = Mathf.Clamp01(v[2]);
@@ -3545,6 +3581,8 @@ public class NoiseLab : MonoBehaviour
         coastalMoistureBonus = Mathf.Clamp01(v[5]);
         coastDecayRate = Mathf.Clamp01(v[6]);
         moistureNoiseAmplitude = Mathf.Clamp01(v[7]);
+        seaTempWeight = p.Length > 8 ? Mathf.Clamp01(v[8]) : 0f; // old codes: the land ignores the sea, as before
+        seaReach = p.Length > 9 ? Mathf.Clamp(v[9], 1f, 40f) : 10f;
     }
 
     void ReadWind(string text)
@@ -5230,10 +5268,12 @@ struct WindJob : IJob
 struct ViewClimateJob : IJobFor
 {
     [ReadOnly] public NativeArray<float> extCoast, extRank, extAir, tn, mn;
+    [ReadOnly] public NativeArray<float> extSea; // 2c: sea T − T0 °C on the ext grid (length 1 when !sea)
     [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> coast, temp, moist, air;
     [NativeDisableParallelForRestriction] public NativeArray<int> probe;
     public int n, w, mL, mB;
-    public bool wind;
+    public bool wind, sea;
+    public float seaW, seaInv; // 2c: seaTempWeight / SeaAnomScale, 1 / seaReach
     public float toUnits, offsetY, latitudeSpan;
     public float span; // 2c: view widths the n rows cover (1 for the view; the big picture's scale for its Biomes colour)
     public float baseTemperature, lapseRate, latitudeEffect, coastModeration, tempNoiseAmplitude;
@@ -5255,6 +5295,7 @@ struct ViewClimateJob : IJobFor
                     - lapseRate * extRank[e]
                     - latitudeEffect * lat
                     + coastModeration / (1f + cd)
+                    + (sea ? seaW * extSea[e] / (1f + cd * seaInv) : 0f)
                     + tempNoiseAmplitude * 0.5f * tn[i];
             temp[i] = math.saturate(t);
 

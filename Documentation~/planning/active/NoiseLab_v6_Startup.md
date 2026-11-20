@@ -186,3 +186,9 @@ build Android y las mediciones.
   nítidos); el afloramiento más frío (−12 a −13 °C) cae en celdas tropicales; con West current
   1 el residual de las corrientes queda en 0,0099 (al borde de la tolerancia; 2a, sin tocar).
   Siguiente: **2c**, `NoiseLab_v6_2c_Startup.md`.
+- **2c, pasos 1 y 2 hechos** (2026-11-18/20; `9fd00fb` y el commit del cierre del 2026-11-20): el clima lee la
+  anomalía del mar (T − T0), color *Biomes* en ×4/×16, y el mar enfría o templa la costa con *Sea → coast temp*
+  y *Sea reach* (`cl=` de 10 valores). Burst check del clima 0 % de biomas distintos, prueba de borde 0,02 %;
+  en una costa a −9,3 °C la tierra baja 0,33 (más de una banda). Receta oficial con océano profundo
+  (`c=-1:-1.4,0:-1,…`). Falta el paso 3 (humedad: el Atacama) y el 4 (verificación). Detalle en
+  `NoiseLab_v6_2c_Startup.md`, «Estado al 2026-11-20».
