@@ -165,3 +165,18 @@ Ideas, links and videos delivered with `/capturar` that belong to Islands. Most 
 - 💡 **Possible use here:** yes. Height quantized into a few terraces (the quantile bands), ¾ view where a higher plateau draws a wall of (level difference × k) tiles on its south edge (painted north to south), dual-grid autotiling for edges (~16 pieces per terrain pair), tileset chosen by biome, local rules for waterfalls (river over a wall, after hydrology H1) and caves. Added as a row in family B of [`NoiseLab_Views_Catalog.md`](../planning/exploration/NoiseLab_Views_Catalog.md). The hard part is the tileset, not the code; FF6 tiles only for private tests.
 - **Connects with:** mundo-islas (zoom to the tile, world map as a 16-bit JRPG), web (tileset generated from a palette, like the araucaria sprites).
 - **Status:** saved; after v6, with the other views. Possible quick web prototype with a placeholder tileset.
+
+## 2026-11-23 — Painterly pixel-art landscape as a target for the local view (image, franek_pixelart)
+
+- **What:** a pixel-art landscape from a Threads post by franek_pixelart (promoting a Steam game, not identified). Top-down with a slight tilt, no visible grid, ~12-colour indexed palette: speckled meadow in 3–4 greens, dark tree clusters with ink outlines and a shadow to the lower right, two cottages, a winding dirt path, water in a corner. Image: [`referencias-visuales/nuevas/2026-11-23-franek-paisaje/`](../../../referencias-visuales/nuevas/2026-11-23-franek-paisaje/README.md) (third-party; reference only).
+- **What Claudio said:** «Cómo podemos generar un paisaje con este tipo de artstyle utilizando nuestro motor de generación procedural?»
+- 💡 **Recipe with the current pipeline** (the data layers exist; what is missing is a renderer):
+  1. **Data:** height + noise, biome (Phase M), lake/river (Phase L).
+  2. **Ground:** per pixel, a continuous field (noise + moisture + height) quantized to 3–4 greens of an indexed palette chosen by biome; add high-frequency noise or Bayer dithering before quantizing for the speckle (the NoiseLab quantile bands, at pixel scale).
+  3. **Trees:** Poisson/blue-noise points filtered by a low-frequency noise mask, so they form clumps; stamp generated sprites (ink outline, top-left light, cast shadow), sorted by Y. The web Flora generators already give role-based pixel palettes.
+  4. **Houses and path:** houses on flat ground near water; path by A* over a cost field (slope + water), drawn with a 2–3 px ragged dirt brush.
+  5. **Scale:** generate at ~128×96, upscale nearest-neighbour; fake the tilt by lifting each sprite by its height.
+- **Open question:** the art direction (`web/.../reference/art-direction.md` §5) fixes Islands pixel art on a 16/32 grid with ink outlines; this is gridless, painterly pixel art (easier to generate per pixel, harder as tiles). Decide which is the game's style, or this one for the zoom-in and the grid for the world map. Note that the houses and path look hand-placed; the truly generable part is ground and clumps.
+- **Connects with:** Phase W (zoom-in to a cell: this is a local view), Phase Q (biome would pick the ground palette instead of tiles), mundo-islas (salt_pilgrim capture of 2026-11-13, same "hand-composed villages" problem), web Flora Lab (tree sprites).
+- **Further reading:** Lucas Pope, "Dithering on the GPU" (*Return of the Obra Dinn* devlog, TIGSource); Red Blob Games, "Making maps with noise" and "Poisson disc sampling"; Lospec palette list.
+- **Status:** seed. After the ALWTTT demo and v7; a quick web Lab prototype with 2–3 variants (aesthetic gate) is the cheapest first test.
