@@ -2,6 +2,17 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-22 · Flowers that vanish with distance (memoryfloater)
+- **Type and origin:** video (Instagram reel, https://www.instagram.com/reel/DgAFMl4o27h/), by memoryfloater, «I have some flowers for everyone!». Not opened (Instagram asks for login); built from 8 screenshots.
+- **What Claudio said:** «Si guarda».
+- **What it is:** a 3D foliage rendering trick. Each flower is a quad with an alpha-cutout texture (cutoff 0.5). Far away the GPU samples a small mip, the thin stem averages below 0.5 and breaks up, so the flower vanishes. Fix: scale each flower up with distance and draw fewer of them (same look, lower cost; scaling alone raises cost and causes flicker). Plus a mesh fitted to the silhouette (6 vs 284 triangles) to cut transparent overdraw; at best, an opaque shader. Ends with a stylized island full of flower meadows.
+- 💡 **Possible use here:**
+  - **Now, as a lesson for the zoomed-out views:** it is the same thing that happens in World ×4/×16. Averaging cells pushes thin features (a coastal strip, a river) below the threshold and they disappear. Downsampling must preserve coverage, not just average. Applies to H1 rivers in ×16 (link in [`Hydrology_Module_Design.md`](../planning/active/Hydrology_Module_Design.md) §4) and to the future continuous zoom.
+  - **Later, with a 3D adapter:** «scale + fewer» as the vegetation placement rule per biome. Unity already has *Mip Maps Preserve Coverage* in the texture importer.
+- **To go deeper:** Ben Golus, «Anti-aliased Alpha Test: The Esoteric Alpha to Coverage» (Medium, 2017); Ignacio Castaño, «Computing Alpha Mipmaps» (2010, *The Witness*).
+- **Connects with:** web (Flora Lab: flowers after the palm; any 3D scene), mundo-islas (the world in 3D, far off).
+- **Status:** seed. Not a front: after v6 and hydrology.
+
 ## 2026-11-19 · «One Ocean, One Year»: ocean currents as streaks
 - **Type and origin:** image (screenshot) + link (Instagram reel, https://www.instagram.com/reel/Df79KxphZMx/), by Aaron J. Becker, mapped.earth, dated 4 May 2026. The reel was not opened (Instagram asks for login); this note is built from the screenshot. Private reference copy in [`referencias-visuales/nuevas/2026-11-19-corrientes-spilhaus/`](../../../referencias-visuales/nuevas/2026-11-19-corrientes-spilhaus/).
 - **What Claudio said:** «Me gusta mucho esta imagen, los colores y la forma en que muestra el movimiento de las corrientes, qué tan factible es incorporar algo así a los mundos de NoiseLabs?»
