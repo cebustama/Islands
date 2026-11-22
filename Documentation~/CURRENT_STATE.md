@@ -52,8 +52,12 @@ W.c implemented and committed, governed docs pending; noise range fix A+D merged
   clouds and climate as Burst jobs (`FloatMode.Strict`; S22: 0 of 327 680 noise values
   differ), Burst toggle and Burst check, scrollable pages. S22: sample on release 13–35 ms
   at 256² with margin, clouds ~2 ms per frame, climate 18.5 ms. Detail in
-  `changelog-ssot.md`. Next on this track: NoiseLab v6, fluids (wind around the relief,
-  ocean currents), scope to confirm (`planning/active/NoiseLab_v6_Startup.md`).
+  `changelog-ssot.md`. **NoiseLab v6 DONE 2026-11-22** (`4de55fc` … `1487c1f` + closing docs):
+  wind around the relief, ocean currents on a coarse world grid, continents and World ×16, sea
+  temperature with upwelling, and the climate reads the sea (cold coasts cooler and drier). S22:
+  Burst check 0 differences, Edge test 0.09 % biomes, climate 33 ms. Detail in
+  `changelog-ssot.md`. Next on this track: NoiseLab v7, closed planet and plates layer
+  (`planning/active/NoiseLab_v7_Startup.md`).
 - **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
   merged into `main` after a user-confirmed visual smoke test.**
   The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s

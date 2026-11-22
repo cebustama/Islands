@@ -192,3 +192,9 @@ build Android y las mediciones.
   en una costa a −9,3 °C la tierra baja 0,33 (más de una banda). Receta oficial con océano profundo
   (`c=-1:-1.4,0:-1,…`). Falta el paso 3 (humedad: el Atacama) y el 4 (verificación). Detalle en
   `NoiseLab_v6_2c_Startup.md`, «Estado al 2026-11-20».
+- **2c cerrada y v6 completa** (2026-11-22): paso 3 (el mar frío seca la costa: techo de humedad
+  `min(1, e^(k·ΔT))`, perilla *Sea → coast moisture*, por defecto 3; `1487c1f`), barra de escala
+  (`7a9f7ff`) y pegado de códigos robusto. Paso 4 en el editor y el S22: Burst check 0 diferencias,
+  clima 0,000 % de biomas, prueba de borde 0,09 %, clima 33 ms en el S22. Detalle en
+  `NoiseLab_v6_2c_Startup.md` y en `changelog-ssot.md` («NoiseLab v6»). Siguiente: **NoiseLab v7**,
+  planeta cerrado y capa de placas (`../active/NoiseLab_v7_Startup.md`).

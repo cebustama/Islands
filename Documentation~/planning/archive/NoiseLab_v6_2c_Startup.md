@@ -4,7 +4,15 @@ Fecha: 2026-11-17. Rama: `main`. Sigue a `NoiseLab_v6_Startup.md` («Progreso»,
 al diseño en `Fluids_Module_Design.md` («Subpasos» y «Añadido el 2026-11-17») y a la fila O4 de
 `NoiseLab_Migration_Matrix.md`.
 
-## Estado al 2026-11-20, noche (leer primero)
+## Cerrada el 2026-11-22
+Paso 4 hecho, en el editor y en el S22 (export del 2026-11-22 23:14): Burst check 0 de 327.680
+valores distintos; clima 0,000 % de biomas distintos (humedad máx. |Δ| 1,2e-7); prueba de borde con
+margen 0,09 % de 21.333 celdas (sin margen 32,7 %); clima 33 ms, World ×16 38 ms. En ×16 (color
+*Biomes*) la costa oeste fría sale desierta y las costas con mar cálido solo tienen una franja verde
+fina. Humedad de la costa fría 0,350 en el S22, igual que en el editor. **DoD cumplida; la v6 queda
+completa.** Siguiente: `../active/NoiseLab_v7_Startup.md` (planeta cerrado y capa de placas).
+
+## Estado al 2026-11-20, noche
 - **Paso 1** en `9fd00fb`; **paso 2** en `eb98ede` (subido). **Barra de escala** en `7a9f7ff` (vista, foco, ×4/×16; 1-2-5 × 10ⁿ km, ~1/5 del ancho; probada por Claudio).
 - **Paso 3 hecho (humedad):** el mar pone un techo a la humedad del aire, `min(1, e^(k·ΔT))` con `k = peso · 0,07/°C`
   (Clausius–Clapeyron): sobre un mar frío el aire va hacia ese techo en vez de hacia 1, en el barrido (`WindField`/`WindJob`),

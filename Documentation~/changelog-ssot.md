@@ -9,6 +9,46 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## NoiseLab v6 — wind around the relief, ocean currents, sea temperature, climate reads the sea (sample only)
+Date: 2026-11-06/22. Commits on `main`, from `4de55fc` (step 1a) to `1487c1f` (2c step 3); main ones:
+`4de55fc`, `c0e5e3c`, `cc218c4`, `aa7896d` (wind and air on the flow grid), `d31d0f8` (2a currents),
+`fdf6eab`, `ffd954f`, `13c6dd1` (continents, World ×16, Gyres), `b3688c8`, `a507225`, `c4a54fa`
+(2b sea temperature, transport, upwelling), `9fd00fb`, `eb98ede`, `7a9f7ff`, `1487c1f` (2c). No runtime
+code changed.
+
+**What.** `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs`:
+- Wind that goes around the relief (pressure projection on a flow grid at a quarter of the climate
+  grid) and moisture carried by that flow until it settles.
+- Ocean currents (Stommel stream function with β and zonal wind) on a coarse grid fixed to the
+  world, in regions of 16×16 view widths. Fractional field frequencies (0.05–32) for continents;
+  *Zoom out ×4* and *World ×16* (pole to pole) pictures with *Gyres*, *Sea temp*, *Temp anomaly* and
+  *Biomes* colours, ocean sliders and seed inside the picture.
+- Sea temperature: base by latitude, carried by the currents (upwind finite volumes + relaxation,
+  *Heat memory*), coastal upwelling on west coasts.
+- 2c, the climate reads the sea: the sea anomaly (T − T0) on the climate grid; *Sea → coast temp*
+  and *Sea reach* cool or warm the coast; *Sea → coast moisture* caps the air's moisture over the
+  sea at `min(1, e^(k·ΔT))`, `k = weight · 0.07/°C` (Clausius–Clapeyron), in the sweep, the flow
+  (cap per block) and the big pictures; default weight 3, a calibration standing in for
+  subtropical subsidence (PL-16 item 8). Scale bar (1-2-5 × 10ⁿ km) on the view, focus and big
+  pictures. Codes: `oc=`, `cl=` with up to 11 values (old codes read the new ones as 0: same bits).
+- Robust paste: whitespace stripped; a part that cannot be read is reported («NOT READ, left at
+  default: …») instead of silently keeping the default (the shallow C curve gave the recurring
+  «thousand islets» coasts).
+
+**Measured (2026-11-22, S22 export and editor).** Burst check: 0 of 327 680 noise values differ;
+climate biome changed 0.000 % (moisture max |Δ| 1.2e-7). Edge test with margin: 0.09 % of 21 333 land
+cells change biome (0.02 % before 2c step 3; without margin 32.7 %). S22: climate 33 ms, World ×16
+38 ms, view 4 ms. Cold west coast (lat 25–36°N, sea −7.5 °C): coast moisture 0.947 (weight 0) →
+0.350 (weight 3): steppe or desert to the shore, the Atacama case.
+
+**Known limits.** No rain belts by latitude, interiors only tundra and desert (PL-16); no mixing
+between gyres; islands thinner than a cell do not exist for the ocean; the world is an infinite
+strip in longitude, not a closed planet (next: NoiseLab v7, PL-17).
+
+**Startups:** `planning/archive/NoiseLab_v6_Startup.md` (progress of every step),
+`planning/archive/NoiseLab_v6_2c_Startup.md`. Migration rows O1–O4 validated
+(`planning/active/NoiseLab_Migration_Matrix.md`).
+
 ## NoiseLab v5 — climate beyond the view, Burst sampling, clouds and climate (sample only)
 Date: 2026-11-05/06. Commits `0cf2af4` (margin), `1d80144` (Burst sampling, scroll),
 `8890317` (clouds in Burst), `caa852d` (climate in Burst) on `main` (local). No runtime code

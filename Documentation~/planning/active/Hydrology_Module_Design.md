@@ -3,7 +3,7 @@
 Documento de diseño, **propuesta**: no es autoridad hasta que cada paso tenga su arranque y Claudio lo cierre. Manda el código; el estado del paquete está en `CURRENT_STATE.md` y en `Phase_L_Design.md`.
 
 - **Origen:** la captura de los mapas de Harold Fisk (1944) y el lab web «El río que se mueve», publicado el 2026-11-17 (https://claudiobustamante.com/labs/islands/meanders/). Claudio, al cerrarlo: «más que cerrar la tangente, me gustaría incluirla en la planificación para el diseño de NoiseLab e Islands, en el componente de hidrología del motor».
-- **Orden aceptado por Claudio (2026-11-17):** H1 ríos → H2 erosión con edad → H3 meandros → H4 deltas. Va **después de NoiseLab v6** (2b y 2c del módulo de fluidos), y el foco general sigue en ALWTTT.
+- **Orden aceptado por Claudio (2026-11-17):** H1 ríos → H2 erosión con edad → H3 meandros → H4 deltas. Va **después de NoiseLab v6** (actualizado el 2026-11-22: después de la v7, planeta y placas, y de PL-16 puntos 1 y 4; H1 usa la rejilla del planeta) (2b y 2c del módulo de fluidos), y el foco general sigue en ALWTTT.
 - **Entrada en el roadmap:** PL-14 (`PCG_Roadmap.md`).
 - **Investigación:** [`../../research/2026-11-17-meanders-deltas-hydrology.md`](../../research/2026-11-17-meanders-deltas-hydrology.md) (fuentes y técnicas) y `../../research/fisk-1944/` (texto del informe).
 

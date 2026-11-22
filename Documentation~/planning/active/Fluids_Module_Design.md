@@ -150,7 +150,7 @@ escalable posible. Propuesta, no autoridad; manda el código.
 ## Añadido el 2026-11-17 (2b hecha: temperatura del mar)
 
 Manda el código (`SeaBaseTemp`, `SeaHeat`, `SeaHeatJob` en `NoiseLab.cs`); resumen en
-`NoiseLab_v6_Startup.md` («2b cerrada»).
+`../archive/NoiseLab_v6_Startup.md` («2b cerrada»).
 
 - **Cambio frente al diseño:** el afloramiento no lee el viento a lo largo de la costa. El
   viento del modelo B es solo zonal (τx), así que en una costa norte–sur nunca va paralelo a
