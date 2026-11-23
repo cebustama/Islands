@@ -180,3 +180,17 @@ Ideas, links and videos delivered with `/capturar` that belong to Islands. Most 
 - **Connects with:** Phase W (zoom-in to a cell: this is a local view), Phase Q (biome would pick the ground palette instead of tiles), mundo-islas (salt_pilgrim capture of 2026-11-13, same "hand-composed villages" problem), web Flora Lab (tree sprites).
 - **Further reading:** Lucas Pope, "Dithering on the GPU" (*Return of the Obra Dinn* devlog, TIGSource); Red Blob Games, "Making maps with noise" and "Poisson disc sampling"; Lospec palette list.
 - **Status:** seed. After the ALWTTT demo and v7; a quick web Lab prototype with 2–3 variants (aesthetic gate) is the cheapest first test.
+
+## 2026-11-23 — Western boundary currents, *Perpetual Ocean* style (images + Instagram link)
+
+- **Type and origin:** four phone screenshots (two identical) of an Instagram carousel, https://www.instagram.com/p/DfSOVIoHCDW/ (not read: login wall; account and credit unknown). Style of NASA SVS *Perpetual Ocean* (ECCO2); by the regions shown, likely *Perpetual Ocean 2: Western Boundary Currents* (https://svs.gsfc.nasa.gov/5425, 2025; unconfirmed). Original: SVS 3827 (2012). Images in [`referencias-visuales/nuevas/2026-11-23-perpetual-ocean/`](../../../referencias-visuales/nuevas/2026-11-23-perpetual-ocean/README.md).
+- **What Claudio said:** nothing beyond sending it (same family as the mapped.earth capture of 2026-11-19, above).
+- **What it is:** white streak lines on blue ocean over natural-colour land: Kuroshio and the Indonesian seas, the Gulf of Mexico Loop Current and Gulf Stream, a close-up of eddies.
+- 💡 **Possible use here:**
+  - **Visual test case for the v6 Stommel currents:** narrow fast western boundary currents (the model gives ~7× the interior; `Fluids_Module_Design.md`) against Kuroshio and the Gulf Stream.
+  - **The known limit** (ψ = 0 on all land, no net flow between landmasses): the Indonesian throughflow is the real counter-example and the case for Godfrey's island rule (1989).
+  - **Eddies:** Stommel is smooth; rings and eddies would come from curl noise on top (option C) or noisy streamlines.
+  - **Palette** for the «currents in streaks» (LIC) view: white on blue with natural land, as an alternative to the SST colouring of mapped.earth.
+  - **Web (Islands Lab page on ψ, gyres, Atacama and Humboldt):** contrast western boundary (narrow, fast, warm: Kuroshio) with eastern boundary (wide, slow, cold: Humboldt).
+- **Further reading:** Stommel (1948), *The westward intensification of wind-driven ocean currents*; Godfrey (1989), island rule; SVS 5425 versions (temperature, salinity, below 600 m).
+- **Status:** seed; test case when currents are revisited (island rule). Credit NASA SVS, not the post, if ever used publicly.

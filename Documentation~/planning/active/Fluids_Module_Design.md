@@ -137,6 +137,8 @@ escalable posible. Propuesta, no autoridad; manda el código.
   ecuador en la costa este.
 - **Límite conocido:** ψ = 0 en toda tierra: entre dos masas de tierra no pasa agua neta.
   La regla de la isla (Godfrey 1989) lo resolvería; medir antes de arreglar.
+  Contraejemplo real: el paso de agua entre las islas de Indonesia en *Perpetual Ocean 2*
+  (captura del 2026-11-23, `research/2026-11-capturas.md`).
 - **Subpasos:** 2a corrientes y capa *Currents*; 2b temperatura del mar (latitud + transporte
   por la corriente con el esquema de la 1b.2 + afloramiento costero por el viento hacia el
   ecuador de los alisios); 2c el clima lee la temperatura del mar (costa fría: más fresca y
