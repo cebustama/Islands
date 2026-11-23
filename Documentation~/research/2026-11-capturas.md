@@ -183,7 +183,7 @@ Ideas, links and videos delivered with `/capturar` that belong to Islands. Most 
 
 ## 2026-11-23 — Western boundary currents, *Perpetual Ocean* style (images + Instagram link)
 
-- **Type and origin:** four phone screenshots (two identical) of an Instagram carousel, https://www.instagram.com/p/DfSOVIoHCDW/ (not read: login wall; account and credit unknown). Style of NASA SVS *Perpetual Ocean* (ECCO2); by the regions shown, likely *Perpetual Ocean 2: Western Boundary Currents* (https://svs.gsfc.nasa.gov/5425, 2025; unconfirmed). Original: SVS 3827 (2012). Images in [`referencias-visuales/nuevas/2026-11-23-perpetual-ocean/`](../../../referencias-visuales/nuevas/2026-11-23-perpetual-ocean/README.md).
+- **Type and origin:** four phone screenshots (two identical) of an Instagram carousel, https://www.instagram.com/p/DfSOVIoHCDW/, by desde_la_ciencia (2026-11-03; read later via Chrome: credits «la NASA» but does not name the piece). Style of NASA SVS *Perpetual Ocean* (ECCO2); by the regions shown, likely *Perpetual Ocean 2: Western Boundary Currents* (https://svs.gsfc.nasa.gov/5425, 2025; unconfirmed). Original: SVS 3827 (2012). Images in [`referencias-visuales/nuevas/2026-11-23-perpetual-ocean/`](../../../referencias-visuales/nuevas/2026-11-23-perpetual-ocean/README.md).
 - **What Claudio said:** nothing beyond sending it (same family as the mapped.earth capture of 2026-11-19, above).
 - **What it is:** white streak lines on blue ocean over natural-colour land: Kuroshio and the Indonesian seas, the Gulf of Mexico Loop Current and Gulf Stream, a close-up of eddies.
 - 💡 **Possible use here:**
