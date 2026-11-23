@@ -56,6 +56,8 @@ cambian.
 | R3 | El mar por porcentaje (cuantil) | `Calibrate`, `CutGroup`, `WaterMode.Percentage` | `waterThreshold01` fijo (coordenada; W-aux.e lo declaró *feature*) | S | `Stage_BaseTerrain2D`, con el operador de cuantil de `HillsThresholdOps2D` | v1–v2 (2026-10-31/11-01) | MD-3 |
 | R4 | Bandas de altura por porcentaje (9 bandas, 3 de agua) | `BandOf`, `Calibrate` | Capas `ShallowWater`/`MidWater`/`DeepWater` por profundidad; colinas por cuantil de área (W-aux.g) | S (agua) / Ad (colores) | Agua: `Stage_Shore2D`; colores: adaptador | v2 | MD-3 |
 | R5 | Coordenadas de mundo continuas (offset, arrastrar) | `offset`, `HandleDrag` | No existe (PL-6) | A | `MapInputs` / `MapContext2D` | v2 | MD-1 |
+| R6 | Planeta cerrado: el mundo da la vuelta este–oeste (cilindro de 32 vistas, 2:1); apagado, los mismos bits | `planet`, `SampleCylinder`, `CylinderNoiseJob<N>`, `Calibrate` (192×96) | Mapa finito y plano | A | Fase W (mundo); muestreo de ruido periódico en `MapNoiseBridge2D` | v7 1a (2026-11-23, `f64eee0`), editor + S22 | MD-1 |
+| R7 | *Polar sea*: hunde la tierra más allá de 55–65°S (océano austral abierto) y avisos del planeta (tierra de polo a polo, latitudes toda tierra, mar circumpolar) | `PolarSea`, `PlanetCheck` | No existe | A | Fase W | v7 1c (2026-11-23, `a888ddf`), editor | R6 |
 
 ### Clima
 
@@ -79,6 +81,7 @@ cambian.
 | O2 | Temperatura del mar: base por latitud, transportada por las corrientes (volúmenes finitos upwind + relajación, memoria del calor) | `SeaBaseTemp`, `SeaHeat`, `SeaHeatJob` | No existe | A | La misma stage que O1; campo `SeaTemperature` | 2b pasos 1–2 (2026-11-17, `b3688c8`, `a507225`), editor + S22 | O1 |
 | O3 | Afloramiento costero (costas oeste frías: Humboldt, Benguela, California, Canarias) | `upwelling`, `SeaDeepTemp` en `SeaHeat` (2b paso 3; lee la corriente hacia el ecuador, no el viento) | No existe | A | La misma stage que O1 | 2b paso 3 (2026-11-17, `c4a54fa`), editor + S22 | O2 |
 | O4 | El clima lee el mar (2c): la temperatura del mar modera la costa y una costa fría seca el aire | `extSeaAnom` en la rejilla del clima; *Sea → coast temp*, *Sea reach*; techo de humedad `min(1, e^(k·ΔT))` en `WindField`/`WindJob`, `FlowMaskJob` → `FlowAirJob`, `ViewClimateJob`, `BigBiomes` | `coastModerationStrength` de M.1 (solo distancia) | S | `Stage_Biome2D` M.1/M.2 | 2c (2026-11-18/22, `9fd00fb`, `eb98ede`, `1487c1f`), editor + S22 | O2, C5 |
+| O5 | Océano periódico: una región de todo el planeta (256×128) con el este unido al oeste | `ComputeOceanRegion` (`wrap`), `OceanSorJob`, `SeaHeatJob`, `SampleWrapped` | No existe | A | La misma stage que O1, sobre la rejilla del planeta | v7 1b (2026-11-23, `99d8859`), editor + S22 | O1, R6 |
 
 ### Adaptadores y herramientas
 
@@ -91,6 +94,8 @@ cambian.
 | T5 | Vistas de escala: World ×4 y ×16, colores Gyres, Sea temp y Anomaly, flechas de corriente | `MakeBigPicture`, `GyreColours`, `SeaTempColours`, `AnomalyColours`, `CurrentArrows` | No existe | Ad | Adaptador del mapa de mundo (fase W) | v6 |
 | T6 | Nubes animadas (nunca tocan el terreno) | `Clouds`, `CloudNoiseJob` | No existe | Ad | Adaptador | v4–v5 |
 | T7 | Histograma exacto y estadísticas del campo | `Measure`, `Flood` | `LogHeightHistogram`, `MapStatsExporter2D` | Ad | Inspection (ya cubierto en parte) | v1 |
+| T8 | *Run all tests* (borde, Burst check, placas dos veces, snapshot; informe guardado) y *Snapshot* (todas las capas en un PNG con rótulos); ir al punto tocado en ×4/×16/×32 | `RunAllTests`, `SaveSnapshot`, `DrawLabel`, `DrawBigPicture` | Goldens por hash | Ad / gate | Tests de EditMode (MD-4) | v7 1c (2026-11-23) |
+| T9 | Capa de placas, solo vista (Voronoi con jitter o Growth; movimiento, tipo, bordes por tipo), en la vista y en ×16/×32 | `EnsurePlates`, `GrowPlates`, `BorderKind`, `PlatePixels` | No existe (Phase K sin código) | Ad (hoy) / A (Phase K) | Phase K, `Stage_Tectonics2D` | v7 paso 2 (2026-11-23, `15847dc`), editor + S22 |
 
 ### Lo que el motor tiene y NoiseLab todavía no valida (FV)
 
@@ -128,3 +133,4 @@ Un problema por batch, como siempre.
 |---|---|
 | 2026-11-17 | Creada a partir de la comparación entre `NoiseLab.cs` (v6, 2b paso 2, `a507225`) y `Runtime/PCG`. |
 | 2026-11-22 | O4 validada (2c cerrada en el editor y el S22). La v6 queda completa. |
+| 2026-11-23 | Filas R6, R7, O5, T8 y T9 (NoiseLab v7: planeta cerrado, océano periódico, pruebas, placas). |

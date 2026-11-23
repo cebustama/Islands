@@ -197,4 +197,4 @@ build Android y las mediciones.
   (`7a9f7ff`) y pegado de códigos robusto. Paso 4 en el editor y el S22: Burst check 0 diferencias,
   clima 0,000 % de biomas, prueba de borde 0,09 %, clima 33 ms en el S22. Detalle en
   `NoiseLab_v6_2c_Startup.md` y en `changelog-ssot.md` («NoiseLab v6»). Siguiente: **NoiseLab v7**,
-  planeta cerrado y capa de placas (`../active/NoiseLab_v7_Startup.md`).
+  planeta cerrado y capa de placas (`NoiseLab_v7_Startup.md`).

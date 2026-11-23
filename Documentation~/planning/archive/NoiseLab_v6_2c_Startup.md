@@ -10,7 +10,7 @@ valores distintos; clima 0,000 % de biomas distintos (humedad máx. |Δ| 1,2e-7)
 margen 0,09 % de 21.333 celdas (sin margen 32,7 %); clima 33 ms, World ×16 38 ms. En ×16 (color
 *Biomes*) la costa oeste fría sale desierta y las costas con mar cálido solo tienen una franja verde
 fina. Humedad de la costa fría 0,350 en el S22, igual que en el editor. **DoD cumplida; la v6 queda
-completa.** Siguiente: `../active/NoiseLab_v7_Startup.md` (planeta cerrado y capa de placas).
+completa.** Siguiente: `NoiseLab_v7_Startup.md` (planeta cerrado y capa de placas).
 
 ## Estado al 2026-11-20, noche
 - **Paso 1** en `9fd00fb`; **paso 2** en `eb98ede` (subido). **Barra de escala** en `7a9f7ff` (vista, foco, ×4/×16; 1-2-5 × 10ⁿ km, ~1/5 del ancho; probada por Claudio).

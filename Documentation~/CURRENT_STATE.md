@@ -56,8 +56,13 @@ W.c implemented and committed, governed docs pending; noise range fix A+D merged
   wind around the relief, ocean currents on a coarse world grid, continents and World ×16, sea
   temperature with upwelling, and the climate reads the sea (cold coasts cooler and drier). S22:
   Burst check 0 differences, Edge test 0.09 % biomes, climate 33 ms. Detail in
-  `changelog-ssot.md`. Next on this track: NoiseLab v7, closed planet and plates layer
-  (`planning/active/NoiseLab_v7_Startup.md`).
+  `changelog-ssot.md`. **NoiseLab v7 DONE 2026-11-23** (`f64eee0` … `15847dc` + closing docs):
+  *Planet* (`pl=1`) closes the world east–west on a cylinder of 32 views (2:1), one periodic
+  ocean region and *World ×32*, planet warnings and *Polar sea*, a tectonic plates layer (view
+  only, Growth by default), *Run all tests* and *Snapshot*. Planet off: same bits as v6. S22:
+  Burst check 0 differences, plates built twice 0 cells differ, Run all tests 1.2 s. Detail in
+  `changelog-ssot.md`. Next on this track: NoiseLab v8, physical ocean (island rule)
+  (`planning/active/NoiseLab_v8_Startup.md`; order to confirm with Claudio at the start).
 - **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
   merged into `main` after a user-confirmed visual smoke test.**
   The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s

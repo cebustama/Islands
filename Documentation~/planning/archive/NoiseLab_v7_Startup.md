@@ -1,5 +1,8 @@
 # Arranque: NoiseLab v7 (planeta cerrado y capa de placas)
 
+**Cerrada el 2026-11-23.** Ver «Avance» al final y `changelog-ssot.md`, «NoiseLab v7». Sigue en
+`../active/NoiseLab_v8_Startup.md`.
+
 Fecha: 2026-11-22. Rama: `main`. Sigue a `../archive/NoiseLab_v6_Startup.md` (v6 completa) y a
 `../archive/NoiseLab_v6_2c_Startup.md` («Cerrada el 2026-11-22»). Roadmap: PL-17 (planeta) y PL-18
 (placas) en `PCG_Roadmap.md`.
@@ -125,3 +128,21 @@ profundo, el pegado robusto.
 1. PL-16, puntos 1 y 4: cinturones de lluvia por latitud y aridez (bajar *Sea → coast moisture*).
 2. PL-14 H1: ríos, sobre la rejilla del planeta (opción A de D-H1-1).
 3. Luego PL-15 (migración) y PL-13 (vistas).
+
+## Avance (2026-11-23)
+- **1a** `f64eee0`: *Planet* (`pl=1`), ruido sobre el cilindro (`CylinderNoiseJob<N>`). Apagado: los
+  mismos bits (prueba de borde 0,09 %, Burst check 120.480 / 3,35e-6 en el editor). Claudio: editor y
+  S22 «Todo OK».
+- **1b** `99d8859`: océano del planeta (una región 256×128 con el este unido al oeste), imágenes
+  grandes w × h, *World ×32*. Botones de ×16/×32 en su propia fila (se cortaban en el S22).
+- **1c** `a888ddf`: avisos del planeta, *Polar sea* (`pl=1,<v>`), *Run all tests*, *Snapshot*, cada
+  estado con su x e y, tocar la imagen grande lleva la vista. El «0 land cells» de la Burst check era
+  una comprobación hecha en otro sitio, no un fallo. Sitios fijos de prueba: apagado en la receta v6
+  (x 0.343, y 2.185); encendido en x −0.515, y 0.593 (con *Planet* el terreno es otro).
+- **2** `15847dc`: capa de placas (Voronoi con jitter y Growth; D-V7-1: **Growth**, por defecto),
+  rótulos en el snapshot. S22 22:40: Burst check 0, placas dos veces 0 de 18.432, Run all tests 1,2 s.
+- Límite visto con *Polar sea* 1: sin corriente circumpolar (ψ = 0 en toda costa) → PL-19, v8.
+- Por revisar: en vistas casi todo mar, el viento de la prueba de borde cambia más con margen que sin él.
+- Tangentes guardadas: lab web «un océano en una caja» (PL-19); placas reales y Chile (Nazca, punto
+  triple de Taitao, Scotia y el paso Drake) para explicaciones futuras.
+

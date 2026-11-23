@@ -9,6 +9,47 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## NoiseLab v7 — closed planet, periodic ocean, World ×32, plates layer (sample only)
+Date: 2026-11-23. Commits on `main`: `f64eee0` (1a, noise on a cylinder), `99d8859` (1b, periodic
+ocean and World ×32), `a888ddf` (1c, warnings, Polar sea, tests), `15847dc` (2, plates). No runtime
+code changed.
+
+**What.** `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs`:
+- *Planet* (`pl=1`, PL-17): every noise field is sampled in 3D on a cylinder of circumference 32
+  views (`CylinderNoiseJob<N>`; cos/sin per column in double, outside Burst, from x wrapped into
+  [0, 32), so managed and Burst read the same inputs and x and x + 32 are the same point). A
+  fractional frequency scales the cylinder. The world reference becomes the whole planet (192×96).
+- Periodic ocean: one region of 256×128 cells (32×16 views) with east joined to west in the SOR,
+  the sea heat, the anomaly and the sampling. Big pictures generalised to w × h; *World ×32*
+  (512×256, 2:1). Tapping a big picture moves the view there.
+- Planet check on the 192×96 grid (land %, land from pole to pole, latitude rows all land, sea all
+  round); *Polar sea* (`pl=1,<v>`) sinks land beyond 55–65°S, inside the height (all paths).
+- Plates layer (PL-18, view only): seeds by hash, Voronoi with a periodic warp or Growth
+  (shortest-path flood over random cell costs, a rate per plate; default, D-V7-1), translation +
+  spin per plate, continental if most of its cells are land, borders convergent / divergent /
+  transform by the relative velocity on the seed-to-seed normal. *Plates* layer in the view and
+  ×16/×32, *Plates view* and *Plates / Sea* buttons. Code `pt=<n>,<v|g>` (default 12, Growth).
+- Tests: *Run all tests* (edge test, Burst check, plates built twice, snapshot; report copied and
+  saved) and *Snapshot* (every layer in one labelled PNG); each status says its x and y.
+
+**Measured.** Planet off, editor at the v6 recipe place: identical to v6 (coast land 1609,
+−7.55 °C; edge test 0.09 %; Burst check 120 480 of 327 680, max 3.35e-6; ocean region 11 545, sea
+temp 7 344). Planet on (x −0.515, y 0.593), S22 (2026-11-23 22:40): Burst check 0 differences in
+noise, climate, flow, ocean and sea temp; planet seam max |Δ| 1.85e-5 (x + 32 has fewer float
+digits); ocean region 46 ms, residual 0.0001; edge test with margin 1.01 % (25.9 % without);
+plates 6.3 ms, built twice 0 of 18 432 cells differ; World ×32 Plates 8 ms; Run all tests 1.2 s.
+Polar sea 1: sea all round at 61–89°S and the ocean still converges (residual 0.0001).
+
+**Known limits.** Stommel with ψ = 0 on all land and at the poles: no net transport between
+landmasses, so a circumpolar channel gets gyres, not a circumpolar current (PL-19). The planet is a
+cylinder (equirectangular stretch at the poles). Plates do not shape the terrain (Phase K); seeds
+are uniform in latitude. Growth plates look blocky inside one view (one cell = 1/6 view). In views
+that are mostly sea, the edge test's wind changes more with margin than without (0.06–0.11):
+unexplained, to check.
+
+**Startups:** `planning/archive/NoiseLab_v7_Startup.md` (decisions D-V7-1…3, progress). Migration
+rows R6, R7, O5, T8, T9 (`planning/active/NoiseLab_Migration_Matrix.md`).
+
 ## NoiseLab v6 — wind around the relief, ocean currents, sea temperature, climate reads the sea (sample only)
 Date: 2026-11-06/22. Commits on `main`, from `4de55fc` (step 1a) to `1487c1f` (2c step 3); main ones:
 `4de55fc`, `c0e5e3c`, `cc218c4`, `aa7896d` (wind and air on the flow grid), `d31d0f8` (2a currents),
