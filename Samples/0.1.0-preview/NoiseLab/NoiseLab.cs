@@ -1672,6 +1672,9 @@ public class NoiseLab : MonoBehaviour
     const int OceanPerView = 8;
     const float OceanStride = 8f;                  // view widths between region centres
     const int OceanN = 16 * OceanPerView;          // cells per side of a region
+    // v7 (PL-17): with Planet, one region holds the whole planet: 32 × 16 views, its east
+    // edge joined to its west edge (index 0, origin at x = 0).
+    const int PlanetOceanW = 32 * OceanPerView;
     const int OceanPasses = 200;
     static readonly float[] OceanOmegas = { 1.7f, 1.4f }; // second try: safe, twice the passes
     const float OceanTolerance = 0.01f;
@@ -1681,6 +1684,8 @@ public class NoiseLab : MonoBehaviour
     class OceanRegion
     {
         public int index;
+        public int nx = OceanN, ny = OceanN; // v7: cells across and up (planet: 256 × 128)
+        public bool wrap;                    // v7: the east edge is joined to the west edge
         public string key;
         public float[] u, v, psi; // psi: the stream function (continents step: the Gyres colouring)
         public float[] temp;      // 2b: sea surface temperature, °C (land cells too, so the bilinear blend is smooth at the coast)
@@ -1779,14 +1784,17 @@ public class NoiseLab : MonoBehaviour
     void SeaHeat(OceanRegion r, bool burst)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        int n = OceanN, cells = n * n;
+        int n = r.ny, nx = r.nx, cells = nx * n;
+        bool wrap = r.wrap;
         float h = 1f / OceanPerView, y0 = -LatitudeSpan;
         float[] psi = r.psi;
         byte[] sea = r.sea;
+        // v7: on a planet x wraps; off, nx = n and nothing wraps (same arithmetic as v6).
+        int Wx(int x) => wrap ? (x + nx) % nx : x;
         // psi at the corner up-right of cell (x, y): the mean of the four cells around it (0 outside).
-        float P(int x, int y) => x < 0 || y < 0 || x >= n || y >= n ? 0f : psi[y * n + x];
+        float P(int x, int y) { x = Wx(x); return x < 0 || y < 0 || x >= nx || y >= n ? 0f : psi[y * nx + x]; }
         float C(int x, int y) => 0.25f * (P(x, y) + P(x + 1, y) + P(x, y + 1) + P(x + 1, y + 1));
-        bool Sea(int x, int y) => x >= 0 && y >= 0 && x < n && y < n && sea[y * n + x] != 0;
+        bool Sea(int x, int y) { x = Wx(x); return x >= 0 && y >= 0 && x < nx && y < n && sea[y * nx + x] != 0; }
 
         var weight = new float4[cells];
         var pull = new float[cells];
@@ -1797,9 +1805,9 @@ public class NoiseLab : MonoBehaviour
         for (int y = 0; y < n; y++)
         {
             float rowBase = SeaBaseTemp(y0 + (y + 0.5f) * h);
-            for (int x = 0; x < n; x++)
+            for (int x = 0; x < nx; x++)
             {
-                int i = y * n + x;
+                int i = y * nx + x;
                 t0[i] = rowBase;
                 if (!Sea(x, y)) { pull[i] = rowBase; continue; } // weight 0: land keeps T0
                 // Velocity through each face (positive = east or north), from psi at its ends.
@@ -1810,7 +1818,8 @@ public class NoiseLab : MonoBehaviour
                 var inflow = new float4(Mathf.Max(uW, 0f), Mathf.Max(-uE, 0f), Mathf.Max(vS, 0f), Mathf.Max(-vN, 0f));
                 // Step 3: land right to the east (inside the grid) and water toward the equator.
                 float up = 0f;
-                if (x + 1 < n && sea[i + 1] == 0)
+                int east = x + 1 < nx ? i + 1 : wrap ? i + 1 - nx : -1; // v7: across the seam on a planet
+                if (east >= 0 && sea[east] == 0)
                 {
                     float toEquator = (y0 + (y + 0.5f) * h) > 0f ? -cv[i] : cv[i];
                     up = 2f * upwelling * Mathf.Max(toEquator, 0f);
@@ -1835,7 +1844,7 @@ public class NoiseLab : MonoBehaviour
             var job = new SeaHeatJob
             {
                 weight = nWeight, pull = nPull, temp = nTemp, start = nStart, stats = stats, probe = probe,
-                n = n, maxRounds = SeaHeatMaxRounds, tolerance = SeaHeatTolerance
+                n = n, nx = nx, maxRounds = SeaHeatMaxRounds, tolerance = SeaHeatTolerance
             };
             if (burst)
             {
@@ -1867,7 +1876,7 @@ public class NoiseLab : MonoBehaviour
         r.upCells = upCount;
         r.upAnomaly = upCount > 0 ? (float)(upSum / upCount) : 0f;
         r.upColdest = coldest;
-        r.anom = SeaAnomaly(temp, t0, sea, n);
+        r.anom = SeaAnomaly(temp, t0, sea, nx, n, wrap);
         r.temp = temp;
         r.heatKey = HeatKey();
         r.heatState = state;
@@ -1888,9 +1897,9 @@ public class NoiseLab : MonoBehaviour
     // ---------------------------------------------------------------------------------
     const int SeaAnomRings = 2;
 
-    static float[] SeaAnomaly(float[] temp, float[] t0, byte[] sea, int n)
+    static float[] SeaAnomaly(float[] temp, float[] t0, byte[] sea, int nx, int n, bool wrap)
     {
-        int cells = n * n;
+        int cells = nx * n;
         var anom = new float[cells];
         var known = new bool[cells];
         for (int i = 0; i < cells; i++)
@@ -1902,9 +1911,9 @@ public class NoiseLab : MonoBehaviour
             System.Array.Copy(anom, next, cells);
             System.Array.Copy(known, nextKnown, cells);
             for (int y = 0; y < n; y++)
-                for (int x = 0; x < n; x++)
+                for (int x = 0; x < nx; x++)
                 {
-                    int i = y * n + x;
+                    int i = y * nx + x;
                     if (known[i]) continue;
                     float sum = 0f;
                     int count = 0;
@@ -1912,8 +1921,9 @@ public class NoiseLab : MonoBehaviour
                         for (int dx = -1; dx <= 1; dx++)
                         {
                             int xx = x + dx, yy = y + dy;
-                            if (xx < 0 || yy < 0 || xx >= n || yy >= n) continue;
-                            int j = yy * n + xx;
+                            if (wrap) xx = (xx + nx) % nx;
+                            if (xx < 0 || yy < 0 || xx >= nx || yy >= n) continue;
+                            int j = yy * nx + xx;
                             if (known[j]) { sum += anom[j]; count++; }
                         }
                     if (count > 0) { next[i] = sum / count; nextKnown[i] = true; }
@@ -1930,33 +1940,36 @@ public class NoiseLab : MonoBehaviour
     OceanRegion ComputeOceanRegion(int index, bool burst)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        int n = OceanN, cells = n * n;
+        // v7: on a planet, one region for the whole planet (index 0), its east edge joined to
+        // its west edge. Off: nx = n, nothing wraps, the v6 arithmetic.
+        bool wrap = planet;
+        int n = OceanN, nx = wrap ? PlanetOceanW : OceanN, cells = nx * n;
         float h = 1f / OceanPerView;
-        float x0 = OceanStride * index - 8f, y0 = -LatitudeSpan;
+        float x0 = wrap ? 0f : OceanStride * index - 8f, y0 = -LatitudeSpan;
 
         // Land and sea: 2 × 2 height samples per cell, the same noises and curves as the view.
-        int sn = 2 * n;
+        int sn = 2 * n, snx = 2 * nx;
         float step = 0.5f * h;
         var src = new float[FieldCount][];
         int keepState = burstState;
         foreach (int k in HeightFields())
         {
-            src[k] = new float[sn * sn];
-            SampleInto(src[k], GetField(k), FieldSeed(k), sn, x0 + 0.5f * step, y0 + 0.5f * step, step);
+            src[k] = new float[snx * sn];
+            SampleInto(src[k], GetField(k), FieldSeed(k), snx, sn, x0 + 0.5f * step, y0 + 0.5f * step, step);
         }
         burstState = keepState; // the "last sampling" label is about the view
-        var heights = new float[sn * sn];
+        var heights = new float[snx * sn];
         CombineHeight(heights, src);
         var sea = new byte[cells];
         int seaCount = 0;
         for (int y = 0; y < n; y++)
-            for (int x = 0; x < n; x++)
+            for (int x = 0; x < nx; x++)
             {
                 int below = 0;
                 for (int dy = 0; dy < 2; dy++)
                     for (int dx = 0; dx < 2; dx++)
-                        if (heights[(2 * y + dy) * sn + 2 * x + dx] < threshold) below++;
-                if (below >= 2) { sea[y * n + x] = 1; seaCount++; }
+                        if (heights[(2 * y + dy) * snx + 2 * x + dx] < threshold) below++;
+                if (below >= 2) { sea[y * nx + x] = 1; seaCount++; }
             }
 
         // Per row: the drag's curl (centred difference of the zonal wind) and beta.
@@ -1988,7 +2001,7 @@ public class NoiseLab : MonoBehaviour
             {
                 int passes = omega == OceanOmegas[0] ? OceanPasses : 2 * OceanPasses;
                 for (int i = 0; i < cells; i++) nPsi[i] = 0f;
-                var sor = new OceanSorJob { sea = nSea, force = nForce, beta = nBeta, psi = nPsi, probe = probe, n = n, eps = eps, h = h, omega = omega };
+                var sor = new OceanSorJob { sea = nSea, force = nForce, beta = nBeta, psi = nPsi, probe = probe, n = n, nx = nx, wrap = wrap, eps = eps, h = h, omega = omega };
                 int rows = (n + 1) / 2;
                 if (burst)
                 {
@@ -2010,7 +2023,7 @@ public class NoiseLab : MonoBehaviour
                     }
                 }
                 nPsi.CopyTo(psi);
-                residual = OceanResidual(psi, sea, force, beta, n, eps, h);
+                residual = OceanResidual(psi, sea, force, beta, nx, n, wrap, eps, h);
                 omegaUsed = omega;
                 if (residual < OceanTolerance) break;
             }
@@ -2022,14 +2035,14 @@ public class NoiseLab : MonoBehaviour
 
         // Velocities at the cell centres (centred differences; land and outside: psi = 0)
         // and the fastest water.
-        float P(int x, int y) => x < 0 || y < 0 || x >= n || y >= n ? 0f : psi[y * n + x];
+        float P(int x, int y) { if (wrap) x = (x + nx) % nx; return x < 0 || y < 0 || x >= nx || y >= n ? 0f : psi[y * nx + x]; }
         var u = new float[cells];
         var v = new float[cells];
         float fastest = 0f;
         for (int y = 0; y < n; y++)
-            for (int x = 0; x < n; x++)
+            for (int x = 0; x < nx; x++)
             {
-                int i = y * n + x;
+                int i = y * nx + x;
                 if (sea[i] == 0) continue;
                 u[i] = -(P(x, y + 1) - P(x, y - 1)) / (2f * h);
                 v[i] = (P(x + 1, y) - P(x - 1, y)) / (2f * h);
@@ -2040,6 +2053,7 @@ public class NoiseLab : MonoBehaviour
         return new OceanRegion
         {
             index = index, key = OceanKey(index), u = u, v = v, psi = psi, sea = sea, state = state,
+            nx = nx, ny = n, wrap = wrap,
             ms = (float)watch.Elapsed.TotalMilliseconds,
             residual = residual, omega = omegaUsed,
             fastest = Mathf.Sqrt(fastest),
@@ -2048,14 +2062,14 @@ public class NoiseLab : MonoBehaviour
     }
 
     // Mean |error of the equation| over the sea, relative to the mean |wind curl|.
-    static float OceanResidual(float[] psi, byte[] sea, float[] force, float[] beta, int n, float eps, float h)
+    static float OceanResidual(float[] psi, byte[] sea, float[] force, float[] beta, int nx, int n, bool wrap, float eps, float h)
     {
-        float P(int x, int y) => x < 0 || y < 0 || x >= n || y >= n ? 0f : psi[y * n + x];
+        float P(int x, int y) { if (wrap) x = (x + nx) % nx; return x < 0 || y < 0 || x >= nx || y >= n ? 0f : psi[y * nx + x]; }
         double res = 0.0, scale = 0.0;
         for (int y = 0; y < n; y++)
-            for (int x = 0; x < n; x++)
+            for (int x = 0; x < nx; x++)
             {
-                if (sea[y * n + x] == 0) continue;
+                if (sea[y * nx + x] == 0) continue;
                 float c = P(x, y), e = P(x + 1, y), w = P(x - 1, y), no = P(x, y + 1), so = P(x, y - 1);
                 res += Mathf.Abs(eps * (e + w + no + so - 4f * c) / (h * h) + beta[y] * (e - c) / h - force[y]);
                 scale += Mathf.Abs(force[y]);
@@ -2066,6 +2080,7 @@ public class NoiseLab : MonoBehaviour
     // Bilinear between the region's cell centres at world point (x, y), in view widths.
     static void SampleRegion(OceanRegion r, float x, float y, out float u, out float v)
     {
+        if (r.wrap) { u = SampleRegionField(r, r.u, x, y); v = SampleRegionField(r, r.v, x, y); return; }
         int n = OceanN;
         float gx = Mathf.Clamp((x - (OceanStride * r.index - 8f)) * OceanPerView - 0.5f, 0f, n - 1);
         float gy = Mathf.Clamp((y + LatitudeSpan) * OceanPerView - 0.5f, 0f, n - 1);
@@ -2081,6 +2096,7 @@ public class NoiseLab : MonoBehaviour
     // 2b: any per-cell field of a region (psi, temperature), bilinear as SampleRegion.
     static float SampleRegionField(OceanRegion r, float[] f, float x, float y)
     {
+        if (r.wrap) return SampleWrapped(f, r.nx, r.ny, x, y);
         int n = OceanN;
         float gx = Mathf.Clamp((x - (OceanStride * r.index - 8f)) * OceanPerView - 0.5f, 0f, n - 1);
         float gy = Mathf.Clamp((y + LatitudeSpan) * OceanPerView - 0.5f, 0f, n - 1);
@@ -2088,6 +2104,21 @@ public class NoiseLab : MonoBehaviour
         float tx = gx - x0, ty = gy - y0;
         int i = y0 * n + x0;
         return Mathf.Lerp(Mathf.Lerp(f[i], f[i + 1], tx), Mathf.Lerp(f[i + n], f[i + n + 1], tx), ty);
+    }
+
+    // v7: the planet's region at world point (x, y): x taken round the planet, bilinear with
+    // the last column next to the first (no clamp in x, so no seam).
+    static float SampleWrapped(float[] f, int nx, int ny, float x, float y)
+    {
+        float gx = (x - PlanetPeriod * Mathf.Floor(x / PlanetPeriod)) * OceanPerView - 0.5f;
+        float gy = Mathf.Clamp((y + LatitudeSpan) * OceanPerView - 0.5f, 0f, ny - 1);
+        int ix = Mathf.FloorToInt(gx);
+        float tx = gx - ix;
+        int xa = (ix + nx) % nx, xb = (ix + 1) % nx;
+        int y0 = Mathf.Min((int)gy, ny - 2);
+        float ty = gy - y0;
+        int ra = y0 * nx, rb = ra + nx;
+        return Mathf.Lerp(Mathf.Lerp(f[ra + xa], f[ra + xb], tx), Mathf.Lerp(f[rb + xa], f[rb + xb], tx), ty);
     }
 
     // The currents at every view cell: the two regions around each column, blended.
@@ -2103,14 +2134,25 @@ public class NoiseLab : MonoBehaviour
         currentV = Ensure(currentV, n * n);
         seaTemp = Ensure(seaTemp, n * n);
         extSeaAnom = Ensure(extSeaAnom, w * h);
-        int first = Mathf.FloorToInt((offset.x - (float)mL / n) / OceanStride);
-        int last = Mathf.FloorToInt((offset.x + (float)(n + mR) / n) / OceanStride) + 1;
-        var regions = new OceanRegion[last - first + 1];
-        for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
-        oceanRegionsUsed = first == last - 1 ? $"{first}, {last}" : $"{first} to {last}";
+        int first, last;
+        OceanRegion[] regions;
+        if (planet)
+        {
+            first = last = 0; // v7: one region, the whole planet
+            regions = new[] { GetOceanRegion(0) };
+            oceanRegionsUsed = "planet";
+        }
+        else
+        {
+            first = Mathf.FloorToInt((offset.x - (float)mL / n) / OceanStride);
+            last = Mathf.FloorToInt((offset.x + (float)(n + mR) / n) / OceanStride) + 1;
+            regions = new OceanRegion[last - first + 1];
+            for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
+            oceanRegionsUsed = first == last - 1 ? $"{first}, {last}" : $"{first} to {last}";
+        }
 
         var gridWatch = System.Diagnostics.Stopwatch.StartNew();
-        int rn = OceanN * OceanN;
+        int rn = regions[0].nx * regions[0].ny; // off: OceanN²
         NativeArray<float> Stack(System.Func<OceanRegion, float[]> pick)
         {
             var a = new NativeArray<float>(regions.Length * rn, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
@@ -2132,7 +2174,8 @@ public class NoiseLab : MonoBehaviour
             {
                 field = field, output = output, probe = probe, first = first, cols = cols, n = n,
                 originX = offset.x, originY = offset.y, shiftX = shiftX, shiftY = shiftY,
-                oceanN = OceanN, perView = OceanPerView, stride = OceanStride, latitudeSpan = LatitudeSpan
+                oceanN = OceanN, perView = OceanPerView, stride = OceanStride, latitudeSpan = LatitudeSpan,
+                wrapW = planet ? regions[0].nx : 0, period = PlanetPeriod
             };
             var jobs = new[] { (Job(fu, ou, n, 0, 0), n), (Job(fv, ov, n, 0, 0), n), (Job(ft, ot, n, 0, 0), n), (Job(fa, oa, w, mL, mB), h) };
             if (useBurst)
@@ -2207,9 +2250,13 @@ public class NoiseLab : MonoBehaviour
 
     string OceanSummary()
     {
-        var r = oceanRegions.Count > 0 ? oceanRegions[0] : null;
+        // v7: on a planet, the planet's region (a cache hit does not move it to the front, so
+        // the first region can be an older one from the open strip).
+        var r = planet ? oceanRegions.Find(x => x.key == OceanKey(0))
+                       : oceanRegions.Count > 0 ? oceanRegions[0] : null;
         if (r == null) return "ocean: not computed yet";
-        return $"ocean regions {oceanRegionsUsed} (16×16 view widths each, {OceanN}×{OceanN} cells, {OceanPasses} passes); " +
+        return (r.wrap ? $"ocean: the whole planet ({PlanetPeriod:0}×16 view widths, {r.nx}×{r.ny} cells, east joined to west, {OceanPasses} passes); "
+                       : $"ocean regions {oceanRegionsUsed} (16×16 view widths each, {OceanN}×{OceanN} cells, {OceanPasses} passes); ") +
                $"last new region {r.ms:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.state)}), sea {100f * r.seaShare:0}%, " +
                $"ω {r.omega}{(r.omega != OceanOmegas[0] ? " (retried)" : "")}, residual {r.residual:0.0000}{(r.residual < OceanTolerance ? "" : " NOT CONVERGED")}, fastest {r.fastest:0.0}× the interior speed; " +
                $"sea temp: memory {F(heatMemory)}, {r.heatRounds} rounds{(r.heatChange < SeaHeatTolerance ? "" : " NOT SETTLED")}, {r.heatMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.heatState)}), " +
@@ -2242,8 +2289,14 @@ public class NoiseLab : MonoBehaviour
                 GUIUtility.systemCopyBuffer = OceanSummary();
             if (GUILayout.Button(new GUIContent("Zoom out ×4", "The currents from 4 times higher up: 4×4 view widths around the view, full screen."), GUILayout.Width(140f), GUILayout.Height(30f)))
                 MakeBigPicture(4);
+            GUILayout.EndHorizontal();
+            // v7: the big pictures on a row of their own. Four buttons in one row were wider than
+            // the panel on the S22: the row and every label above it ran off the right edge.
+            GUILayout.BeginHorizontal();
             if (GUILayout.Button(new GUIContent("World ×16", "The whole latitude range, pole to pole: 16×16 view widths, centred on the view's longitude, full screen. The first time it may solve a few more ocean regions."), GUILayout.Width(140f), GUILayout.Height(30f)))
                 MakeBigPicture(WorldScale);
+            if (planet && GUILayout.Button(new GUIContent("World ×32", "The whole planet: 32 view widths around, 16 from pole to pole (2:1), centred on the view's longitude, full screen."), GUILayout.Width(140f), GUILayout.Height(30f)))
+                MakeBigPicture(PlanetScale);
             GUILayout.EndHorizontal();
             GUILayout.BeginHorizontal(); // its own row: three buttons do not fit on a narrow panel
             BigColourButton();
@@ -2288,7 +2341,9 @@ public class NoiseLab : MonoBehaviour
     // else (climate, biomes) is computed for it.
     // Continents step: a second size, the whole latitude range (pole to pole = 16 views).
     const int BigN = 512, WorldScale = 16;
+    const int PlanetScale = 32; // v7: the whole planet, BigN × BigN / 2 (2:1)
     int bigScale = 4;
+    int bigW = BigN, bigH = BigN; // v7: pixels across and up
     // continents step: paint the stream function instead of the speed; 2b: or the sea temperature
     enum BigColour { Speed, Gyres, SeaTemp, Anomaly, Biomes } // 2c: Biomes
     BigColour bigColour;
@@ -2306,10 +2361,12 @@ public class NoiseLab : MonoBehaviour
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         bigScale = scale;
-        int n = BigN, cells = n * n;
+        int n = BigN, bh = bigScale == PlanetScale ? BigN / 2 : BigN, cells = n * bh;
+        bigW = n;
+        bigH = bh;
         float step = (float)bigScale / n;
         bigOrigin = offset - 0.5f * (bigScale - 1) * Vector2.one;
-        if (bigScale == WorldScale) bigOrigin.y = -LatitudeSpan; // pole to pole
+        if (bigScale >= WorldScale) bigOrigin.y = -LatitudeSpan; // pole to pole
         string heightsKey = $"{HeightKey()}|{F(bigOrigin.x)}|{F(bigOrigin.y)}|{bigScale}";
         if (bigHeights == null || bigHeightsKey != heightsKey)
         {
@@ -2318,7 +2375,7 @@ public class NoiseLab : MonoBehaviour
             foreach (int k in HeightFields())
             {
                 src[k] = new float[cells];
-                SampleInto(src[k], GetField(k), FieldSeed(k), n, bigOrigin.x + 0.5f * step, bigOrigin.y + 0.5f * step, step);
+                SampleInto(src[k], GetField(k), FieldSeed(k), n, bh, bigOrigin.x + 0.5f * step, bigOrigin.y + 0.5f * step, step);
             }
             burstState = keepState;
             bigHeights = new float[cells];
@@ -2327,8 +2384,9 @@ public class NoiseLab : MonoBehaviour
         }
         var heights = bigHeights;
 
-        int first = Mathf.FloorToInt(bigOrigin.x / OceanStride);
-        int last = Mathf.FloorToInt((bigOrigin.x + bigScale) / OceanStride) + 1;
+        // v7: on a planet, its one region (read round the planet); off, the regions as in v6.
+        int first = planet ? 0 : Mathf.FloorToInt(bigOrigin.x / OceanStride);
+        int last = planet ? 0 : Mathf.FloorToInt((bigOrigin.x + bigScale) / OceanStride) + 1;
         var regions = new OceanRegion[last - first + 1];
         for (int k = 0; k < regions.Length; k++) regions[k] = GetOceanRegion(first + k);
         var u = new float[cells];
@@ -2340,18 +2398,19 @@ public class NoiseLab : MonoBehaviour
         {
             float wx = bigOrigin.x + (x + 0.5f) * step;
             float t = wx / OceanStride;
-            int k0 = Mathf.FloorToInt(t);
-            float b = t - k0;
-            for (int y = 0; y < n; y++)
+            int k0 = planet ? 0 : Mathf.FloorToInt(t);
+            float b = planet ? 0f : t - k0;
+            int k1 = planet ? 0 : k0 + 1; // planet: the one region twice, weight 0 on the second
+            for (int y = 0; y < bh; y++)
             {
                 float wy = bigOrigin.y + (y + 0.5f) * step;
                 SampleRegion(regions[k0 - first], wx, wy, out float u0, out float v0);
-                SampleRegion(regions[k0 + 1 - first], wx, wy, out float u1, out float v1);
+                SampleRegion(regions[k1 - first], wx, wy, out float u1, out float v1);
                 int i = y * n + x;
                 u[i] = Mathf.Lerp(u0, u1, b);
                 v[i] = Mathf.Lerp(v0, v1, b);
                 var r0 = regions[k0 - first];
-                var r1 = regions[k0 + 1 - first];
+                var r1 = regions[k1 - first];
                 if (bigColour == BigColour.Gyres)
                     field[i] = Mathf.Lerp(SampleRegionPsi(r0, wx, wy), SampleRegionPsi(r1, wx, wy), b);
                 else if (bigColour == BigColour.SeaTemp || bigColour == BigColour.Anomaly || bigColour == BigColour.Biomes)
@@ -2364,17 +2423,18 @@ public class NoiseLab : MonoBehaviour
                     pixels[i] = CurrentColour(heights[i], u[i], v[i]);
             }
         }
-        if (bigColour == BigColour.Gyres) GyreColours(pixels, n, heights, field);
-        else if (bigColour == BigColour.SeaTemp) SeaTempColours(pixels, n, heights, field, 2f);
-        else if (bigColour == BigColour.Anomaly) AnomalyColours(pixels, n, heights, field, bigOrigin.y, step);
+        if (bigColour == BigColour.Gyres) GyreColours(pixels, n, bh, heights, field);
+        else if (bigColour == BigColour.SeaTemp) SeaTempColours(pixels, n, bh, heights, field, 2f);
+        else if (bigColour == BigColour.Anomaly) AnomalyColours(pixels, n, bh, heights, field, bigOrigin.y, step);
         else if (bigColour == BigColour.Biomes)
         {
-            AnomalyColours(pixels, n, heights, field, bigOrigin.y, step); // the sea as in Temp anomaly
+            AnomalyColours(pixels, n, bh, heights, field, bigOrigin.y, step); // the sea as in Temp anomaly
             BigBiomes(pixels, heights, seaAnom);
         }
-        CurrentArrows(pixels, n, n / 32, heights, u, v);
+        CurrentArrows(pixels, n, bh, n / 32, heights, u, v);
+        if (bigPicture != null && (bigPicture.width != n || bigPicture.height != bh)) { Destroy(bigPicture); bigPicture = null; }
         if (bigPicture == null)
-            bigPicture = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            bigPicture = new Texture2D(n, bh, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
         bigPicture.SetPixels32(pixels);
         bigPicture.Apply();
         bigMs = (float)watch.Elapsed.TotalMilliseconds;
@@ -2384,7 +2444,7 @@ public class NoiseLab : MonoBehaviour
     // each gyre is a closed loop; the sign says which way it turns (red: psi > 0, blue:
     // psi < 0), the strength is how deep the colour is. 12 lines between 0 and the largest
     // |psi| of the picture. Land in grey, as in the speed colouring.
-    void GyreColours(Color32[] pixels, int n, float[] heights, float[] psi)
+    void GyreColours(Color32[] pixels, int n, int rows, float[] heights, float[] psi)
     {
         float max = 1e-6f;
         for (int i = 0; i < psi.Length; i++)
@@ -2394,7 +2454,7 @@ public class NoiseLab : MonoBehaviour
         var red = new Color32(200, 60, 45, 255);
         var blue = new Color32(40, 90, 190, 255);
         var line = new Color32(20, 20, 25, 255);
-        for (int y = 0; y < n; y++)
+        for (int y = 0; y < rows; y++)
             for (int x = 0; x < n; x++)
             {
                 int i = y * n + x;
@@ -2403,7 +2463,7 @@ public class NoiseLab : MonoBehaviour
                 var c = Color32.Lerp(pale, p >= 0f ? red : blue, Mathf.Sqrt(Mathf.Abs(p) / max));
                 int band = Mathf.FloorToInt(p / spacing);
                 bool edge = (x + 1 < n && heights[i + 1] < threshold && Mathf.FloorToInt(psi[i + 1] / spacing) != band) ||
-                            (y + 1 < n && heights[i + n] < threshold && Mathf.FloorToInt(psi[i + n] / spacing) != band);
+                            (y + 1 < rows && heights[i + n] < threshold && Mathf.FloorToInt(psi[i + n] / spacing) != band);
                 pixels[i] = edge ? Color32.Lerp(c, line, 0.6f) : c;
             }
     }
@@ -2414,10 +2474,10 @@ public class NoiseLab : MonoBehaviour
     static Color32 SeaTempColour(float t) =>
         Ramp3(Cold, Mild, Hot, Mathf.Clamp01((t - SeaColdest) / (SeaWarmest - SeaColdest)));
 
-    void SeaTempColours(Color32[] pixels, int n, float[] heights, float[] temp, float step)
+    void SeaTempColours(Color32[] pixels, int n, int rows, float[] heights, float[] temp, float step)
     {
         var line = new Color32(20, 20, 25, 255);
-        for (int y = 0; y < n; y++)
+        for (int y = 0; y < rows; y++)
             for (int x = 0; x < n; x++)
             {
                 int i = y * n + x;
@@ -2425,7 +2485,7 @@ public class NoiseLab : MonoBehaviour
                 var c = SeaTempColour(temp[i]);
                 int band = Mathf.FloorToInt(temp[i] / step);
                 bool edge = (x + 1 < n && heights[i + 1] < threshold && Mathf.FloorToInt(temp[i + 1] / step) != band) ||
-                            (y + 1 < n && heights[i + n] < threshold && Mathf.FloorToInt(temp[i + n] / step) != band);
+                            (y + 1 < rows && heights[i + n] < threshold && Mathf.FloorToInt(temp[i + n] / step) != band);
                 pixels[i] = edge ? Color32.Lerp(c, line, 0.5f) : c;
             }
     }
@@ -2433,17 +2493,17 @@ public class NoiseLab : MonoBehaviour
     // 2b step 3: the temperature minus the base of its latitude (T − T0): white = the same,
     // red warmer, blue colder, full colour at ±6 °C, a line every 1 °C. The latitude bands
     // vanish, so what the currents and the upwelling do stands out.
-    void AnomalyColours(Color32[] pixels, int n, float[] heights, float[] temp, float originY, float step)
+    void AnomalyColours(Color32[] pixels, int n, int rows, float[] heights, float[] temp, float originY, float step)
     {
         var white = new Color32(245, 245, 240, 255);
         var line = new Color32(20, 20, 25, 255);
         var anomaly = new float[pixels.Length];
-        for (int y = 0; y < n; y++)
+        for (int y = 0; y < rows; y++)
         {
             float t0 = SeaBaseTemp(originY + (y + 0.5f) * step);
             for (int x = 0; x < n; x++) anomaly[y * n + x] = temp[y * n + x] - t0;
         }
-        for (int y = 0; y < n; y++)
+        for (int y = 0; y < rows; y++)
             for (int x = 0; x < n; x++)
             {
                 int i = y * n + x;
@@ -2452,7 +2512,7 @@ public class NoiseLab : MonoBehaviour
                 var c = Color32.Lerp(white, a >= 0f ? Hot : Cold, Mathf.Clamp01(Mathf.Abs(a) / 6f));
                 int band = Mathf.FloorToInt(a);
                 bool edge = (x + 1 < n && heights[i + 1] < threshold && Mathf.FloorToInt(anomaly[i + 1]) != band) ||
-                            (y + 1 < n && heights[i + n] < threshold && Mathf.FloorToInt(anomaly[i + n]) != band);
+                            (y + 1 < rows && heights[i + n] < threshold && Mathf.FloorToInt(anomaly[i + n]) != band);
                 pixels[i] = edge ? Color32.Lerp(c, line, 0.5f) : c;
             }
     }
@@ -2478,7 +2538,7 @@ public class NoiseLab : MonoBehaviour
 
     void BigBiomes(Color32[] pixels, float[] heights, float[] seaAnom)
     {
-        int n = BigN, cells = n * n;
+        int n = bigW, rows = bigH, cells = n * rows; // v7: ×32 is 2:1 (rows = n / 2)
         string key = BigClimateKey();
         if (bigTemp == null || bigClimateKey != key)
         {
@@ -2490,7 +2550,7 @@ public class NoiseLab : MonoBehaviour
             {
                 src[k] = new float[cells];
                 int f = ClimateFields[k];
-                SampleInto(src[k], GetField(f), FieldSeed(f), n, bigOrigin.x + 0.5f * step, bigOrigin.y + 0.5f * step, step);
+                SampleInto(src[k], GetField(f), FieldSeed(f), n, rows, bigOrigin.x + 0.5f * step, bigOrigin.y + 0.5f * step, step);
             }
             burstState = keepState;
             float[] source = CutSource;
@@ -2517,12 +2577,12 @@ public class NoiseLab : MonoBehaviour
                 {
                     heights = nHeights, sorted = sorted, rank = rank, w = n,
                     below = below, landCount = sorted.Length - below, probe = rankProbe
-                }.ScheduleParallel(n, 8, default);
+                }.ScheduleParallel(rows, 8, default);
                 var hCols = new CoastColumnsJob
                 {
-                    heights = nHeights, dist = dist, w = n, h = n, threshold = threshold, probe = probe
+                    heights = nHeights, dist = dist, w = n, h = rows, threshold = threshold, probe = probe
                 }.ScheduleParallel(n, 8, default);
-                var hRows = new CoastRowsJob { dist = dist, w = n, probe = probe }.ScheduleParallel(n, 8, hCols);
+                var hRows = new CoastRowsJob { dist = dist, w = n, probe = probe }.ScheduleParallel(rows, 8, hCols);
                 var deps = JobHandle.CombineDependencies(hRank, hRows);
                 if (wind)
                 {
@@ -2534,7 +2594,7 @@ public class NoiseLab : MonoBehaviour
                     float stepLen = Mathf.Sqrt(1f + slope * slope) * toUnits;
                     deps = new WindJob
                     {
-                        heights = nHeights, rank = rank, air = air, w = n, h = n, threshold = threshold,
+                        heights = nHeights, rank = rank, air = air, w = n, h = rows, threshold = threshold,
                         xMajor = xMajor, dir = major >= 0f ? 1 : -1, slope = slope,
                         keepFlat = Mathf.Exp(-windDry * stepLen), pickUp = 1f - Mathf.Exp(-windEvaporation * stepLen),
                         lift = windLift * LiftScale, sea = seaA, hasSea = hasSea, seaK = SeaK, probe = probe
@@ -2551,7 +2611,7 @@ public class NoiseLab : MonoBehaviour
                     coastModeration = coastModeration, tempNoiseAmplitude = tempNoiseAmplitude,
                     moistureNoiseAmplitude = moistureNoiseAmplitude, coastalMoistureBonus = coastalMoistureBonus,
                     coastDecayRate = coastDecayRate, windStrength = windStrength, probe = probe
-                }.ScheduleParallel(n, 8, deps).Complete();
+                }.ScheduleParallel(rows, 8, deps).Complete();
                 bigTemp = Ensure(bigTemp, cells);
                 bigMoist = Ensure(bigMoist, cells);
                 tempV.CopyTo(bigTemp);
@@ -2575,17 +2635,18 @@ public class NoiseLab : MonoBehaviour
     void DrawBigPicture(float width, float height, float margin)
     {
         const float panelWidth = 360f, panelHeight = 250f;
+        float aspect = (float)bigH / bigW; // v7: 1, or 0.5 for the planet (×32)
         Rect r, panel;
         if (width - height >= panelWidth)
         {
-            float s = Mathf.Min(width - panelWidth - 3f * margin, height - 2f * margin);
-            r = new Rect(margin, (height - s) * 0.5f, s, s);
+            float s = Mathf.Min(width - panelWidth - 3f * margin, (height - 2f * margin) / aspect);
+            r = new Rect(margin, (height - s * aspect) * 0.5f, s, s * aspect);
             panel = new Rect(r.xMax + margin, margin, width - r.xMax - 2f * margin, height - 2f * margin);
         }
         else
         {
-            float s = Mathf.Min(width - 2f * margin, height - panelHeight - 3f * margin);
-            r = new Rect((width - s) * 0.5f, margin, s, s);
+            float s = Mathf.Min(width - 2f * margin, (height - panelHeight - 3f * margin) / aspect);
+            r = new Rect((width - s) * 0.5f, margin, s, s * aspect);
             panel = new Rect(margin, r.yMax + margin, width - 2f * margin, height - r.yMax - 2f * margin);
         }
         float side = r.width;
@@ -2599,7 +2660,7 @@ public class NoiseLab : MonoBehaviour
         DrawRect(new Rect(view.x, view.yMax - 2f, view.width, 2f), line);
         DrawRect(new Rect(view.x, view.y, 2f, view.height), line);
         DrawRect(new Rect(view.xMax - 2f, view.y, 2f, view.height), line);
-        string name = $"{BigColourNames[(int)bigColour]} ×{bigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + bigScale)}, " +
+        string name = $"{BigColourNames[(int)bigColour]} ×{bigScale}: lat {LatitudeName(bigOrigin.y)} – {LatitudeName(bigOrigin.y + bigScale * aspect)}, " +
                       $"the view outlined; {bigMs:0} ms" + (bigColour == BigColour.Biomes ? $" (climate {bigClimateMs:0} ms)" : "");
         DrawRect(new Rect(r.x, r.y, Mathf.Min(8.5f * name.Length + 8f, r.width), 22f), new Color(0f, 0f, 0f, 0.5f));
         GUI.Label(new Rect(r.x + 4f, r.y + 1f, r.width - 4f, 22f), name);
@@ -2651,7 +2712,7 @@ public class NoiseLab : MonoBehaviour
     string OceanCheck()
     {
         if (!(colouring == Colouring.Biomes && ocean)) return "";
-        int index = Mathf.FloorToInt(offset.x / OceanStride);
+        int index = planet ? 0 : Mathf.FloorToInt(offset.x / OceanStride);
         var a = ComputeOceanRegion(index, false);
         var b = ComputeOceanRegion(index, true);
         var c = ComputeOceanRegion(index, true);
@@ -2726,15 +2787,15 @@ public class NoiseLab : MonoBehaviour
         return s < 1f ? Color32.Lerp(Calm, Breeze, s) : Color32.Lerp(Breeze, Gust, (s - 1f) / 3f);
     }
 
-    void CurrentArrows(Color32[] pixels, int n) => CurrentArrows(pixels, n, n / 16, values, currentU, currentV);
+    void CurrentArrows(Color32[] pixels, int n) => CurrentArrows(pixels, n, n, n / 16, values, currentU, currentV);
 
     // Arrows over the sea, as for the wind; length grows with the square root of the speed.
-    void CurrentArrows(Color32[] pixels, int n, int every, float[] heights, float[] currentU, float[] currentV)
+    void CurrentArrows(Color32[] pixels, int n, int rows, int every, float[] heights, float[] currentU, float[] currentV)
     {
         int spacing = Mathf.Max(4, every);
         var body = new Color32(255, 255, 255, 255);
         var tail = new Color32(20, 20, 20, 255);
-        for (int cy = spacing / 2; cy < n; cy += spacing)
+        for (int cy = spacing / 2; cy < rows; cy += spacing)
             for (int cx = spacing / 2; cx < n; cx += spacing)
             {
                 int i = cy * n + cx;
@@ -2748,7 +2809,7 @@ public class NoiseLab : MonoBehaviour
                 {
                     float t = len * k / steps;
                     int x = Mathf.RoundToInt(cx + u / s * t), y = Mathf.RoundToInt(cy + v / s * t);
-                    if (x < 0 || y < 0 || x >= n || y >= n) break;
+                    if (x < 0 || y < 0 || x >= n || y >= rows) break;
                     pixels[y * n + x] = Color32.Lerp(tail, body, (float)k / steps);
                 }
             }
@@ -3215,7 +3276,7 @@ public class NoiseLab : MonoBehaviour
         }
         if (show == Show.WindFlow) FlowArrows(pixels, n);
         if (show == Show.Currents) CurrentArrows(pixels, n);
-        if (show == Show.SeaTemp) SeaTempColours(pixels, n, values, seaTemp, 1f); // 2b: a line every 1 °C (a view spans ~11° of latitude)
+        if (show == Show.SeaTemp) SeaTempColours(pixels, n, n, values, seaTemp, 1f); // 2b: a line every 1 °C (a view spans ~11° of latitude)
         texture.SetPixels32(pixels);
         texture.Apply();
     }
@@ -5729,6 +5790,23 @@ struct RegionSampleJob : IJobFor
     [NativeDisableParallelForRestriction] public NativeArray<int> probe;
     public int first, cols, n, shiftX, shiftY, oceanN, perView;
     public float originX, originY, stride, latitudeSpan;
+    public int wrapW;    // v7: > 0 on a planet: one region wrapW × oceanN, read round the planet
+    public float period; // v7: the planet's circumference in view widths
+
+    // v7: as NoiseLab.SampleWrapped.
+    float SampleWrapped(float x, float y)
+    {
+        int nx = wrapW;
+        float gx = (x - period * math.floor(x / period)) * perView - 0.5f;
+        float gy = math.clamp((y + latitudeSpan) * perView - 0.5f, 0f, oceanN - 1);
+        int ix = (int)math.floor(gx);
+        float tx = gx - ix;
+        int xa = (ix + nx) % nx, xb = (ix + 1) % nx;
+        int y0 = math.min((int)gy, oceanN - 2);
+        float ty = gy - y0;
+        int ra = y0 * nx, rb = ra + nx;
+        return math.lerp(math.lerp(field[ra + xa], field[ra + xb], tx), math.lerp(field[rb + xa], field[rb + xb], tx), ty);
+    }
 
     float Sample(int k, float x, float y)
     {
@@ -5748,6 +5826,7 @@ struct RegionSampleJob : IJobFor
         for (int x = 0; x < cols; x++)
         {
             float wx = originX + (x - shiftX + 0.5f) / n;
+            if (wrapW > 0) { output[y * cols + x] = SampleWrapped(wx, wy); continue; }
             float t = wx / stride;
             int k0 = (int)math.floor(t);
             float b = t - k0;
@@ -5768,13 +5847,13 @@ struct SeaHeatJob : IJob
     [ReadOnly] public NativeArray<float> pull;
     public NativeArray<float> temp, start, stats;
     public NativeArray<int> probe;
-    public int n, maxRounds;
+    public int n, nx, maxRounds; // v7: nx columns (n off; 256 on a planet, the seam joined)
     public float tolerance;
 
     public void Execute()
     {
         BurstProbe.Check(probe);
-        int cells = n * n;
+        int cells = nx * n;
         float worst = 0f;
         int rounds = 0;
         while (rounds < maxRounds)
@@ -5787,7 +5866,7 @@ struct SeaHeatJob : IJob
                 for (int k = 0; k < n; k++)
                 {
                     int y = up ? k : n - 1 - k;
-                    for (int m = 0; m < n; m++) Update(right ? m : n - 1 - m, y);
+                    for (int m = 0; m < nx; m++) Update(right ? m : nx - 1 - m, y);
                 }
             }
             worst = 0f;
@@ -5799,15 +5878,17 @@ struct SeaHeatJob : IJob
     }
 
     // A face with no inflow has weight 0, so the neighbour beyond the grid is never read.
+    // v7: on a planet the faces of the first and last columns do carry water, across the
+    // seam; off they never do (outside the grid is not sea), so the wrapped index is unused.
     void Update(int x, int y)
     {
-        int c = y * n + x;
+        int c = y * nx + x;
         float4 w4 = weight[c];
         float t = pull[c];
-        if (w4.x > 0f) t += w4.x * temp[c - 1];
-        if (w4.y > 0f) t += w4.y * temp[c + 1];
-        if (w4.z > 0f) t += w4.z * temp[c - n];
-        if (w4.w > 0f) t += w4.w * temp[c + n];
+        if (w4.x > 0f) t += w4.x * temp[x > 0 ? c - 1 : c - 1 + nx];
+        if (w4.y > 0f) t += w4.y * temp[x < nx - 1 ? c + 1 : c + 1 - nx];
+        if (w4.z > 0f) t += w4.z * temp[c - nx];
+        if (w4.w > 0f) t += w4.w * temp[c + nx];
         temp[c] = t;
     }
 }
@@ -5822,7 +5903,8 @@ struct OceanSorJob : IJobFor
     [ReadOnly] public NativeArray<float> force, beta;
     [NativeDisableParallelForRestriction] public NativeArray<float> psi;
     [NativeDisableParallelForRestriction] public NativeArray<int> probe;
-    public int n, parity;
+    public int n, nx, parity; // v7: n rows of nx cells (nx = n off)
+    public bool wrap;         // v7: a planet: the east edge is joined to the west edge
     public float eps, h, omega;
 
     public void Execute(int r)
@@ -5833,12 +5915,13 @@ struct OceanSorJob : IJobFor
         float b = beta[y], f = force[y];
         float k = eps / (h * h);
         float diag = 4f * k + b / h;
-        for (int x = n - 1; x >= 0; x--)
+        for (int x = nx - 1; x >= 0; x--)
         {
-            int i = y * n + x;
+            int i = y * nx + x;
             if (sea[i] == 0) continue; // land stays 0
-            float e = x < n - 1 ? psi[i + 1] : 0f, w = x > 0 ? psi[i - 1] : 0f;
-            float no = y < n - 1 ? psi[i + n] : 0f, so = y > 0 ? psi[i - n] : 0f;
+            float e = x < nx - 1 ? psi[i + 1] : wrap ? psi[i + 1 - nx] : 0f;
+            float w = x > 0 ? psi[i - 1] : wrap ? psi[i - 1 + nx] : 0f;
+            float no = y < n - 1 ? psi[i + nx] : 0f, so = y > 0 ? psi[i - nx] : 0f;
             float target = (k * (e + w + no + so) + b * e / h - f) / diag;
             psi[i] += omega * (target - psi[i]);
         }
