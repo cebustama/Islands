@@ -196,6 +196,13 @@ public class NoiseLab : MonoBehaviour
     [SerializeField, Range(0f, 1f)] float polarSea;
     const float PolarSeaFrom = 55f, PolarSeaTo = 65f, PolarSeaDepth = 2f;
 
+    // v7 (step 2, PL-18): tectonic plates, a layer to look at (the terrain does not use it).
+    // Only on a planet. Code: pt=<count>,<v|g> when not the default (12, Growth: chosen by
+    // looking at both on the S22 and in the editor, D-V7-1).
+    enum PlateShape { Voronoi, Growth }
+    [SerializeField, Range(4, 24)] int plateCount = 12;
+    [SerializeField] PlateShape plateShape = PlateShape.Growth;
+
     const int WorldSamples = 128;   // reference grid, WorldSamples² points
     const float WorldSpan = 16f;    // ... spread over 16 × 16 view widths around the origin
 
@@ -634,6 +641,349 @@ public class NoiseLab : MonoBehaviour
         if (allLand.Count > 0) text += $"; WARNING: {allLand.Count} latitude row(s) all land ({Ranges(allLand)})";
         text += allSea.Count > 0 ? $"; sea all round (circumpolar) at {Ranges(allSea)}" : "; no latitude all sea";
         return planetText = text;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // v7 (step 2, PL-18): tectonic plates, view only. On the planet's coarse grid (192 × 96,
+    // the same cells as the world reference, east joined to west):
+    //  - Seeds: plateCount points from the map's seed (a hash, never UnityEngine.Random).
+    //  - Shape (D-V7-1, both, to choose by looking): Voronoi = each point goes to the nearest
+    //    seed, after a smooth periodic warp (the jitter) so the borders are not straight;
+    //    Growth = the plates grow from their seeds at their own rate over cells of random
+    //    cost (a shortest-path flood), which gives ragged, uneven plates.
+    //  - Motion: a translation and a small spin per plate (a hash). On a cylinder there are
+    //    no Euler poles, so this stands in for the rotation of a plate on a sphere.
+    //  - Type: continental if most of its cells are land, oceanic otherwise.
+    //  - Border: the relative velocity of the two plates on the normal of the border (the
+    //    line between their seeds): mostly toward each other = convergent, apart = divergent,
+    //    mostly along it = transform.
+    // ---------------------------------------------------------------------------------
+    const int PlateW = 192, PlateH = 96;
+    const float PlateJitter = 0.9f;   // views: how far the Voronoi warp moves a point
+    const float PlateSpeedRef = 1.2f; // the speed an arrow is drawn full length at
+    static readonly Color32 Convergent = Hex("D7263D"), Divergent = Hex("1B98E0"), Transform = Hex("F4D35E");
+
+    int[] plateGrid;
+    Vector2[] plateSeed, plateMove;
+    float[] plateSpin, plateWarp;
+    bool[] plateContinental;
+    Color32[] plateColour;
+    string plateKey, plateSummary = "";
+
+    static uint PlateHash(int a, int b)
+    {
+        unchecked
+        {
+            uint h = (uint)a * 0x9E3779B1u ^ ((uint)b + 0x7F4A7C15u) * 0x85EBCA77u;
+            h ^= h >> 15; h *= 0x2C1B3C6Du;
+            h ^= h >> 12; h *= 0x297A2D39u;
+            h ^= h >> 15;
+            return h;
+        }
+    }
+
+    static float Plate01(int a, int b) => (PlateHash(a, b) & 0xFFFFFF) / 16777216f;
+
+    static float WrapX(float x) => x - PlanetPeriod * Mathf.Floor((x + 0.5f * PlanetPeriod) / PlanetPeriod); // into [−16, 16)
+
+    void EnsurePlates()
+    {
+        bool landKnown = cutsFrom == CutsFrom.World && worldValues != null && worldValues.Length == PlateW * PlateH;
+        string key = $"{seed}|{plateCount}|{plateShape}|{(landKnown ? HeightKey() + "|" + F(threshold) : "-")}";
+        if (key == plateKey && plateGrid != null) return;
+        plateKey = key;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
+        int count = plateCount, s = seed * 31 + 17;
+        plateSeed = new Vector2[count];
+        plateMove = new Vector2[count];
+        plateSpin = new float[count];
+        plateContinental = new bool[count];
+        plateColour = new Color32[count];
+        var rate = new float[count];
+        for (int k = 0; k < count; k++)
+        {
+            plateSeed[k] = new Vector2(-0.5f * PlanetPeriod + PlanetPeriod * Plate01(s, 8 * k), -LatitudeSpan + 2f * LatitudeSpan * Plate01(s, 8 * k + 1));
+            float angle = 2f * Mathf.PI * Plate01(s, 8 * k + 2), speed = 0.4f + 0.6f * Plate01(s, 8 * k + 3);
+            plateMove[k] = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * speed;
+            plateSpin[k] = (Plate01(s, 8 * k + 4) - 0.5f) * 0.12f; // radians per unit of time: 0.06 · 5 views ≈ 0.3
+            rate[k] = 0.6f + 0.8f * Plate01(s, 8 * k + 5);
+        }
+        plateWarp = new float[12];
+        for (int k = 0; k < 12; k++) plateWarp[k] = 2f * Mathf.PI * Plate01(s, 1000 + k);
+
+        int w = PlateW, h = PlateH, cells = w * h;
+        float step = PlanetPeriod / w;
+        plateGrid = new int[cells];
+        if (plateShape == PlateShape.Voronoi)
+        {
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    plateGrid[y * w + x] = VoronoiPlate(-0.5f * PlanetPeriod + (x + 0.5f) * step, -LatitudeSpan + (y + 0.5f) * step);
+        }
+        else GrowPlates(s, rate);
+
+        // Type: land share of each plate on the world reference (the same cells).
+        var land = new int[count];
+        var size = new int[count];
+        for (int i = 0; i < cells; i++)
+        {
+            int k = plateGrid[i];
+            if (k < 0) continue;
+            size[k]++;
+            if (landKnown && worldValues[i] >= threshold) land[k]++;
+        }
+        int continental = 0, empty = 0;
+        for (int k = 0; k < count; k++)
+        {
+            plateContinental[k] = size[k] > 0 && 2 * land[k] > size[k];
+            if (plateContinental[k]) continental++;
+            if (size[k] == 0) empty++;
+            float hue = Plate01(s, 2000 + k);
+            plateColour[k] = (Color32)(plateContinental[k] ? Color.HSVToRGB(hue, 0.45f, 0.85f) : Color.HSVToRGB(hue, 0.35f, 0.55f));
+        }
+
+        // Borders on the grid: each cell with its east (round the planet) and north neighbour.
+        int conv = 0, div = 0, trans = 0;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                int i = y * w + x, a = plateGrid[i];
+                float px = -0.5f * PlanetPeriod + (x + 0.5f) * step, py = -LatitudeSpan + (y + 0.5f) * step;
+                int e = plateGrid[x + 1 < w ? i + 1 : i + 1 - w];
+                int no = y + 1 < h ? plateGrid[i + w] : a;
+                foreach (int b in new[] { e, no })
+                {
+                    if (b == a || a < 0 || b < 0) continue;
+                    int kind = BorderKind(a, b, px, py);
+                    if (kind == 1) conv++; else if (kind == 2) div++; else trans++;
+                }
+            }
+        int border = Mathf.Max(1, conv + div + trans);
+        plateSummary = $"{count} plates ({plateShape}): {continental} continental, {count - continental} oceanic" +
+                       (empty > 0 ? $", {empty} empty (two seeds in one cell)" : "") +
+                       (landKnown ? "" : " (type unknown: needs the cuts from the world)") +
+                       $"; borders: convergent {100f * conv / border:0} %, divergent {100f * div / border:0} %, transform {100f * trans / border:0} %; " +
+                       $"built in {watch.Elapsed.TotalMilliseconds:0.0} ms";
+    }
+
+    // The jitter: a smooth warp, a sum of three waves per axis, periodic round the planet
+    // (whole numbers of waves in 32 views), so the plates join east to west.
+    Vector2 PlateWarpAt(float x, float y)
+    {
+        float dx = 0f, dy = 0f;
+        for (int k = 0; k < 3; k++)
+        {
+            float m = 2f * Mathf.PI * (2 + 2 * k) / PlanetPeriod, f = 0.25f + 0.2f * k, a = 1f / (k + 1);
+            dx += a * Mathf.Sin(m * x + f * y + plateWarp[k]);
+            dy += a * Mathf.Sin(m * x - f * y + plateWarp[3 + k]) ;
+            dx += 0.5f * a * Mathf.Sin(f * 1.7f * y + plateWarp[6 + k]);
+            dy += 0.5f * a * Mathf.Sin(m * x + plateWarp[9 + k]);
+        }
+        return new Vector2(x + PlateJitter * dx / 2.75f, y + PlateJitter * dy / 2.75f);
+    }
+
+    int VoronoiPlate(float x, float y)
+    {
+        Vector2 q = PlateWarpAt(x, y);
+        int best = 0;
+        float bestD = float.MaxValue;
+        for (int k = 0; k < plateSeed.Length; k++)
+        {
+            float dx = WrapX(q.x - plateSeed[k].x), dy = q.y - plateSeed[k].y;
+            float d = dx * dx + dy * dy;
+            if (d < bestD) { bestD = d; best = k; }
+        }
+        return best;
+    }
+
+    // Growth: a shortest-path flood from every seed at once over cells of random cost; a
+    // plate's step costs the cell's cost over its rate, so fast plates grow bigger.
+    void GrowPlates(int s, float[] rate)
+    {
+        int w = PlateW, h = PlateH, cells = w * h;
+        float step = PlanetPeriod / w;
+        var cost = new float[cells];
+        for (int i = 0; i < cells; i++) cost[i] = 0.3f + Plate01(s + 7777, i);
+        for (int i = 0; i < cells; i++) plateGrid[i] = -1;
+        int capacity = 4 * cells + plateSeed.Length, size = 0;
+        var hc = new float[capacity];
+        var hi = new int[capacity];
+        var hp = new int[capacity];
+        void Push(float c, int i, int k)
+        {
+            int at = size++;
+            while (at > 0)
+            {
+                int up = (at - 1) / 2;
+                if (hc[up] <= c) break;
+                hc[at] = hc[up]; hi[at] = hi[up]; hp[at] = hp[up];
+                at = up;
+            }
+            hc[at] = c; hi[at] = i; hp[at] = k;
+        }
+        for (int k = 0; k < plateSeed.Length; k++)
+        {
+            int gx = Mathf.Clamp(Mathf.FloorToInt((plateSeed[k].x + 0.5f * PlanetPeriod) / step), 0, w - 1);
+            int gy = Mathf.Clamp(Mathf.FloorToInt((plateSeed[k].y + LatitudeSpan) / step), 0, h - 1);
+            Push(0f, gy * w + gx, k);
+        }
+        while (size > 0)
+        {
+            float c = hc[0];
+            int i = hi[0], k = hp[0];
+            size--;
+            float lc = hc[size];
+            int li = hi[size], lk = hp[size];
+            int at = 0;
+            while (true)
+            {
+                int child = 2 * at + 1;
+                if (child >= size) break;
+                if (child + 1 < size && hc[child + 1] < hc[child]) child++;
+                if (hc[child] >= lc) break;
+                hc[at] = hc[child]; hi[at] = hi[child]; hp[at] = hp[child];
+                at = child;
+            }
+            if (size > 0) { hc[at] = lc; hi[at] = li; hp[at] = lk; }
+            if (plateGrid[i] >= 0) continue;
+            plateGrid[i] = k;
+            int x = i % w, y = i / w;
+            int e = x + 1 < w ? i + 1 : i + 1 - w, wst = x > 0 ? i - 1 : i - 1 + w;
+            if (plateGrid[e] < 0) Push(c + cost[e] / rate[k], e, k);
+            if (plateGrid[wst] < 0) Push(c + cost[wst] / rate[k], wst, k);
+            if (y > 0 && plateGrid[i - w] < 0) Push(c + cost[i - w] / rate[k], i - w, k);
+            if (y + 1 < h && plateGrid[i + w] < 0) Push(c + cost[i + w] / rate[k], i + w, k);
+        }
+    }
+
+    // The plate at a point of the world (views; x round the planet).
+    int PlateAt(float x, float y)
+    {
+        if (plateShape == PlateShape.Voronoi) return VoronoiPlate(x, y);
+        float step = PlanetPeriod / PlateW;
+        int gx = Mathf.Clamp(Mathf.FloorToInt((WrapX(x) + 0.5f * PlanetPeriod) / step), 0, PlateW - 1);
+        int gy = Mathf.Clamp(Mathf.FloorToInt((y + LatitudeSpan) / step), 0, PlateH - 1);
+        return Mathf.Max(0, plateGrid[gy * PlateW + gx]);
+    }
+
+    Vector2 PlateVelocity(int k, float x, float y)
+    {
+        float rx = WrapX(x - plateSeed[k].x), ry = y - plateSeed[k].y;
+        return plateMove[k] + plateSpin[k] * new Vector2(-ry, rx);
+    }
+
+    // 1 convergent, 2 divergent, 3 transform: the relative velocity of b seen from a, on
+    // the normal from a's seed to b's (within 60° of it: toward or apart; else along).
+    int BorderKind(int a, int b, float x, float y)
+    {
+        var n = new Vector2(WrapX(plateSeed[b].x - plateSeed[a].x), plateSeed[b].y - plateSeed[a].y);
+        if (n.sqrMagnitude < 1e-8f) return 3;
+        n.Normalize();
+        Vector2 v = PlateVelocity(b, x, y) - PlateVelocity(a, x, y);
+        float vn = Vector2.Dot(v, n), speed = v.magnitude;
+        if (speed < 1e-6f || Mathf.Abs(vn) < 0.5f * speed) return 3;
+        return vn < 0f ? 1 : 2;
+    }
+
+    // Paints the plates over an n × rows grid of points (x0 + x · step, y0 + y · step):
+    // each plate its colour (continental brighter, oceanic darker), its land paler so the
+    // coasts show, the borders coloured by kind (2 pixels: both sides), and an arrow of the
+    // plate's motion every `spacing` pixels.
+    void PlatePixels(Color32[] pixels, int n, int rows, float x0, float y0, float step, float[] heights, int spacing)
+    {
+        EnsurePlates();
+        var ids = new int[n * rows];
+        for (int y = 0; y < rows; y++)
+            for (int x = 0; x < n; x++)
+                ids[y * n + x] = PlateAt(x0 + x * step, y0 + y * step);
+        var white = new Color32(255, 255, 255, 255);
+        for (int i = 0; i < ids.Length; i++)
+        {
+            var c = plateColour[ids[i]];
+            pixels[i] = heights[i] >= threshold ? Color32.Lerp(c, white, 0.35f) : c;
+        }
+        for (int y = 0; y < rows; y++)
+            for (int x = 0; x < n; x++)
+            {
+                int i = y * n + x, a = ids[i];
+                if (x + 1 < n && ids[i + 1] != a)
+                {
+                    var c = KindColour(BorderKind(a, ids[i + 1], x0 + (x + 0.5f) * step, y0 + y * step));
+                    pixels[i] = pixels[i + 1] = c;
+                }
+                if (y + 1 < rows && ids[i + n] != a)
+                {
+                    var c = KindColour(BorderKind(a, ids[i + n], x0 + x * step, y0 + (y + 0.5f) * step));
+                    pixels[i] = pixels[i + n] = c;
+                }
+            }
+        var body = new Color32(255, 255, 255, 255);
+        var tail = new Color32(20, 20, 20, 255);
+        for (int cy = spacing / 2; cy < rows; cy += spacing)
+            for (int cx = spacing / 2; cx < n; cx += spacing)
+            {
+                Vector2 v = PlateVelocity(ids[cy * n + cx], x0 + cx * step, y0 + cy * step);
+                float sp = v.magnitude;
+                if (sp < 1e-3f) continue;
+                float len = 0.45f * spacing * Mathf.Min(sp / PlateSpeedRef, 1.5f);
+                int steps = Mathf.Max(1, Mathf.CeilToInt(len));
+                for (int k = 0; k <= steps; k++)
+                {
+                    float t = len * k / steps;
+                    int px = Mathf.RoundToInt(cx + v.x / sp * t), py = Mathf.RoundToInt(cy + v.y / sp * t);
+                    if (px < 0 || py < 0 || px >= n || py >= rows) break;
+                    pixels[py * n + px] = Color32.Lerp(tail, body, (float)k / steps);
+                }
+            }
+    }
+
+    static Color32 KindColour(int kind) => kind == 1 ? Convergent : kind == 2 ? Divergent : Transform;
+
+    string PlateSummary()
+    {
+        if (!planet) return "";
+        EnsurePlates();
+        return plateSummary;
+    }
+
+    // Run all tests: the plates built twice from scratch must be the same cells.
+    string PlateCheck()
+    {
+        if (!planet) return "";
+        plateKey = null;
+        EnsurePlates();
+        var a = (int[])plateGrid.Clone();
+        plateKey = null;
+        EnsurePlates();
+        int differ = 0;
+        for (int i = 0; i < a.Length; i++) if (a[i] != plateGrid[i]) differ++;
+        return $"plates: {plateSummary}; built twice: {differ} of {a.Length} cells differ";
+    }
+
+    void PlatesControls()
+    {
+        GUILayout.Space(6f);
+        if (!planet)
+        {
+            GUILayout.Label("Plates: turn Planet on (Climate > Ocean) to see the tectonic plates.");
+            return;
+        }
+        GUILayout.BeginHorizontal(GUILayout.Height(30f));
+        bool showing = panelShow[0] == Show.Plates;
+        if (GUILayout.Button(new GUIContent(showing ? "Normal view" : "Plates view",
+                "Switches the first panel between the map and the tectonic plates (view only: the terrain does not use them)."),
+                GUILayout.Width(130f), GUILayout.Height(30f)))
+            panelShow[0] = showing ? Show.Map : Show.Plates;
+        plateShape = (PlateShape)GUILayout.Toolbar((int)plateShape, new[]
+        {
+            new GUIContent("Voronoi", "Each point goes to the nearest seed, after a smooth warp: rounded plates with wavy borders."),
+            new GUIContent("Growth", "The plates grow from their seeds at their own rate over cells of random cost: ragged plates of uneven size.")
+        }, GUILayout.Height(30f));
+        GUILayout.EndHorizontal();
+        plateCount = Mathf.RoundToInt(Slider("Plates", plateCount, 4f, 24f, "0",
+            "How many plates. Each one moves (arrows) and is continental (bright) or oceanic (dark) by the land it carries. Borders: red convergent, blue divergent, yellow transform."));
+        GUILayout.Label(PlateSummary());
     }
 
     // The world reference: same noise(s), same settings, sampled on a fixed grid that
@@ -2461,16 +2811,17 @@ public class NoiseLab : MonoBehaviour
             "How much the sea's temperature sets the moisture of the air over it and of the coast: air over a cold sea holds less water (about 7 % less per °C below the usual of its latitude, Clausius–Clapeyron), so the wind brings dry air and a cold coast turns to desert (Atacama, Namib, Baja California); a warm sea gives a wetter coast. 1 = the physical rate; above 1 it also stands in for the sinking dry air of the subtropics, which the model does not simulate (default 3: cold west coasts turn to desert); 0 = the air ignores the sea's temperature."));
     }
 
-    static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp", "Temp anomaly", "Biomes" };
+    static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp", "Temp anomaly", "Biomes", "Plates" };
 
     void BigColourButton()
     {
         if (GUILayout.Button(new GUIContent($"Colour: {BigColourNames[(int)bigColour]}",
                 "How the ×4 and ×16 pictures paint the sea (tap to change). Speed: dark = still, orange = four times the interior speed and more. " +
                 "Gyres: red turns one way, blue the other, lines follow the water (stream function); each gyre is a closed loop. " +
-                "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms). Temp anomaly: how much warmer (red) or colder (blue) than its latitude, white = the same, full colour at ±6 °C, a line every 1 °C. Biomes: the land's biomes from the same climate as the view, coarser (always the sweep wind, no beach), the sea as in Temp anomaly."),
+                "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms). Temp anomaly: how much warmer (red) or colder (blue) than its latitude, white = the same, full colour at ±6 °C, a line every 1 °C. Biomes: the land's biomes from the same climate as the view, coarser (always the sweep wind, no beach), the sea as in Temp anomaly. Plates (Planet only): the tectonic plates, as in the Plates layer."),
                 GUILayout.Width(160f), GUILayout.Height(30f)))
-            bigColour = (BigColour)(((int)bigColour + 1) % BigColourNames.Length);
+            do bigColour = (BigColour)(((int)bigColour + 1) % BigColourNames.Length);
+            while (bigColour == BigColour.Plates && !planet);
     }
 
     // v6 (2a): the currents from four times higher up: 4 × 4 view widths centred on the view,
@@ -2483,8 +2834,9 @@ public class NoiseLab : MonoBehaviour
     int bigScale = 4;
     int bigW = BigN, bigH = BigN; // v7: pixels across and up
     // continents step: paint the stream function instead of the speed; 2b: or the sea temperature
-    enum BigColour { Speed, Gyres, SeaTemp, Anomaly, Biomes } // 2c: Biomes
+    enum BigColour { Speed, Gyres, SeaTemp, Anomaly, Biomes, Plates } // 2c: Biomes; v7: Plates (planet only)
     BigColour bigColour;
+    BigColour bigSeaColour; // v7: what the Plates button goes back to
     Texture2D bigPicture;
     Vector2 bigOrigin;
     float bigMs;
@@ -2499,6 +2851,7 @@ public class NoiseLab : MonoBehaviour
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         bigScale = scale;
+        if (bigColour == BigColour.Plates && !planet) bigColour = BigColour.Speed;
         int n = BigN, bh = bigScale == PlanetScale ? BigN / 2 : BigN, cells = n * bh;
         bigW = n;
         bigH = bh;
@@ -2521,6 +2874,20 @@ public class NoiseLab : MonoBehaviour
             bigHeightsKey = heightsKey;
         }
         var heights = bigHeights;
+
+        // v7 (step 2): the plates need no ocean, only the heights (for the coasts).
+        if (bigColour == BigColour.Plates)
+        {
+            var plates = new Color32[cells];
+            PlatePixels(plates, n, bh, bigOrigin.x + 0.5f * step, bigOrigin.y + 0.5f * step, step, heights, n / 24);
+            if (bigPicture != null && (bigPicture.width != n || bigPicture.height != bh)) { Destroy(bigPicture); bigPicture = null; }
+            if (bigPicture == null)
+                bigPicture = new Texture2D(n, bh, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            bigPicture.SetPixels32(plates);
+            bigPicture.Apply();
+            bigMs = (float)watch.Elapsed.TotalMilliseconds;
+            return;
+        }
 
         // v7: on a planet, its one region (read round the planet); off, the regions as in v6.
         int first = planet ? 0 : Mathf.FloorToInt(bigOrigin.x / OceanStride);
@@ -2814,6 +3181,16 @@ public class NoiseLab : MonoBehaviour
         BigColourButton();
         if (GUILayout.Button(new GUIContent("Back", "Back to the view where it was (or Esc). Tapping the picture takes the view to that point."), GUILayout.Width(90f), GUILayout.Height(30f)))
             close = true;
+        // v7 (step 2): the same picture, plates or sea, in one tap. On a row of its own: three
+        // buttons ran off the right edge on the S22.
+        GUILayout.EndHorizontal();
+        GUILayout.BeginHorizontal();
+        if (planet && GUILayout.Button(new GUIContent(bigColour == BigColour.Plates ? "Sea" : "Plates",
+                "Switches this picture between the tectonic plates and the sea colouring it had."), GUILayout.Width(90f), GUILayout.Height(30f)))
+        {
+            if (bigColour == BigColour.Plates) bigColour = bigSeaColour;
+            else { bigSeaColour = bigColour; bigColour = BigColour.Plates; }
+        }
         GUILayout.EndHorizontal();
         OceanSliders();
         if (GUI.changed && !close) { bigDirty = true; viewStale = true; }
@@ -3336,9 +3713,9 @@ public class NoiseLab : MonoBehaviour
     // What the image shows. Map: bands or biomes. The rest: one field on its own.
     // v6: WindFlow goes last; it is a panel layer only (the overlay list maps its entries to
     // Show by index + 1 up to WindAir, and Contours after that).
-    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir, WindFlow, Currents, SeaTemp }
-    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air", "Wind flow", "Currents", "Sea temp" };
-    static readonly string[] ShowCodes = { "map", "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind", "flow", "currents", "seatemp" };
+    enum Show { Map, Height, Temperature, Moisture, Continent, Erosion, Peaks, WindAir, WindFlow, Currents, SeaTemp, Plates }
+    static readonly string[] ShowNames = { "Map", "Height", "Temperature", "Moisture", "Continent (raw)", "Erosion (raw)", "Peaks (raw)", "Wind air", "Wind flow", "Currents", "Sea temp", "Plates" };
+    static readonly string[] ShowCodes = { "map", "height", "temperature", "moisture", "continent", "erosion", "peaks", "wind", "flow", "currents", "seatemp", "plates" };
 
     // v4: number of panels (1, 2 or 4) and the layer each one shows. A choice that is not
     // available (Temperature with Bands) is kept, and the panel shows the map meanwhile.
@@ -3358,6 +3735,7 @@ public class NoiseLab : MonoBehaviour
         Show.WindAir => colouring == Colouring.Biomes && wind,
         Show.WindFlow => FlowOn,
         Show.Currents or Show.SeaTemp => colouring == Colouring.Biomes && ocean,
+        Show.Plates => planet, // v7 (step 2)
         _ => true
     };
 
@@ -3407,6 +3785,11 @@ public class NoiseLab : MonoBehaviour
     // v7 (1c): the pixels of one layer, apart from its texture (the snapshot paints every layer).
     void FillPanel(Color32[] pixels, int n, Show show, bool countBiomes)
     {
+        if (show == Show.Plates)
+        {
+            PlatePixels(pixels, n, n, offset.x + 0.5f / n, offset.y + 0.5f / n, 1f / n, values, Mathf.Max(8, n / 8));
+            return;
+        }
         var bands = Bands;
         bool biomes = colouring == Colouring.Biomes;
 
@@ -3447,6 +3830,7 @@ public class NoiseLab : MonoBehaviour
         Show.WindAir => Color32.Lerp(Dry, Wet, windAir[i]),
         Show.WindFlow => FlowColour(i),
         Show.Currents => CurrentColour(i),
+        Show.Plates => default, // v7: painted whole (PlatePixels)
         Show.SeaTemp => default, // painted whole, with its isotherms, after the loop
         _ => Gray(viewField[FCont + (s - Show.Continent)][i])
     };
@@ -3652,6 +4036,8 @@ public class NoiseLab : MonoBehaviour
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
         if (planet) code += polarSea > 0f ? $";pl=1,{F(polarSea)}" : ";pl=1"; // v7 (PL-17); 1c: polar sea
+        if (planet && (plateCount != 12 || plateShape != PlateShape.Growth))
+            code += $";pt={plateCount},{(plateShape == PlateShape.Growth ? "g" : "v")}"; // v7 (step 2)
         if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)},{F(heatMemory)},{F(upwelling)}"; // v6 (2a): currents; 2b: heat memory, upwelling
         if (shade) code += $";sh={F(relief)}";
         if (HasContours()) code += $";ct={F(contourStep)}";
@@ -3708,6 +4094,8 @@ public class NoiseLab : MonoBehaviour
     {
         planet = false; // v7: a code without pl= is the open strip
         polarSea = 0f;
+        plateCount = 12;
+        plateShape = PlateShape.Growth;
         heightSource = HeightSource.OneNoise;
         colouring = Colouring.Bands;
         shade = false;
@@ -3844,6 +4232,13 @@ public class NoiseLab : MonoBehaviour
                     break;
                 }
                 case "v": ReadView(val); break;
+                case "pt": // v7 (step 2): pt=<count>,<v|g>
+                {
+                    string[] pq = val.Split(',');
+                    if (int.TryParse(pq[0], NumberStyles.Integer, Inv, out int pc)) plateCount = Mathf.Clamp(pc, 4, 24);
+                    plateShape = pq.Length > 1 && pq[1] == "v" ? PlateShape.Voronoi : PlateShape.Growth;
+                    break;
+                }
                 case "pl": // v7 (PL-17); 1c: pl=1,<polar sea>
                 {
                     string[] pp = val.Split(',');
@@ -4726,6 +5121,7 @@ public class NoiseLab : MonoBehaviour
             GUILayout.Label(contourStep.ToString("0.00", Inv), GUILayout.Width(40f));
         }
         GUILayout.EndHorizontal();
+        PlatesControls(); // v7 (step 2)
     }
 
     // A new overlay starts on the first available layer not yet in the list.
@@ -5104,6 +5500,7 @@ public class NoiseLab : MonoBehaviour
         {
             var sb = new System.Text.StringBuilder();
             if (planet) sb.AppendLine(PlanetCheck());
+            if (planet) sb.AppendLine(PlateCheck());
             if (edgeStatus.Length > 0) sb.AppendLine(edgeStatus);
             if (FlowOn) sb.AppendLine(FlowSummary());
             if (colouring == Colouring.Biomes && ocean) sb.AppendLine(OceanSummary());
@@ -5168,6 +5565,7 @@ public class NoiseLab : MonoBehaviour
         AppendDevice(sb);
         sb.AppendLine($"view: x {F(offset.x)}, y {F(offset.y)}, {resolution}², burst {(useBurst ? "on" : "off")}, margin {(climateMargin ? "on" : "off")}");
         if (planet) sb.AppendLine(PlanetCheck());
+        if (planet) sb.AppendLine(PlateCheck());
         sb.AppendLine(edgeStatus);
         if (FlowOn) sb.AppendLine("flow: " + FlowSummary());
         if (ocean) sb.AppendLine("ocean: " + OceanSummary());
@@ -5181,6 +5579,50 @@ public class NoiseLab : MonoBehaviour
         testStatus = $"Tests done in {watch.Elapsed.TotalSeconds:0.0} s; report copied" + (path != null ? $" and saved:\n{path}" : " (file not saved)");
         Debug.Log($"[NoiseLab] {report}");
         dirty = true;
+    }
+
+    // v7 (1c): a small label inside the snapshot: 3 × 5 pixel capitals (and digits), times
+    // `scale`, white on a half-dark box. left and top in image pixels from the top left.
+    const string FontChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()-";
+    static readonly string[] FontGlyphs =
+    {
+        "010101111101101", "110101110101110", "011100100100011", "110101101101110", "111100110100111",
+        "111100110100100", "011100101101011", "101101111101101", "111010010010111", "001001001101010",
+        "101101110101101", "100100100100111", "101111111101101", "110101101101101", "010101101101010",
+        "110101110100100", "010101101110011", "110101110101101", "011100010001110", "111010010010010",
+        "101101101101111", "101101101101010", "101101111111101", "101101010101101", "101101010010010",
+        "111001010100111", "111101101101111", "010110010010111", "110001010100111", "110001010001110",
+        "101101111001001", "111100110001110", "011100111101111", "111001010010010", "111101111101111",
+        "111101111001110", "001010010010001", "100010010010100", "000000111000000"
+    };
+
+    static void DrawLabel(Color32[] px, int width, int height, int left, int top, string text, int scale)
+    {
+        text = text.ToUpperInvariant();
+        int cw = 4 * scale, boxW = text.Length * cw + scale, boxH = 7 * scale;
+        var black = new Color32(0, 0, 0, 255);
+        var white = new Color32(255, 255, 255, 255);
+        void Put(int sx, int sy, Color32 c, float a)
+        {
+            if (sx < 0 || sy < 0 || sx >= width || sy >= height) return;
+            int i = (height - 1 - sy) * width + sx; // texture rows go up
+            px[i] = Color32.Lerp(px[i], c, a);
+        }
+        for (int y = 0; y < boxH; y++)
+            for (int x = 0; x < boxW; x++) Put(left + x, top + y, black, 0.55f);
+        for (int k = 0; k < text.Length; k++)
+        {
+            int g = FontChars.IndexOf(text[k]);
+            if (g < 0) continue;
+            for (int gy = 0; gy < 5; gy++)
+                for (int gx = 0; gx < 3; gx++)
+                {
+                    if (FontGlyphs[g][gy * 3 + gx] != '1') continue;
+                    for (int sy = 0; sy < scale; sy++)
+                        for (int sx = 0; sx < scale; sx++)
+                            Put(left + scale + k * cw + gx * scale + sx, top + scale + gy * scale + sy, white, 1f);
+                }
+        }
     }
 
     // Every layer available now, painted as its panel would be, in a grid of up to 4 columns
@@ -5202,6 +5644,7 @@ public class NoiseLab : MonoBehaviour
             int x0 = (t % cols) * (n + gap), y0 = height - n - (t / cols) * (n + gap); // texture rows go up
             for (int y = 0; y < n; y++) System.Array.Copy(tile, y * n, all, (y0 + y) * width + x0, n);
             names[t] = $"{t + 1} {ShowNames[(int)shows[t]]}";
+            DrawLabel(all, width, height, x0 + 3, (t / cols) * (n + gap) + 3, names[t], 2);
         }
         tiles = "left to right, top to bottom: " + string.Join(", ", names);
         var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
