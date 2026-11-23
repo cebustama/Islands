@@ -183,6 +183,15 @@ public class NoiseLab : MonoBehaviour
     // about 1251 km, so a cell of a 256 map is about 4.9 km. Only for the scale bar.
     const float KmPerView = 90f / LatitudeSpan * 111.2f;
 
+    // v7 (PL-17): Planet closes the world east–west into a cylinder (never a torus: it ends
+    // at the poles). 180° of latitude are 2 · LatitudeSpan = 16 views, so 360° of longitude are
+    // 32 views at the equator (D-V7-3). Every noise is then sampled in 3D on a cylinder of
+    // circumference PlanetPeriod: x → angle θ = 2π·x / P, point (R·cos θ, y, R·sin θ) with
+    // R = P / 2π, so arc length = x and one view width spans the same noise as before. Off:
+    // the 2D sampling, untouched (same bits).
+    const float PlanetPeriod = 32f;
+    [SerializeField] bool planet;
+
     const int WorldSamples = 128;   // reference grid, WorldSamples² points
     const float WorldSpan = 16f;    // ... spread over 16 × 16 view widths around the origin
 
@@ -530,18 +539,22 @@ public class NoiseLab : MonoBehaviour
         worldKey = key;
 
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        float span = worldSpan = WorldSpanFor(HeightFields());
-        float step = span / WorldSamples;
+        // v7: on a planet the reference is the whole planet, 32 × 16 views (2:1), with about
+        // the same number of samples (192 × 96, one every 1/6 view). Off: as before.
+        int ww = planet ? WorldSamples * 3 / 2 : WorldSamples, wh = planet ? WorldSamples * 3 / 4 : WorldSamples;
+        float span = worldSpan = planet ? PlanetPeriod : WorldSpanFor(HeightFields());
+        float step = span / ww;
         float origin = -0.5f * span + 0.5f * step;
+        float originY = planet ? -LatitudeSpan + 0.5f * step : origin;
         foreach (int k in HeightFields())
         {
             string fk = $"{FieldKey(k)}|{F(span)}";
             if (worldFieldKey[k] == fk && worldField[k] != null) continue;
-            worldField[k] = Ensure(worldField[k], WorldSamples * WorldSamples);
-            SampleInto(worldField[k], GetField(k), FieldSeed(k), WorldSamples, origin, origin, step);
+            worldField[k] = Ensure(worldField[k], ww * wh);
+            SampleInto(worldField[k], GetField(k), FieldSeed(k), ww, wh, origin, originY, step);
             worldFieldKey[k] = fk;
         }
-        worldValues = Ensure(worldValues, WorldSamples * WorldSamples);
+        worldValues = Ensure(worldValues, ww * wh);
         CombineHeight(worldValues, worldField);
         worldSorted = Ensure(worldSorted, worldValues.Length);
         System.Array.Copy(worldValues, worldSorted, worldValues.Length);
@@ -652,7 +665,7 @@ public class NoiseLab : MonoBehaviour
     string FieldKey(int k)
     {
         var f = GetField(k);
-        return $"{f.type}|{FieldSeed(k)}|{F(f.frequency)}|{f.octaves}|{f.lacunarity}|{F(f.gain)}";
+        return $"{f.type}|{FieldSeed(k)}|{F(f.frequency)}|{f.octaves}|{f.lacunarity}|{F(f.gain)}" + (planet ? "|planet" : "");
     }
 
     static readonly int[] OneNoiseFields = { FHeight };
@@ -743,6 +756,12 @@ public class NoiseLab : MonoBehaviour
         int differ = 0, total = 0;
         float worst = 0f;
         int state = -1;
+        // v7: with Planet, the view one turn east (x + 32) must be the same world. Not the
+        // same bits: x + 32 in float has fewer digits after the point, so the columns land
+        // a few millionths of a view away (max |Δ| tells how far that moves the noise).
+        var c = planet ? new float[n * n] : null;
+        int seamDiffer = 0;
+        float seamWorst = 0f;
         foreach (int k in ActiveFields())
         {
             bool keep = useBurst;
@@ -755,6 +774,16 @@ public class NoiseLab : MonoBehaviour
             SampleInto(b, GetField(k), FieldSeed(k), n, offset.x + 0.5f * step, offset.y + 0.5f * step, step);
             burstMs += watch.Elapsed.TotalMilliseconds;
             state = burstState;
+            if (planet)
+            {
+                SampleInto(c, GetField(k), FieldSeed(k), n, offset.x + PlanetPeriod + 0.5f * step, offset.y + 0.5f * step, step);
+                for (int i = 0; i < c.Length; i++)
+                {
+                    float d = Mathf.Abs(c[i] - b[i]);
+                    if (d > 0f) seamDiffer++;
+                    seamWorst = Mathf.Max(seamWorst, d);
+                }
+            }
             useBurst = keep;
             for (int i = 0; i < a.Length; i++)
             {
@@ -766,7 +795,9 @@ public class NoiseLab : MonoBehaviour
         }
         burstStatus = $"Burst check at {n}², {ActiveFieldCount()} field(s): managed {managedMs:0} ms, Burst {burstMs:0} ms " +
                       $"({(burstMs > 0 ? managedMs / burstMs : 0):0.0}×, {GridNoiseJob<Simplex2D<Simplex>>.StateName(state)}); " +
-                      $"values that differ {differ} of {total}, max |Δ| {worst:G3}\n" + ClimateCheck() + FlowCheck() + OceanCheck();
+                      $"values that differ {differ} of {total}, max |Δ| {worst:G3}" +
+                      (planet ? $"; planet seam (view at x and x + {PlanetPeriod:0}): {seamDiffer} differ, max |Δ| {seamWorst:G3}" : "") +
+                      "\n" + ClimateCheck() + FlowCheck() + OceanCheck();
         dirty = true; // repaint with the path in use
         Debug.Log($"[NoiseLab] {burstStatus}");
     }
@@ -882,8 +913,14 @@ public class NoiseLab : MonoBehaviour
         // goes through unchanged, so existing codes give the same bits. A fractional one samples
         // at frequency 1 with the coordinates scaled by f instead, which is the same noise
         // stretched 1/f times. Runtime/ stays untouched.
+        float scale = 1f; // v7: on a planet a fractional frequency scales the cylinder instead
         if (IsWholeFrequency(field.frequency))
             settings.frequency = (int)field.frequency;
+        else if (planet)
+        {
+            settings.frequency = 1;
+            scale = field.frequency;
+        }
         else
         {
             settings.frequency = 1;
@@ -895,6 +932,12 @@ public class NoiseLab : MonoBehaviour
         settings.lacunarity = field.lacunarity;
         settings.persistence = field.gain;
 
+        if (planet)
+        {
+            SampleCylinder(target, field.type, settings, w, h, originX, originZ, step, scale);
+            return;
+        }
+
         switch (field.type)
         {
             case NoiseType.Value: burstState = GridNoiseJob<Lattice2D<LatticeNormal, Value>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
@@ -903,6 +946,39 @@ public class NoiseLab : MonoBehaviour
             case NoiseType.SimplexPerlinOnSimplex: burstState = GridNoiseJob<Simplex2D<PerlinOnSimplex>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
             case NoiseType.SimplexSimplex: burstState = GridNoiseJob<Simplex2D<Simplex>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
             case NoiseType.VoronoiF1: burstState = GridNoiseJob<Voronoi2D<LatticeNormal, Worley, F1>>.Fill(useBurst, settings, target, w, h, originX, originZ, step); break;
+        }
+    }
+
+    // v7 (PL-17): the same grid on the cylinder. The cosine and sine of each column are
+    // computed here, once, in double precision from the column's x wrapped into [0, P): the
+    // managed and the Burst jobs read the same numbers (the Burst check stays exact) and
+    // x and x + P give the very same point (no seam). The x of a column is the float the 2D
+    // job uses (i · step + originX).
+    float[] cylCos, cylSin;
+
+    void SampleCylinder(float[] target, NoiseType type, Settings settings, int w, int h,
+                        float originX, float originY, float step, float scale)
+    {
+        cylCos = Ensure(cylCos, w);
+        cylSin = Ensure(cylSin, w);
+        double radius = PlanetPeriod / (2.0 * System.Math.PI) * scale;
+        for (int i = 0; i < w; i++)
+        {
+            double x = (float)i * step + originX;
+            x -= PlanetPeriod * System.Math.Floor(x / PlanetPeriod);
+            double a = 2.0 * System.Math.PI * x / PlanetPeriod;
+            cylCos[i] = (float)(radius * System.Math.Cos(a));
+            cylSin[i] = (float)(radius * System.Math.Sin(a));
+        }
+        float y0 = originY * scale, dy = step * scale;
+        switch (type)
+        {
+            case NoiseType.Value: burstState = CylinderNoiseJob<Lattice3D<LatticeNormal, Value>>.Fill(useBurst, settings, target, cylCos, cylSin, w, h, y0, dy); break;
+            case NoiseType.PerlinSquare: burstState = CylinderNoiseJob<Lattice3D<LatticeNormal, Perlin>>.Fill(useBurst, settings, target, cylCos, cylSin, w, h, y0, dy); break;
+            case NoiseType.SimplexOldGradient: burstState = CylinderNoiseJob<Simplex3D<Perlin>>.Fill(useBurst, settings, target, cylCos, cylSin, w, h, y0, dy); break;
+            case NoiseType.SimplexPerlinOnSimplex: burstState = CylinderNoiseJob<Simplex3D<PerlinOnSimplex>>.Fill(useBurst, settings, target, cylCos, cylSin, w, h, y0, dy); break;
+            case NoiseType.SimplexSimplex: burstState = CylinderNoiseJob<Simplex3D<Simplex>>.Fill(useBurst, settings, target, cylCos, cylSin, w, h, y0, dy); break;
+            case NoiseType.VoronoiF1: burstState = CylinderNoiseJob<Voronoi3D<LatticeNormal, Worley, F1>>.Fill(useBurst, settings, target, cylCos, cylSin, w, h, y0, dy); break;
         }
     }
 
@@ -2148,6 +2224,12 @@ public class NoiseLab : MonoBehaviour
         ocean = GUILayout.Toggle(ocean, new GUIContent(" Currents",
             "Ocean currents from the planet's winds (Stommel 1948), on a coarse grid fixed to the world. Show them with the Currents layer."),
             GUILayout.Width(110f));
+        // v7 (PL-17): the world wraps east–west (32 views around); everything is recomputed.
+        bool wasPlanet = planet;
+        planet = GUILayout.Toggle(planet, new GUIContent(" Planet",
+            "The world goes round east–west: 32 view widths around the equator, 16 from pole to pole (a cylinder, not a sphere). Off: the open strip of v6."),
+            GUILayout.Width(110f));
+        if (planet != wasPlanet) dirty = true;
         GUILayout.EndHorizontal();
         GUI.enabled = ocean;
         OceanSliders();
@@ -3350,6 +3432,7 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
+        if (planet) code += ";pl=1"; // v7 (PL-17)
         if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)},{F(heatMemory)},{F(upwelling)}"; // v6 (2a): currents; 2b: heat memory, upwelling
         if (shade) code += $";sh={F(relief)}";
         if (HasContours()) code += $";ct={F(contourStep)}";
@@ -3404,6 +3487,7 @@ public class NoiseLab : MonoBehaviour
     // no v3 keys) opens exactly the v2 map.
     void ResetV3()
     {
+        planet = false; // v7: a code without pl= is the open strip
         heightSource = HeightSource.OneNoise;
         colouring = Colouring.Bands;
         shade = false;
@@ -3540,6 +3624,7 @@ public class NoiseLab : MonoBehaviour
                     break;
                 }
                 case "v": ReadView(val); break;
+                case "pl": planet = val == "1"; break; // v7 (PL-17)
                 case "ov": ReadOverlays(val); sawOverlays = true; break;
                 case "cu": ReadClouds(val); break;
                 case "ct":
@@ -5126,6 +5211,87 @@ public struct GridNoiseJob<N> : IJobFor where N : struct, INoise
                 for (int k = 0; k < 4 && x + k < w; k++)
                     target[y * w + x + k] = v[k];
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------
+// v7 (PL-17): GridNoiseJob on the planet's cylinder. Column x is the 3D point
+// (cos[x], y, sin[x]), the cosine and sine already times the radius (NoiseLab.SampleCylinder);
+// row y is at originY + y · step. Same rows-in-parallel layout and probe as GridNoiseJob.
+// ---------------------------------------------------------------------------------
+[BurstCompile(FloatPrecision.Standard, FloatMode.Strict, CompileSynchronously = true)]
+public struct CylinderNoiseJob<N> : IJobFor where N : struct, INoise
+{
+    public Settings settings;
+    public int w;
+    public float originY, step;
+    [ReadOnly] public NativeArray<float> cos, sin;
+    [WriteOnly, NativeDisableParallelForRestriction] public NativeArray<float> target;
+    [NativeDisableParallelForRestriction] public NativeArray<int> state;
+
+    public void Execute(int y)
+    {
+        if (y == 0)
+        {
+            bool managed = false;
+            MarkManaged(ref managed);
+            state[0] = managed ? GridNoiseJob<N>.Managed : GridNoiseJob<N>.Compiled;
+        }
+        Row(y, w, originY, step, settings, cos, sin, target);
+    }
+
+    static void Row(int y, int w, float originY, float step, Settings settings,
+                    NativeArray<float> cos, NativeArray<float> sin, NativeArray<float> target)
+    {
+        float py = originY + y * step;
+        for (int x = 0; x < w; x += 4)
+        {
+            float4 cx = default, sz = default;
+            for (int k = 0; k < 4; k++)
+            {
+                int c = math.min(x + k, w - 1);
+                cx[k] = cos[c];
+                sz[k] = sin[c];
+            }
+            float4 v = GetFractalNoise<N>(new float4x3(cx, py, sz), settings).v;
+            for (int k = 0; k < 4 && x + k < w; k++)
+                target[y * w + x + k] = v[k];
+        }
+    }
+
+    [BurstDiscard]
+    static void MarkManaged(ref bool managed) => managed = true;
+
+    public static int Fill(bool burst, Settings settings, float[] target, float[] cos, float[] sin,
+                           int w, int h, float originY, float step)
+    {
+        var buffer = new NativeArray<float>(w * h, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var nCos = new NativeArray<float>(w, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var nSin = new NativeArray<float>(w, Allocator.TempJob, NativeArrayOptions.UninitializedMemory);
+        var flag = new NativeArray<int>(1, Allocator.TempJob);
+        try
+        {
+            NativeArray<float>.Copy(cos, 0, nCos, 0, w);
+            NativeArray<float>.Copy(sin, 0, nSin, 0, w);
+            int result = GridNoiseJob<N>.Off;
+            if (burst)
+            {
+                new CylinderNoiseJob<N>
+                {
+                    settings = settings, w = w, originY = originY, step = step,
+                    cos = nCos, sin = nSin, target = buffer, state = flag
+                }.ScheduleParallel(h, 4, default).Complete();
+                result = h > 0 ? flag[0] : GridNoiseJob<N>.Compiled;
+            }
+            else
+                for (int y = 0; y < h; y++) Row(y, w, originY, step, settings, nCos, nSin, buffer);
+            NativeArray<float>.Copy(buffer, 0, target, 0, w * h);
+            return result;
+        }
+        finally
+        {
+            buffer.Dispose(); nCos.Dispose(); nSin.Dispose(); flag.Dispose();
         }
     }
 }

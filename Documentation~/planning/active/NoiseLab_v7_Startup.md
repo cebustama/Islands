@@ -70,7 +70,21 @@ Fecha: 2026-11-22. Rama: `main`. Sigue a `../archive/NoiseLab_v6_Startup.md` (v6
 5. **Verificación:** prueba de borde y Burst check sin cambios con *Planet* apagado; con él, la
    costura este–oeste sin salto (comparar la columna 0 con la 32); S22.
 
-## Decisiones abiertas
+## Decisiones (Claudio, 2026-11-23)
+- **D-V7-1:** las dos formas, Voronoi con jitter y crecimiento desde semillas, con un selector; se
+  decide mirando en el S22.
+- **D-V7-2:** color *Plates* en la vista y en ×16/×32, y un botón que alterna el mismo mapa entre
+  la vista normal y la de placas.
+- **D-V7-3:** periodo de 32 vistas (2:1).
+- **Alcance:** el propuesto, tal cual. Paso 1: *Planet*, océano periódico, *World ×32*, avisos y
+  *Polar sea*. Paso 2: placas.
+- Arranque comprobado el 2026-11-23: suite 415/415 (batchmode). De las referencias se leyó solo
+  Red Blob (2018): semillas 10–50, relleno desde las semillas en orden aleatorio (no Voronoi),
+  dirección al azar por placa, borde según se acerquen o se alejen (sin transformante explícito).
+  Gainey, Cortial y la tesis PlaTec no se pudieron abrir (Cortial existe: CGF 38(2); PlaTec en
+  SourceForge: «divide al azar un mapa fractal en placas»).
+
+## Decisiones abiertas (cerradas arriba)
 - **D-V7-1, forma de las placas:** (A) Voronoi con jitter: simple, pero celdas convexas de bordes
   rectos (el «ingenuo» que intuye Claudio); (B) crecimiento desde semillas con relleno aleatorio
   ponderado (Gainey, Patel): placas irregulares, unas grandes y muchas pequeñas. Recomendación:
