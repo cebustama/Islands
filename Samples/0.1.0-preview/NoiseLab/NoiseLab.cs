@@ -191,6 +191,10 @@ public class NoiseLab : MonoBehaviour
     // the 2D sampling, untouched (same bits).
     const float PlanetPeriod = 32f;
     [SerializeField] bool planet;
+    // v7 (1c): Polar sea sinks the land beyond ~60° south (an open Southern Ocean), from 0
+    // (off) to 1 (all sea beyond 65°S). Only on a planet. Code: pl=1,<polar sea>.
+    [SerializeField, Range(0f, 1f)] float polarSea;
+    const float PolarSeaFrom = 55f, PolarSeaTo = 65f, PolarSeaDepth = 2f;
 
     const int WorldSamples = 128;   // reference grid, WorldSamples² points
     const float WorldSpan = 16f;    // ... spread over 16 × 16 view widths around the origin
@@ -344,17 +348,7 @@ public class NoiseLab : MonoBehaviour
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("# NoiseLab perf export v2");
-        sb.AppendLine($"date: {System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", Inv)}");
-        sb.AppendLine($"device: {SystemInfo.deviceModel} | {SystemInfo.operatingSystem}");
-        sb.AppendLine($"cpu: {SystemInfo.processorType} x{SystemInfo.processorCount} @ {SystemInfo.processorFrequency} MHz | ram {SystemInfo.systemMemorySize} MB");
-#if ENABLE_IL2CPP
-        const string backend = "IL2CPP";
-#else
-        const string backend = "Mono";
-#endif
-        sb.AppendLine($"unity: {Application.unityVersion} | {Application.platform} | {backend} | " +
-                      $"{(Application.isEditor ? "editor" : Debug.isDebugBuild ? "development build" : "release build")}");
-        sb.AppendLine($"screen: {Screen.width}x{Screen.height} | target fps {Application.targetFrameRate}");
+        AppendDevice(sb);
         sb.AppendLine($"resolution: {resolution} | drag resolution: {dragResolution} | world reference: {WorldSamples}x{WorldSamples} over {F(R1(worldSpan))} views, last {F(R1(calibrateMs))} ms");
         sb.AppendLine($"fields sampled per view: {ActiveFieldCount()} (height: {heightSource}, colour: {colouring})");
         sb.AppendLine($"panels: {viewCount} ({ViewCode()}) | overlays: {overlays.Count} | clouds: {(clouds ? CloudRes + "x" + CloudRes + ", " + GridNoiseJob<Simplex2D<Simplex>>.StateName(cloudBurstState) : "off")}");
@@ -392,6 +386,46 @@ public class NoiseLab : MonoBehaviour
         return sb.ToString();
     }
 
+    // Date, device and build: the head of the perf export and of the test run (v7, 1c).
+    static void AppendDevice(System.Text.StringBuilder sb)
+    {
+        sb.AppendLine($"date: {System.DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", Inv)}");
+        sb.AppendLine($"device: {SystemInfo.deviceModel} | {SystemInfo.operatingSystem}");
+        sb.AppendLine($"cpu: {SystemInfo.processorType} x{SystemInfo.processorCount} @ {SystemInfo.processorFrequency} MHz | ram {SystemInfo.systemMemorySize} MB");
+#if ENABLE_IL2CPP
+        const string backend = "IL2CPP";
+#else
+        const string backend = "Mono";
+#endif
+        sb.AppendLine($"unity: {Application.unityVersion} | {Application.platform} | {backend} | " +
+                      $"{(Application.isEditor ? "editor" : Debug.isDebugBuild ? "development build" : "release build")}");
+        sb.AppendLine($"screen: {Screen.width}x{Screen.height} | target fps {Application.targetFrameRate}");
+    }
+
+    // Editor: <project>/NoiseLabPerf/; phone: Application.persistentDataPath.
+    static string ExportDir() => Application.isEditor
+        ? System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "NoiseLabPerf"))
+        : Application.persistentDataPath;
+
+    // Writes text or bytes to the export folder; the path, or null if it could not.
+    static string SaveExport(string name, string text, byte[] bytes)
+    {
+        try
+        {
+            string dir = ExportDir();
+            System.IO.Directory.CreateDirectory(dir);
+            string path = System.IO.Path.Combine(dir, name);
+            if (bytes != null) System.IO.File.WriteAllBytes(path, bytes);
+            else System.IO.File.WriteAllText(path, text);
+            return path;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning($"[NoiseLab] {name} not saved: {e.Message}");
+            return null;
+        }
+    }
+
     static float R1(float v) => Mathf.Round(v * 10f) / 10f;
 
     static string StatsRow(string name, System.Collections.Generic.List<float> data)
@@ -419,9 +453,7 @@ public class NoiseLab : MonoBehaviour
         GUIUtility.systemCopyBuffer = report;
         try
         {
-            string dir = Application.isEditor
-                ? System.IO.Path.GetFullPath(System.IO.Path.Combine(Application.dataPath, "..", "NoiseLabPerf"))
-                : Application.persistentDataPath;
+            string dir = ExportDir();
             System.IO.Directory.CreateDirectory(dir);
             string path = System.IO.Path.Combine(dir, $"noiselab-perf-{System.DateTime.Now.ToString("yyyyMMdd-HHmmss", Inv)}.txt");
             System.IO.File.WriteAllText(path, report);
@@ -528,6 +560,82 @@ public class NoiseLab : MonoBehaviour
 
     float[] CutSource => cutsFrom == CutsFrom.World ? worldSorted : sorted;
 
+    // ---------------------------------------------------------------------------------
+    // v7 (1c): what the planet's coarse grid (the world reference, 192 × 96, east joined to
+    // west) says about its continents. Warnings only; no seed is rejected.
+    //  - Land from pole to pole: a flood fill over the land from the southern row; if it
+    //    reaches the northern row, no sea goes all the way round the planet.
+    //  - A latitude all land: the sea has no way east–west there at all.
+    //  - Latitudes all sea (information): a circumpolar ocean, where the currents can run
+    //    round the planet without a coast (the Southern Ocean). Watch the ocean's residual.
+    // ---------------------------------------------------------------------------------
+    int worldW = WorldSamples, worldH = WorldSamples;
+    string planetKey, planetText = "";
+
+    string PlanetCheck()
+    {
+        if (!planet) return "";
+        if (cutsFrom != CutsFrom.World || worldValues == null || worldValues.Length != worldW * worldH || worldW == worldH)
+            return "planet check: needs the cuts from the world (Map page, Cuts: World)";
+        string key = $"{worldKey}|{F(threshold)}";
+        if (key == planetKey) return planetText;
+        planetKey = key;
+
+        int w = worldW, h = worldH, land = 0;
+        float step = PlanetPeriod / w;
+        var allLand = new System.Collections.Generic.List<int>();
+        var allSea = new System.Collections.Generic.List<int>();
+        for (int r = 0; r < h; r++)
+        {
+            int row = 0;
+            for (int x = 0; x < w; x++) if (worldValues[r * w + x] >= threshold) row++;
+            land += row;
+            if (row == w) allLand.Add(r);
+            if (row == 0) allSea.Add(r);
+        }
+
+        var seen = new bool[w * h];
+        var stack = new int[w * h];
+        int top = 0;
+        bool poles = false;
+        for (int x = 0; x < w; x++)
+            if (worldValues[x] >= threshold) { seen[x] = true; stack[top++] = x; }
+        while (top > 0 && !poles)
+        {
+            int i = stack[--top];
+            int x = i % w, y = i / w;
+            if (y == h - 1) { poles = true; break; }
+            int e = x + 1 < w ? i + 1 : i + 1 - w, wst = x > 0 ? i - 1 : i - 1 + w;
+            int[] next = { e, wst, y > 0 ? i - w : -1, i + w };
+            foreach (int j in next)
+                if (j >= 0 && !seen[j] && worldValues[j] >= threshold) { seen[j] = true; stack[top++] = j; }
+        }
+
+        string Lat(int r)
+        {
+            float lat = (-LatitudeSpan + (r + 0.5f) * step) / LatitudeSpan * 90f;
+            return lat < 0f ? $"{-lat:0}°S" : $"{lat:0}°N";
+        }
+        string Ranges(System.Collections.Generic.List<int> rows)
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            for (int a = 0; a < rows.Count;)
+            {
+                int b = a;
+                while (b + 1 < rows.Count && rows[b + 1] == rows[b] + 1) b++;
+                parts.Add(a == b ? Lat(rows[a]) : $"{Lat(rows[a])}–{Lat(rows[b])}");
+                a = b + 1;
+            }
+            return string.Join(", ", parts);
+        }
+
+        string text = $"planet: land {100f * land / (w * h):0} %";
+        text += poles ? "; WARNING: land runs from pole to pole (no sea all round the planet)" : "; no land from pole to pole";
+        if (allLand.Count > 0) text += $"; WARNING: {allLand.Count} latitude row(s) all land ({Ranges(allLand)})";
+        text += allSea.Count > 0 ? $"; sea all round (circumpolar) at {Ranges(allSea)}" : "; no latitude all sea";
+        return planetText = text;
+    }
+
     // The world reference: same noise(s), same settings, sampled on a fixed grid that
     // ignores the offset. Noises are resampled only when their settings change; editing a
     // spline only recombines and sorts (16 384 values).
@@ -555,7 +663,9 @@ public class NoiseLab : MonoBehaviour
             worldFieldKey[k] = fk;
         }
         worldValues = Ensure(worldValues, ww * wh);
-        CombineHeight(worldValues, worldField);
+        worldW = ww;
+        worldH = wh;
+        CombineHeight(worldValues, worldField, ww, originY, step);
         worldSorted = Ensure(worldSorted, worldValues.Length);
         System.Array.Copy(worldValues, worldSorted, worldValues.Length);
         System.Array.Sort(worldSorted);
@@ -563,9 +673,10 @@ public class NoiseLab : MonoBehaviour
     }
 
     // Everything the height depends on (noises and curves), as text: same key, same heights.
-    string HeightKey() => heightSource == HeightSource.OneNoise
+    string HeightKey() => (heightSource == HeightSource.OneNoise
         ? FieldKey(FHeight)
-        : $"S|{FieldKey(FCont)}|{FieldKey(FEros)}|{FieldKey(FPeaks)}|{CurvesCode()}";
+        : $"S|{FieldKey(FCont)}|{FieldKey(FEros)}|{FieldKey(FPeaks)}|{CurvesCode()}")
+        + (planet && polarSea > 0f ? $"|ps{F(polarSea)}" : ""); // v7 (1c)
 
     void CutGroup(float[] sorted, float[] shares, int start, int end, float top, int firstEdge)
     {
@@ -704,7 +815,7 @@ public class NoiseLab : MonoBehaviour
             viewFieldKey[k] = key;
         }
         values = Ensure(values, n * n);
-        CombineHeight(values, viewField);
+        CombineHeight(values, viewField, n, offset.y + 0.5f * step, step);
         SampleMargins(n);
         sampleMs = (float)watch.Elapsed.TotalMilliseconds;
     }
@@ -793,7 +904,7 @@ public class NoiseLab : MonoBehaviour
             }
             total += a.Length;
         }
-        burstStatus = $"Burst check at {n}², {ActiveFieldCount()} field(s): managed {managedMs:0} ms, Burst {burstMs:0} ms " +
+        burstStatus = $"Burst check at {n}², x {F(offset.x)}, y {F(offset.y)}, {ActiveFieldCount()} field(s): managed {managedMs:0} ms, Burst {burstMs:0} ms " +
                       $"({(burstMs > 0 ? managedMs / burstMs : 0):0.0}×, {GridNoiseJob<Simplex2D<Simplex>>.StateName(state)}); " +
                       $"values that differ {differ} of {total}, max |Δ| {worst:G3}" +
                       (planet ? $"; planet seam (view at x and x + {PlanetPeriod:0}): {seamDiffer} differ, max |Δ| {seamWorst:G3}" : "") +
@@ -865,7 +976,7 @@ public class NoiseLab : MonoBehaviour
         }
         if (extValues == values) extValues = null;
         extValues = Ensure(extValues, extW * extH);
-        CombineHeight(extValues, extField);
+        CombineHeight(extValues, extField, extW, offset.y + (0.5f - mB) * step, step);
     }
 
     // Samples the w × h block of the extended grid whose lower-left cell is (x0, y0).
@@ -885,19 +996,40 @@ public class NoiseLab : MonoBehaviour
     //   height = C(continentalness) + E(erosion) · PV(peaks and valleys)
     // C sets the base level (ocean, coast, inland), E how much relief is allowed there,
     // and PV adds the peaks and the valleys.
-    void CombineHeight(float[] target, float[][] src)
+    // v7 (1c): w, originY and step place the rows in latitude, for Polar sea.
+    void CombineHeight(float[] target, float[][] src, int w, float originY, float step)
     {
         if (heightSource == HeightSource.OneNoise)
-        {
             System.Array.Copy(src[FHeight], target, target.Length);
-            return;
+        else
+        {
+            var sc = ToSpline(curves[0]);
+            var se = ToSpline(curves[1]);
+            var sp = ToSpline(curves[2]);
+            float[] c = src[FCont], e = src[FEros], p = src[FPeaks];
+            for (int i = 0; i < target.Length; i++)
+                target[i] = sc.Evaluate(c[i]) + se.Evaluate(e[i]) * sp.Evaluate(p[i]);
         }
-        var sc = ToSpline(curves[0]);
-        var se = ToSpline(curves[1]);
-        var sp = ToSpline(curves[2]);
-        float[] c = src[FCont], e = src[FEros], p = src[FPeaks];
-        for (int i = 0; i < target.Length; i++)
-            target[i] = sc.Evaluate(c[i]) + se.Evaluate(e[i]) * sp.Evaluate(p[i]);
+        PolarSea(target, w, originY, step);
+    }
+
+    // v7 (1c): lowers every height beyond PolarSeaFrom degrees south, smoothly up to
+    // PolarSeaTo, by up to PolarSeaDepth · polarSea (2 = the whole range of the heights).
+    // It is part of the height, so the view, its margins, the world reference, the ocean and
+    // the big pictures all see the same sea. With % water the sea level is measured after it:
+    // the land sunk at the pole comes up elsewhere. Off (or no planet): nothing, same bits.
+    void PolarSea(float[] target, int w, float originY, float step)
+    {
+        if (!planet || polarSea <= 0f) return;
+        int rows = target.Length / w;
+        for (int r = 0; r < rows; r++)
+        {
+            float south = -(originY + r * step) / LatitudeSpan * 90f; // degrees south of the equator
+            float k = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(PolarSeaFrom, PolarSeaTo, south));
+            if (k <= 0f) continue;
+            float drop = PolarSeaDepth * polarSea * k;
+            for (int x = 0; x < w; x++) target[r * w + x] -= drop;
+        }
     }
 
     void SampleInto(float[] target, NoiseField field, int fieldSeed, int n, float originX, float originZ, float step) =>
@@ -1959,7 +2091,7 @@ public class NoiseLab : MonoBehaviour
         }
         burstState = keepState; // the "last sampling" label is about the view
         var heights = new float[snx * sn];
-        CombineHeight(heights, src);
+        CombineHeight(heights, src, snx, y0 + 0.5f * step, step);
         var sea = new byte[cells];
         int seaCount = 0;
         for (int y = 0; y < n; y++)
@@ -2278,6 +2410,12 @@ public class NoiseLab : MonoBehaviour
             GUILayout.Width(110f));
         if (planet != wasPlanet) dirty = true;
         GUILayout.EndHorizontal();
+        if (planet)
+        {
+            polarSea = R2(Slider("Polar sea", polarSea, 0f, 1f, "0.00",
+                "Sinks the land beyond 60° south, so a sea goes all round the planet there (an open Southern Ocean). 0 = off; 1 = all sea beyond 65°S. With % water the land sunk at the pole comes up elsewhere."));
+            GUILayout.Label(PlanetCheck());
+        }
         GUI.enabled = ocean;
         OceanSliders();
         GUI.enabled = true;
@@ -2379,7 +2517,7 @@ public class NoiseLab : MonoBehaviour
             }
             burstState = keepState;
             bigHeights = new float[cells];
-            CombineHeight(bigHeights, src);
+            CombineHeight(bigHeights, src, n, bigOrigin.y + 0.5f * step, step);
             bigHeightsKey = heightsKey;
         }
         var heights = bigHeights;
@@ -2674,7 +2812,7 @@ public class NoiseLab : MonoBehaviour
         GUI.changed = false;
         GUILayout.BeginHorizontal();
         BigColourButton();
-        if (GUILayout.Button(new GUIContent("Back", "Back to the view (or tap the picture, or Esc)."), GUILayout.Width(90f), GUILayout.Height(30f)))
+        if (GUILayout.Button(new GUIContent("Back", "Back to the view where it was (or Esc). Tapping the picture takes the view to that point."), GUILayout.Width(90f), GUILayout.Height(30f)))
             close = true;
         GUILayout.EndHorizontal();
         OceanSliders();
@@ -2694,7 +2832,21 @@ public class NoiseLab : MonoBehaviour
         GUILayout.EndArea();
 
         Event e = Event.current;
-        if ((e.type == EventType.MouseUp && r.Contains(e.mousePosition)) || (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape))
+        if (e.type == EventType.MouseUp && r.Contains(e.mousePosition))
+        {
+            // v7 (1c): a tap on the picture takes the view there (centred on the point) and
+            // closes it. Rounded to 1/1000 of a view, so the code stays short; on a planet x is
+            // brought back into [−16, 16) (the same place, one turn away).
+            float px = bigOrigin.x + (e.mousePosition.x - r.x) / w;
+            float py = bigOrigin.y + (r.yMax - e.mousePosition.y) / w;
+            float nx = px - 0.5f, ny = Mathf.Clamp(py - 0.5f, -LatitudeSpan, LatitudeSpan - 1f);
+            if (planet) nx -= PlanetPeriod * Mathf.Floor((nx + 0.5f * PlanetPeriod) / PlanetPeriod);
+            offset = new Vector2(Mathf.Round(nx * 1000f) / 1000f, Mathf.Round(ny * 1000f) / 1000f);
+            viewStale = true;
+            close = true;
+            e.Use();
+        }
+        else if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
         {
             close = true;
             e.Use();
@@ -3247,6 +3399,14 @@ public class NoiseLab : MonoBehaviour
 
         var pixels = panelPixels[k];
         if (pixels == null || pixels.Length != n * n) pixels = panelPixels[k] = new Color32[n * n];
+        FillPanel(pixels, n, show, countBiomes);
+        texture.SetPixels32(pixels);
+        texture.Apply();
+    }
+
+    // v7 (1c): the pixels of one layer, apart from its texture (the snapshot paints every layer).
+    void FillPanel(Color32[] pixels, int n, Show show, bool countBiomes)
+    {
         var bands = Bands;
         bool biomes = colouring == Colouring.Biomes;
 
@@ -3277,8 +3437,6 @@ public class NoiseLab : MonoBehaviour
         if (show == Show.WindFlow) FlowArrows(pixels, n);
         if (show == Show.Currents) CurrentArrows(pixels, n);
         if (show == Show.SeaTemp) SeaTempColours(pixels, n, n, values, seaTemp, 1f); // 2b: a line every 1 °C (a view spans ~11° of latitude)
-        texture.SetPixels32(pixels);
-        texture.Apply();
     }
 
     Color32 FieldColour(Show s, int i) => s switch
@@ -3493,7 +3651,7 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
-        if (planet) code += ";pl=1"; // v7 (PL-17)
+        if (planet) code += polarSea > 0f ? $";pl=1,{F(polarSea)}" : ";pl=1"; // v7 (PL-17); 1c: polar sea
         if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)},{F(heatMemory)},{F(upwelling)}"; // v6 (2a): currents; 2b: heat memory, upwelling
         if (shade) code += $";sh={F(relief)}";
         if (HasContours()) code += $";ct={F(contourStep)}";
@@ -3549,6 +3707,7 @@ public class NoiseLab : MonoBehaviour
     void ResetV3()
     {
         planet = false; // v7: a code without pl= is the open strip
+        polarSea = 0f;
         heightSource = HeightSource.OneNoise;
         colouring = Colouring.Bands;
         shade = false;
@@ -3685,7 +3844,13 @@ public class NoiseLab : MonoBehaviour
                     break;
                 }
                 case "v": ReadView(val); break;
-                case "pl": planet = val == "1"; break; // v7 (PL-17)
+                case "pl": // v7 (PL-17); 1c: pl=1,<polar sea>
+                {
+                    string[] pp = val.Split(',');
+                    planet = pp[0] == "1";
+                    polarSea = pp.Length > 1 && TryF(pp[1], out float ps) ? Mathf.Clamp01(ps) : 0f;
+                    break;
+                }
                 case "ov": ReadOverlays(val); sawOverlays = true; break;
                 case "cu": ReadClouds(val); break;
                 case "ct":
@@ -4938,6 +5103,7 @@ public class NoiseLab : MonoBehaviour
         if (GUILayout.Button(new GUIContent("Copy results", "Copy the edge test, the flow summary and the Burst check as text."), GUILayout.Height(30f)))
         {
             var sb = new System.Text.StringBuilder();
+            if (planet) sb.AppendLine(PlanetCheck());
             if (edgeStatus.Length > 0) sb.AppendLine(edgeStatus);
             if (FlowOn) sb.AppendLine(FlowSummary());
             if (colouring == Colouring.Biomes && ocean) sb.AppendLine(OceanSummary());
@@ -4946,6 +5112,104 @@ public class NoiseLab : MonoBehaviour
             GUIUtility.systemCopyBuffer = sb.ToString();
             perfStatus = "Results copied.";
         }
+
+        // v7 (1c): the whole check in one tap, at the code's place, and a picture of every layer.
+        GUILayout.BeginHorizontal();
+        if (GUILayout.Button(new GUIContent("Run all tests",
+                "At the view as it is (the code's x and y): edge test, Burst check and a snapshot, one after the other, the same every time. " +
+                "Copies the report and saves it with the snapshot. Takes a few seconds (the checks run everything in plain C# too)."),
+                GUILayout.Height(40f))) RunAllTests();
+        if (GUILayout.Button(new GUIContent("Snapshot",
+                "Saves one PNG with every layer of the view in a grid (left to right, top to bottom, in the order of the panel menu)."),
+                GUILayout.Height(40f)))
+        {
+            string path = SaveSnapshot(System.DateTime.Now.ToString("yyyyMMdd-HHmmss", Inv), out string tiles);
+            testStatus = path != null ? $"Snapshot saved: {path}\n{tiles}" : "Snapshot not saved (see the console).";
+        }
+        GUILayout.EndHorizontal();
+        if (testStatus.Length > 0) GUILayout.Label(testStatus);
+    }
+
+    // ---------------------------------------------------------------------------------
+    // v7 (1c): standard tests. The place is the code's (x, y): paste a code, tap Run all
+    // tests, and the same checks run at the same place on any device. Each status says
+    // where it ran, so an old result is not taken for a new one.
+    // ---------------------------------------------------------------------------------
+
+    string testStatus = "";
+
+    // What Update does after a change, now (the tests leave the view moved or half done).
+    void RefreshView()
+    {
+        Sample(resolution);
+        Measure();
+        Calibrate();
+        Flood();
+        Climate();
+        Paint();
+        dirty = false;
+        moved = false;
+    }
+
+    void RunAllTests()
+    {
+        if (colouring != Colouring.Biomes) { testStatus = "Run all tests: choose Biomes colouring first."; return; }
+        string stamp = System.DateTime.Now.ToString("yyyyMMdd-HHmmss", Inv);
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        RefreshView();
+        EdgeTest();
+        RefreshView();
+        BurstCheck();
+        RefreshView();
+        string png = SaveSnapshot(stamp, out string tiles);
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("# NoiseLab test run v1");
+        AppendDevice(sb);
+        sb.AppendLine($"view: x {F(offset.x)}, y {F(offset.y)}, {resolution}², burst {(useBurst ? "on" : "off")}, margin {(climateMargin ? "on" : "off")}");
+        if (planet) sb.AppendLine(PlanetCheck());
+        sb.AppendLine(edgeStatus);
+        if (FlowOn) sb.AppendLine("flow: " + FlowSummary());
+        if (ocean) sb.AppendLine("ocean: " + OceanSummary());
+        sb.AppendLine(burstStatus);
+        sb.AppendLine($"snapshot: {png ?? "not saved"} ({tiles})");
+        sb.AppendLine($"total: {watch.Elapsed.TotalSeconds:0.0} s");
+        sb.AppendLine("code: " + BuildCode());
+        string report = sb.ToString();
+        GUIUtility.systemCopyBuffer = report;
+        string path = SaveExport($"noiselab-tests-{stamp}.txt", report, null);
+        testStatus = $"Tests done in {watch.Elapsed.TotalSeconds:0.0} s; report copied" + (path != null ? $" and saved:\n{path}" : " (file not saved)");
+        Debug.Log($"[NoiseLab] {report}");
+        dirty = true;
+    }
+
+    // Every layer available now, painted as its panel would be, in a grid of up to 4 columns
+    // (the first layer at the top left). Same size as the view, 4 pixels apart.
+    string SaveSnapshot(string stamp, out string tiles)
+    {
+        var shows = new System.Collections.Generic.List<Show>();
+        foreach (Show sh in System.Enum.GetValues(typeof(Show))) if (Available(sh)) shows.Add(sh);
+        int n = sampleN, gap = 4, cols = Mathf.Min(4, shows.Count), rows = (shows.Count + cols - 1) / cols;
+        int width = cols * n + (cols - 1) * gap, height = rows * n + (rows - 1) * gap;
+        var all = new Color32[width * height];
+        Color32 bg = background;
+        for (int i = 0; i < all.Length; i++) all[i] = bg;
+        var tile = new Color32[n * n];
+        var names = new string[shows.Count];
+        for (int t = 0; t < shows.Count; t++)
+        {
+            FillPanel(tile, n, shows[t], false);
+            int x0 = (t % cols) * (n + gap), y0 = height - n - (t / cols) * (n + gap); // texture rows go up
+            for (int y = 0; y < n; y++) System.Array.Copy(tile, y * n, all, (y0 + y) * width + x0, n);
+            names[t] = $"{t + 1} {ShowNames[(int)shows[t]]}";
+        }
+        tiles = "left to right, top to bottom: " + string.Join(", ", names);
+        var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+        texture.SetPixels32(all);
+        texture.Apply();
+        byte[] png = texture.EncodeToPNG();
+        Destroy(texture);
+        return SaveExport($"noiselab-snapshot-{stamp}.png", null, png);
     }
 
     // ---------------------------------------------------------------------------------
@@ -4968,7 +5232,7 @@ public class NoiseLab : MonoBehaviour
         climateMargin = keepMargin;
         offset = keepOffset;
         dirty = true;
-        edgeStatus = $"Edge test at {resolution}², wind {(wind ? WindName() + (FlowOn ? " (flow)" : "") : "off")}, land of the overlap:\n" +
+        edgeStatus = $"Edge test at {resolution}², x {F(offset.x)}, y {F(offset.y)}, wind {(wind ? WindName() + (FlowOn ? " (flow)" : "") : "off")}, land of the overlap:\n" +
                      $"  no margin: {off}\n  margin:    {on}";
         Debug.Log($"[NoiseLab] {edgeStatus}");
     }
