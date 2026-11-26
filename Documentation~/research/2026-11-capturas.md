@@ -2,6 +2,42 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-25 · Rogue waves: superposition, dispersion and crossing seas (Veritasium)
+- **Type and origin:** video, Veritasium, «Scientists Said This Wave Was Impossible» (28:03, sponsored by KiwiCo), https://www.youtube.com/watch?v=WbM7GP7QoEM. Transcript read in full.
+- **What Claudio said:** «guarda todo, está interesante».
+- **What it is:** how rogue waves form and how science denied them for 150 years: Draupner (1995), MaxWave, the height distribution, Russell's soliton, dispersive focusing, the Benjamin–Feir instability, crossing seas, and d'Urville against Arago.
+- **In plain words:**
+  - **0:25** Draupner, 1 Jan 1995: 25.6 m trough to crest in a sea whose typical wave was ~6 m.
+  - **1:18** MaxWave (ESA satellites, ~3 weeks, 2000–01): more than 10 waves over 25 m. Not freak events.
+  - **7:19–10:20** Stones as energy units: energy tends to spread, so the chance of one huge wave falls off exponentially. Because energy grows with height², the most common waves are mid-sized («Goldilocks»). The tail never reaches zero. With that maths, Draupner was a 1-in-3,000-year wave.
+  - **11:08–16:37** Russell's wave of translation (1834), rejected by Airy and Stokes. It survives because dispersion (long waves are faster) and amplitude (tall waves are faster) balance: a soliton.
+  - **16:48–19:04** Dispersive focusing: dispersion run backwards. Short components are sent first and long ones later, so all of them meet at one point and time.
+  - **19:13–21:13** Benjamin–Feir (modulational) instability: wave groups bunch up like a traffic jam and one wave «steals» its neighbours' energy.
+  - **21:17–23:26** Draupner needed **two crossing storms** (±45°, a checkerboard sea). Where they cross, the water can only go up, so the wave exceeds the single-direction breaking limit. Focusing waves from every direction gives 30–35 m (scaled).
+  - **23:31–24:57** 429 events from 2005 to 2021; the Ucluelet wave (2020); the Agulhas current. Optical rogue waves in fibre, plasmas and BECs. «Rogue holes».
+  - **25:01** Korzybski: the map is not the territory. d'Urville was ridiculed because his wave was not in the model.
+- **Field check (as of 2026-11-25):**
+
+  | Claim (min.) | Status | What the field says today | Source |
+  | --- | --- | --- | --- |
+  | Draupner 25.6 m, 1995 (0:25) | ✅ consensus | Accepted measurement; significant wave height 12 m | McAllister et al. 2019, *JFM* 860:767–786 |
+  | Rogue waves are common (24:29) | ✅ consensus | ~100,000 in >1 billion buoy waves, about one per day at a random spot | Häfner, Gemmrich & Jochum 2023, *PNAS*, doi:10.1073/pnas.2306275120 |
+  | Benjamin–Feir as a main cause (19:13) | ⚖️ debated, losing ground | Real in narrow-band, unidirectional tank seas. 27,500 North Sea records (18 years) show no sign of it | Fedele et al. 2025, *Sci. Rep.*, doi:10.1038/s41598-025-07156-6; Fedele et al. 2016, *Sci. Rep.* |
+  | Linear superposition / focusing dominates (16:48) | ✅ growing consensus | Dominant factor in the symbolic-regression model | Häfner et al. 2023 |
+  | Draupner explained by crossing seas (21:17) | ✅ with nuance | Reproduced only with a large crossing angle; the authors say the mechanisms are «still contentious» | McAllister et al. 2019 |
+  | 429 events 2005–2021; Ucluelet the most extreme (23:31) | ❓ no data | Not checked | — |
+
+  **What's new:** a readable rogue-wave risk formula found by symbolic regression (Häfner 2023), being put into a North Pacific forecast. A 2025 preprint (EGUsphere-2025-2031) studies crest–trough correlation as a precursor; it is preliminary and contested by its referees.
+  **Verdict:** reliable on the history, the statistics and Draupner. It overstates Benjamin–Feir: in the real ocean, linear focusing and crossing seas do almost all the work. «Scientists said it was impossible» is dramatized, since linear models already allowed such waves, just very rarely.
+- 💡 **Possible use here:**
+  - **An animated sea surface for NoiseLab or a 3D adapter:** a sum of wave components with the deep-water dispersion relation ω² = g·k (the classic FFT ocean, Tessendorf 2001). This is the surface, not the v8 currents.
+  - **Crossing seas as a world feature:** where two swell systems or a current and a swell meet (the Agulhas case), mark «dangerous waters» on the map. It gives navigation risk for the colonization game and mundo-islas.
+  - **Same family as Chladni** ([`2026-11-19-chladni.md`](2026-11-19-chladni.md)): the checkerboard of two crossing seas is plain interference of two plane waves, a field you can compose in NoiseLab.
+  - **Emergence:** the giant wave comes from interaction, with no single cause; it fits Claudio's main interest.
+- **Connects with:** web Labs (an explainer of the stone-counting scene, 7:19–10:20, next to `labs/scenes/mandelbrot`; probable), [`cuaderno-injusticia/conocimiento/saberes-originarios-y-ciencia.md`](../../../cuaderno-injusticia/conocimiento/saberes-originarios-y-ciencia.md) (testimony dismissed by the official model), [`cuaderno-injusticia/conocimiento/clima-argumentos-y-comparaciones.md`](../../../cuaderno-injusticia/conocimiento/clima-argumentos-y-comparaciones.md) (how to use, and not use, «the map is not the territory»), [`cuaderno-civilizaciones/notas/2026-11-capturas.md`](../../../cuaderno-civilizaciones/notas/2026-11-capturas.md) (d'Urville in the Strait of Magellan, a tangent).
+- **Further reading:** Tessendorf, «Simulating Ocean Water» (SIGGRAPH course notes, 2001); Fedele et al. 2016, «Real world ocean rogue waves explained without the modulational instability» (*Sci. Rep.*); Korzybski, *Science and Sanity* (1933).
+- **Status:** seed. Not a front: after the ALWTTT demo and v8.
+
 ## 2026-11-22 · Flowers that vanish with distance (memoryfloater)
 - **Type and origin:** video (Instagram reel, https://www.instagram.com/reel/DgAFMl4o27h/), by memoryfloater, «I have some flowers for everyone!». Not opened (Instagram asks for login); built from 8 screenshots.
 - **What Claudio said:** «Si guarda».
