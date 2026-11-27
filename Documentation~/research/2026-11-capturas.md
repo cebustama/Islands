@@ -2,6 +2,30 @@
 
 Ideas, links and videos delivered with `/capturar` that belong to Islands. Most recent first. Research material, not authority. Trace in `../../../_comun/capturas/registro.md`.
 
+## 2026-11-27 · Bethesda: generate, then hand-retouch for two years (Noclip)
+- **Type and origin:** video, Noclip, «La historia de Bethesda Game Studios» (2018, 88 min, Spanish dub), https://youtu.be/QKn9yiLVlMM. Transcript read in full.
+- **What Claudio said:** «perfecto. guarda todo cómo propones.»
+- **What it is:** studio history from Arena (1994) to Fallout 4, told by the team (Todd Howard, Emil Pagliarulo, Istvan Pely…), filmed during Fallout 76 with Bethesda's cooperation.
+- **In plain words:**
+  - **24:07–24:48** Oblivion's forests and terrain came from an algorithmic generator built on SpeedTree templates. «It didn't turn out well»: artists spent **two years** on a hand «terraforming pass» over the generated output, and the environment team had to grow.
+  - **35:30, 52:08** «We always start with the map»: map first, then quests that send the player across all of it; new tech is added to build the world; *strike teams* for problem areas (V.A.T.S., dragons).
+  - **58:41** Skyrim's cave kit: Fallout 3's LEGO-like 90° pieces replaced by more organic ones; more work for designers, no grid feel.
+  - **1:06:48** Cell-based world loading vs. dragons that must be visible from any distance (the heaviest character, always loaded).
+  - **1:11:17, 1:13:30** Landmarks you can navigate by without opening the map (Fenway's lights); key accent colours in a grey wasteland to pull the player toward what matters.
+  - **52:36** «Seven or eight months before launch everything is a mess»: cut, swap, fake.
+- **Field check (as of 2026-11-27; source from 2018):**
+
+  | Claim (min.) | Status | What other sources say | Source |
+  | --- | --- | --- | --- |
+  | «First game company to use SpeedTree» (24:11) | ⚖️ | Bethesda bought one of the first licences (Dec 2002) and Oblivion was the breakthrough; The Escapist gives *Trials of Atlantis* (2003) as the first commercial use | [Wikipedia](https://en.wikipedia.org/wiki/SpeedTree); [Escapist](https://escapistmagazine.com/?p=53119) |
+  | Morrowind «second best-seller on Xbox after Halo» (19:45) | 🔸 Howard's recollection | VGChartz ranks it 5th (2.86 M); it was the only title besides Halo still in the top 10 a year after launch | [VGChartz](https://www.vgchartz.com/article/451502/xbox-turns-20-top-10-best-selling-original-xbox-games/) |
+  | Terrain generated, then hand-edited (24:22) | ✅ method · ❓ «two years» | Procedural terrain with erosion plus hand editing is confirmed; the two-year figure only appears here | [PC Gamer](https://www.pcgamer.com/the-evolution-of-the-elder-scrolls/4/) |
+
+  Verdict: reliable first-hand testimony on process; sales figures and «we were first» are recollections. Authorised history: no crunch, no Fallout 76 launch, no Microsoft sale.
+- 💡 **Possible use here:** a real cost figure for «generate, then fix by hand». It supports making generated output controllable from the start (constraints, art-directable parameters) and the LLM-as-co-designer rule: the LLM designs and tests, while the package runs on its own. Related: the Daggerfall card in [`banco-ideas-juego/juegos-procedurales/investigacion/pcg-11-15.md`](../../../banco-ideas-juego/juegos-procedurales/investigacion/pcg-11-15.md) §14 (precomputed dungeons).
+- **Connects with:** mundo-islas (landmarks, colour guidance, guards that reflect the player, dragons with their own AI: [`2026-11-capturas.md`](../../../mundo-islas/ideas/2026-11-capturas.md)); cuaderno-injusticia (Fallout 3's «hero who makes a better world» in D.C.: [`notas/2026-11-capturas.md`](../../../cuaderno-injusticia/notas/2026-11-capturas.md)); videojuego-colonizacion (Morrowind as «a stranger in a strange land», your premise seen from the other side).
+- **Status:** seed
+
 ## 2026-11-25 · Rogue waves: superposition, dispersion and crossing seas (Veritasium)
 - **Type and origin:** video, Veritasium, «Scientists Said This Wave Was Impossible» (28:03, sponsored by KiwiCo), https://www.youtube.com/watch?v=WbM7GP7QoEM. Transcript read in full.
 - **What Claudio said:** «guarda todo, está interesante».
