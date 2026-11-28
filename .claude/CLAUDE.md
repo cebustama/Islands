@@ -12,3 +12,4 @@
 - Propose-by-default still holds. Edit files directly only when the user asks; with edits applied, a runbook is not needed.
 - Unity creates a `.meta` file for every new file outside `~` and dot folders. Never hand-write or delete `.meta` files; if a file is moved or deleted, its `.meta` goes with it.
 - The user writes in Spanish; answer in Spanish unless asked otherwise.
+- **«continuemos» (Claudio, 2026-11-28):** when a session starts with «continuemos» (or similar: «sigamos», «retomemos»), read `Documentation~/planning/active/NEXT_SESSION.md` and follow it as the rehydration prompt (its startup ritual first). At every session close, **replace** that file's content with the next session's rehydration prompt (same format), and commit it with the closing docs.
