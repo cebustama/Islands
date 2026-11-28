@@ -1,6 +1,9 @@
 # Arranque: NoiseLab v8 (océano físico: la regla de la isla y el relieve del fondo)
 
-Fecha: 2026-11-23. Rama: `main`. Sigue a `../archive/NoiseLab_v7_Startup.md` (v7 cerrada el
+**Cerrada el 2026-11-28** (la regla de la isla; el relieve queda en PL-19). Ver «Avance» al final y
+`changelog-ssot.md`, «NoiseLab v8». Sigue PL-16, puntos 1 y 4.
+
+Fecha: 2026-11-23. Rama: `main`. Sigue a `NoiseLab_v7_Startup.md` (v7 cerrada el
 2026-11-23). Roadmap: PL-19 en `PCG_Roadmap.md`.
 
 ## Objetivo
@@ -117,3 +120,18 @@ La v6 y la v7 (planeta, océano periódico, ×32, avisos, *Polar sea*, placas, *
 - `Documentation~/changelog-ssot.md` («NoiseLab v7», «NoiseLab v6»).
 - `Documentation~/planning/active/NoiseLab_Migration_Matrix.md` (O1, O5; fila nueva al cerrar).
 - `Documentation~/planning/archive/NoiseLab_v7_Startup.md` (avance de la v7).
+
+## Avance (2026-11-25/28)
+- **Ritual** (2026-11-24): suite 415/415; fuentes leídas (Pedlosky et al. 1997 y Pratt y Pedlosky
+  1998, con `pdftotext`; Godfrey 1989 no). Decisiones D-V8-1…5: «ok» de Claudio a las cinco.
+- **Paso 1** (`10d4b6c`): masas de tierra y color *Landmasses*. Código C: 11 masas (6291, 746, 492,
+  luego ≤ 8). Umbral por tamaño (≥ 64 celdas, una vista de tierra) en vez de «las 8 mayores».
+- **Paso 2** (`10d4b6c`): la regla de la isla. Código C, S22: comprobación a 75°S −3,390 frente a
+  −3,391; vuelta al planeta −7,26 (al oeste); 5 cálculos, 133 ms; Burst check 0. Planet apagado: los
+  mismos resultados (editor y S22).
+- **Sitio D** (cierre): *Polar sea from*; `pl=1,1,1,40` (editor): a 45°S +3,399 frente a +3,395
+  (al este); neto −4,54. No corrido en el S22.
+- *Gyres*: opción a (el color es el nivel de ψ; ayuda cambiada).
+- **Tangentes guardadas:** color *Spin* (la vorticidad ζ = ∇²ψ: dónde gira el agua sobre sí misma;
+  ~30 líneas); una «Antártida» que tape los vientos polares del este para que el neto vaya al este
+  (mejor con PL-20, la Tierra como entrada); el relieve (PL-19, punto 2).

@@ -61,8 +61,12 @@ W.c implemented and committed, governed docs pending; noise range fix A+D merged
   ocean region and *World ×32*, planet warnings and *Polar sea*, a tectonic plates layer (view
   only, Growth by default), *Run all tests* and *Snapshot*. Planet off: same bits as v6. S22:
   Burst check 0 differences, plates built twice 0 cells differ, Run all tests 1.2 s. Detail in
-  `changelog-ssot.md`. Next on this track: NoiseLab v8, physical ocean (island rule)
-  (`planning/active/NoiseLab_v8_Startup.md`; order to confirm with Claudio at the start).
+  `changelog-ssot.md`. **NoiseLab v8 DONE 2026-11-28** (`10d4b6c` + closing commit): the island
+  rule (Pedlosky et al. 1997) on the planet's ocean, each large landmass and the south wall with its
+  own ψ by superposition, so water passes between landmasses and round the planet; *Landmasses*
+  colour, exact check in the summary (ū = τ/eps, −3.390 vs −3.391), *Polar sea from*. Planet off:
+  same results. S22: Burst check 0 differences, island rule 133 ms. Detail in `changelog-ssot.md`.
+  Next on this track: PL-16 items 1 and 4 (rain by latitude, aridity), then PL-14 H1.
 - **Noise range — `PerlinOnSimplex` (A) + fBm amplitude sum (D). RESOLVED 2026-10-31,
   merged into `main` after a user-confirmed visual smoke test.**
   The default terrain noise, `Simplex2D<Perlin>`, peaked at 0.437 because `Perlin`'s

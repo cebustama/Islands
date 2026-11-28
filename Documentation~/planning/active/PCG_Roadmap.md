@@ -1741,7 +1741,7 @@ vegetation — recalibrating vegetation densities for those biomes would change 
 2. **Sea-floor relief** (f/H): the Stommel equation with depth, so the water follows contours of f/H, goes round ridges and speeds up in narrow passages; with the island rule, ridges are what brakes the circumpolar current in a real ocean (form stress). One-layer models overdo topographic steering: smooth the relief first. Depth today is the noise below sea level; with Phase K it would come from the plates (mid-ocean ridges at divergent borders, trenches at convergent ones).
 **Without (1), (2) cannot give a circumpolar current; without (2), (1) gives one far too strong** (linear friction is the only brake).  
 **Relation:** PL-17 (planet grid, *Polar sea*), PL-18 / Phase K (ridges), O1 in the migration matrix. Web lab idea (Claudio, 2026-11-23): «an ocean in a box», the same seed with ψ = 0 on all coasts, the island rule, relief, and relief from plates, side by side.  
-**Status:** proposed as NoiseLab v8 (`NoiseLab_v8_Startup.md`); it changes the order of 2026-11-22 (PL-16 items 1 and 4 first), so the order is confirmed with Claudio at the start of v8.
+**Status:** item 1 (island rule) **DONE in NoiseLab v8** (2026-11-28; `changelog-ssot.md`). Item 2 (relief, f/H) open: after the island rule was measured (D-V8-3), better with ridges from Phase K. Order confirmed by Claudio (2026-11-25): v8 first, then PL-16 items 1 and 4.
 
 ### PL-20 — Earth as input: a simplified real map to test the climate (NoiseLab)
 **Date:** 2026-11-25  

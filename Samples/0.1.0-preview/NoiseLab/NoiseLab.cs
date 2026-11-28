@@ -196,6 +196,7 @@ public class NoiseLab : MonoBehaviour
     [SerializeField, Range(0f, 1f)] float polarSea;
     [SerializeField] bool islandRule = true; // v8 (PL-19): each large landmass its own psi (planet only)
     const float PolarSeaFrom = 55f, PolarSeaTo = 65f, PolarSeaDepth = 2f;
+    [SerializeField, Range(30f, 70f)] float polarSeaFrom = PolarSeaFrom; // v8 (D-V8-5): where the sinking starts, °S (fully sea 10° further)
 
     // v7 (step 2, PL-18): tectonic plates, a layer to look at (the terrain does not use it).
     // Only on a planet. Code: pt=<count>,<v|g> when not the default (12, Growth: chosen by
@@ -1027,7 +1028,8 @@ public class NoiseLab : MonoBehaviour
     string HeightKey() => (heightSource == HeightSource.OneNoise
         ? FieldKey(FHeight)
         : $"S|{FieldKey(FCont)}|{FieldKey(FEros)}|{FieldKey(FPeaks)}|{CurvesCode()}")
-        + (planet && polarSea > 0f ? $"|ps{F(polarSea)}" : ""); // v7 (1c)
+        + (planet && polarSea > 0f ? $"|ps{F(polarSea)}" : "") // v7 (1c)
+        + (planet && polarSea > 0f && polarSeaFrom != PolarSeaFrom ? $"|pf{F(polarSeaFrom)}" : ""); // v8
 
     void CutGroup(float[] sorted, float[] shares, int start, int end, float top, int firstEdge)
     {
@@ -1376,7 +1378,7 @@ public class NoiseLab : MonoBehaviour
         for (int r = 0; r < rows; r++)
         {
             float south = -(originY + r * step) / LatitudeSpan * 90f; // degrees south of the equator
-            float k = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(PolarSeaFrom, PolarSeaTo, south));
+            float k = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(polarSeaFrom, polarSeaFrom + (PolarSeaTo - PolarSeaFrom), south)); // v8: from a slider (55 = v7)
             if (k <= 0f) continue;
             float drop = PolarSeaDepth * polarSea * k;
             for (int x = 0; x < w; x++) target[r * w + x] -= drop;
@@ -3069,6 +3071,8 @@ public class NoiseLab : MonoBehaviour
         {
             polarSea = R2(Slider("Polar sea", polarSea, 0f, 1f, "0.00",
                 "Sinks the land beyond 60° south, so a sea goes all round the planet there (an open Southern Ocean). 0 = off; 1 = all sea beyond 65°S. With % water the land sunk at the pole comes up elsewhere."));
+            polarSeaFrom = Mathf.Round(Slider("Polar sea from", polarSeaFrom, 30f, 70f, "0",
+                "Where Polar sea starts sinking the land, in degrees south; it is all sea 10° further. 55 = as in v7 (all sea beyond 65°S). Below 60° the ring of sea reaches the westerlies, which drive a current eastward round the planet (as the Antarctic Circumpolar Current through the Drake Passage); beyond 60° the polar easterlies drive it westward."));
             islandRule = GUILayout.Toggle(islandRule, new GUIContent(" Island rule",
                 "Water can pass between landmasses and round the planet: each large landmass and the south pole's wall get their own stream function, fixed so that round each coast the wind's push and the drag balance (Godfrey 1989; Pedlosky et al. 1997). Off: every coast at 0, so no water passes between landmasses (v7). Costs one more ocean solve per large landmass."),
                 GUILayout.Height(30f));
@@ -3125,7 +3129,7 @@ public class NoiseLab : MonoBehaviour
     {
         if (GUILayout.Button(new GUIContent($"Colour: {BigColourNames[(int)bigColour]}",
                 "How the ×4 and ×16 pictures paint the sea (tap to change). Speed: dark = still, orange = four times the interior speed and more. " +
-                "Gyres: red turns one way, blue the other, lines follow the water (stream function); each gyre is a closed loop. " +
+                "Gyres: the stream function. The water flows along the lines, and between two neighbouring lines the same amount of water passes (close lines = fast water); a gyre is a closed loop. Red = high, blue = low: with every coast at 0 (Island rule off) red turns one way and blue the other; with the island rule each landmass has its own level, so the colour is the level (as in ocean atlases), not the turning. " +
                 "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms). Temp anomaly: how much warmer (red) or colder (blue) than its latitude, white = the same, full colour at ±6 °C, a line every 1 °C. Biomes: the land's biomes from the same climate as the view, coarser (always the sweep wind, no beach), the sea as in Temp anomaly. Plates (Planet only): the tectonic plates, as in the Plates layer. " +
                 "Landmasses (Planet only): the pieces of land the ocean sees (its coarse grid), each its own colour: the free ones of a view of land or more bright (each its own psi with the island rule), the pole walls grey-blue, the smaller ones (sea for the island rule) dark grey."),
                 GUILayout.Width(160f), GUILayout.Height(30f)))
@@ -4398,7 +4402,8 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
-        if (planet) code += !islandRule ? $";pl=1,{F(polarSea)},0" : polarSea > 0f ? $";pl=1,{F(polarSea)}" : ";pl=1"; // v7 (PL-17); 1c: polar sea; v8: ,0 = no island rule
+        if (planet) code += polarSeaFrom != PolarSeaFrom ? $";pl=1,{F(polarSea)},{(islandRule ? 1 : 0)},{F(polarSeaFrom)}" // v8: polar sea from (°S)
+                          : !islandRule ? $";pl=1,{F(polarSea)},0" : polarSea > 0f ? $";pl=1,{F(polarSea)}" : ";pl=1"; // v7 (PL-17); 1c: polar sea; v8: ,0 = no island rule
         if (planet && (plateCount != 12 || plateShape != PlateShape.Growth))
             code += $";pt={plateCount},{(plateShape == PlateShape.Growth ? "g" : "v")}"; // v7 (step 2)
         if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)},{F(heatMemory)},{F(upwelling)}"; // v6 (2a): currents; 2b: heat memory, upwelling
@@ -4458,6 +4463,7 @@ public class NoiseLab : MonoBehaviour
         planet = false; // v7: a code without pl= is the open strip
         polarSea = 0f;
         islandRule = true; // v8
+        polarSeaFrom = PolarSeaFrom;
         plateCount = 12;
         plateShape = PlateShape.Growth;
         heightSource = HeightSource.OneNoise;
@@ -4609,6 +4615,7 @@ public class NoiseLab : MonoBehaviour
                     planet = pp[0] == "1";
                     polarSea = pp.Length > 1 && TryF(pp[1], out float ps) ? Mathf.Clamp01(ps) : 0f;
                     islandRule = !(pp.Length > 2 && pp[2] == "0"); // v8
+                    polarSeaFrom = pp.Length > 3 && TryF(pp[3], out float pf) ? Mathf.Clamp(pf, 30f, 70f) : PolarSeaFrom;
                     break;
                 }
                 case "ov": ReadOverlays(val); sawOverlays = true; break;

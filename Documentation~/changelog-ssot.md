@@ -9,6 +9,51 @@
 > absence is recorded here so this file is not read as a complete history; backfilling
 > it was not in scope for the documentation-application session.
 
+## NoiseLab v8 — physical ocean: the island rule and a circumpolar current (sample only)
+Date: 2026-11-25/28. Commits on `main`: `10d4b6c` (steps 1 and 2) and the closing commit (*Polar
+sea from*, *Gyres* help, docs). No runtime code changed. PL-19 item 1; item 2 (relief) still open.
+
+**What.** `Samples/0.1.0-preview/NoiseLab/NoiseLab.cs`, planet only:
+- Landmasses of the planet's ocean grid (`LabelLandmasses`: 4-connected pieces, east joined to west,
+  labelled in row-major order; a piece touching the first or last row belongs to that pole's wall;
+  free pieces ranked by size). ×32 colour *Landmasses*; a `landmasses:` line in the ocean summary.
+- The island rule (`SolveIslandRule`). Sources read: Pedlosky, Pratt, Spall & Helfrich 1997 (*J.
+  Mar. Res.* 55, eq. 2.2) and Pratt & Pedlosky 1998 (*JPO* 28, eq. 1.1–1.2, §6); Godfrey 1989 not
+  opened. With a linear drag the tangential momentum integrated along the coast gives exactly
+  r∮u·t ds = ∮τ·t ds (Godfrey's formula is the frictionless approximation). On the grid each
+  landmass of ≥ 64 cells (`OceanMinMassCells`, at most `OceanMaxNodes` = 16) and the south wall
+  (ghost row; the north wall is the reference, ψ 0) is one unknown whose equation is the solver's
+  equation summed over its cells. Superposition: one solve with the wind and every node at 0, one per
+  node without wind and that node at 1 (`SolveStommel`, the v6 SOR moved into a function;
+  `OceanSorJob.south` = ψ beyond the first row), then a K × K system in double (Gauss–Jordan with
+  partial pivoting, fixed order). Smaller free masses count as sea for the currents (still land in
+  the view and for the sea heat). *Island rule* toggle, on by default; `pl=1,<polar sea>,0` turns it
+  off (= v7). The summary gives each node's ψ, the transport round the planet (south wall − north
+  wall) and an exact check: summing every equation south of a row of pure sea gives mean
+  u = (τ_top − τ_ghost)/eps.
+- *Polar sea from* (D-V8-5): where *Polar sea* starts sinking the land, 30–70°S (55 = v7; all sea
+  10° further); code `pl=1,<v>,<rule 1|0>,<lat>`.
+- The big picture's panel scrolls (finger or bar); *Gyres* help: with the island rule the colour is
+  the level of ψ, not the turning.
+
+**Measured.** At x −0.515, y 0.593. Code C (Polar sea 1, sea all round at 61–89°S), S22: 11
+landmasses (6291, 746, 492 cells, then ≤ 8), 4 nodes, 5 solves, island rule 133 ms, region 154 ms
+(46 ms without the rule in v7); residual 0.0003; check at 75°S: mean u −3.390 vs wind/drag −3.391;
+round the planet −7.26 (westward, under the polar easterlies); Burst check 0 differences in noise,
+climate, flow, ocean and sea temp. Code D (`pl=1,1,1,40`, sea all round at 46–89°S), editor: 5
+nodes, 6 solves, 195 ms; check at 45°S: +3.399 vs +3.395 (eastward under the westerlies); net round
+the planet −4.54 (the easterly band is wider); Burst twice 0. Island rule off: the v7 numbers
+(residual 0.0001, fastest 9.8×). Planet off, editor and S22: same results as v6/v7 (coast land
+1609, −7.55 °C, edge test 0.09 %, editor Burst check 120 480 / 3.35e-6). Suite 415/415.
+
+**Known limits.** Flat bottom: the zonal current is wind/drag (no form stress from ridges):
+PL-19 item 2. A net eastward circumpolar current needs land over the polar easterly band (an
+Antarctica), which *Polar sea* cannot make (PL-20). Small islands are sea for the currents. Code D
+not run on the S22 (editor only).
+
+**Startups:** `planning/archive/NoiseLab_v8_Startup.md` (D-V8-1…5, the discrete rule). Migration
+rows O6, T10.
+
 ## NoiseLab v7 — closed planet, periodic ocean, World ×32, plates layer (sample only)
 Date: 2026-11-23. Commits on `main`: `f64eee0` (1a, noise on a cylinder), `99d8859` (1b, periodic
 ocean and World ×32), `a888ddf` (1c, warnings, Polar sea, tests), `15847dc` (2, plates). No runtime

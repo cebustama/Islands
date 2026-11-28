@@ -1,7 +1,7 @@
 # Arranque: NoiseLab v7 (planeta cerrado y capa de placas)
 
 **Cerrada el 2026-11-23.** Ver «Avance» al final y `changelog-ssot.md`, «NoiseLab v7». Sigue en
-`../active/NoiseLab_v8_Startup.md`.
+`NoiseLab_v8_Startup.md`.
 
 Fecha: 2026-11-22. Rama: `main`. Sigue a `../archive/NoiseLab_v6_Startup.md` (v6 completa) y a
 `../archive/NoiseLab_v6_2c_Startup.md` («Cerrada el 2026-11-22»). Roadmap: PL-17 (planeta) y PL-18

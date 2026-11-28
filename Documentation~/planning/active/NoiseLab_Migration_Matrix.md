@@ -82,6 +82,7 @@ cambian.
 | O3 | Afloramiento costero (costas oeste frías: Humboldt, Benguela, California, Canarias) | `upwelling`, `SeaDeepTemp` en `SeaHeat` (2b paso 3; lee la corriente hacia el ecuador, no el viento) | No existe | A | La misma stage que O1 | 2b paso 3 (2026-11-17, `c4a54fa`), editor + S22 | O2 |
 | O4 | El clima lee el mar (2c): la temperatura del mar modera la costa y una costa fría seca el aire | `extSeaAnom` en la rejilla del clima; *Sea → coast temp*, *Sea reach*; techo de humedad `min(1, e^(k·ΔT))` en `WindField`/`WindJob`, `FlowMaskJob` → `FlowAirJob`, `ViewClimateJob`, `BigBiomes` | `coastModerationStrength` de M.1 (solo distancia) | S | `Stage_Biome2D` M.1/M.2 | 2c (2026-11-18/22, `9fd00fb`, `eb98ede`, `1487c1f`), editor + S22 | O2, C5 |
 | O5 | Océano periódico: una región de todo el planeta (256×128) con el este unido al oeste | `ComputeOceanRegion` (`wrap`), `OceanSorJob`, `SeaHeatJob`, `SampleWrapped` | No existe | A | La misma stage que O1, sobre la rejilla del planeta | v7 1b (2026-11-23, `99d8859`), editor + S22 | O1, R6 |
+| O6 | Regla de la isla: cada masa de tierra grande (≥ 64 celdas) y el muro sur con su ψ, por superposición y un sistema K×K; corriente circumpolar; las islas pequeñas cuentan como mar | `LabelLandmasses`, `SolveIslandRule`, `SolveStommel`, `OceanSorJob.south` | No existe | A | La misma stage que O1; las masas de tierra como dato de la stage | v8 (2026-11-28, `10d4b6c` y cierre), editor + S22 | O5 |
 
 ### Adaptadores y herramientas
 
@@ -96,6 +97,7 @@ cambian.
 | T7 | Histograma exacto y estadísticas del campo | `Measure`, `Flood` | `LogHeightHistogram`, `MapStatsExporter2D` | Ad | Inspection (ya cubierto en parte) | v1 |
 | T8 | *Run all tests* (borde, Burst check, placas dos veces, snapshot; informe guardado) y *Snapshot* (todas las capas en un PNG con rótulos); ir al punto tocado en ×4/×16/×32 | `RunAllTests`, `SaveSnapshot`, `DrawLabel`, `DrawBigPicture` | Goldens por hash | Ad / gate | Tests de EditMode (MD-4) | v7 1c (2026-11-23) |
 | T9 | Capa de placas, solo vista (Voronoi con jitter o Growth; movimiento, tipo, bordes por tipo), en la vista y en ×16/×32 | `EnsurePlates`, `GrowPlates`, `BorderKind`, `PlatePixels` | No existe (Phase K sin código) | Ad (hoy) / A (Phase K) | Phase K, `Stage_Tectonics2D` | v7 paso 2 (2026-11-23, `15847dc`), editor + S22 |
+| T10 | Color *Landmasses* en ×32 y comprobación exacta de la regla en el resumen (ū = τ/eps en una fila de puro mar); panel de la vista grande con desplazamiento | `LandmassColours`, `IslandRuleSummary`, `DrawBigPicture` | No existe | Ad / gate | Tests de EditMode (MD-4) | v8 (2026-11-28), editor + S22 |
 
 ### Lo que el motor tiene y NoiseLab todavía no valida (FV)
 
@@ -134,3 +136,4 @@ Un problema por batch, como siempre.
 | 2026-11-17 | Creada a partir de la comparación entre `NoiseLab.cs` (v6, 2b paso 2, `a507225`) y `Runtime/PCG`. |
 | 2026-11-22 | O4 validada (2c cerrada en el editor y el S22). La v6 queda completa. |
 | 2026-11-23 | Filas R6, R7, O5, T8 y T9 (NoiseLab v7: planeta cerrado, océano periódico, pruebas, placas). |
+| 2026-11-28 | Filas O6 y T10 (NoiseLab v8: la regla de la isla). R7: *Polar sea from* (latitud del hundimiento, `pl=1,<v>,<regla>,<lat>`). |
