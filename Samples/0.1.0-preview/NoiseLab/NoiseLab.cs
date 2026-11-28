@@ -194,6 +194,7 @@ public class NoiseLab : MonoBehaviour
     // v7 (1c): Polar sea sinks the land beyond ~60° south (an open Southern Ocean), from 0
     // (off) to 1 (all sea beyond 65°S). Only on a planet. Code: pl=1,<polar sea>.
     [SerializeField, Range(0f, 1f)] float polarSea;
+    [SerializeField] bool islandRule = true; // v8 (PL-19): each large landmass its own psi (planet only)
     const float PolarSeaFrom = 55f, PolarSeaTo = 65f, PolarSeaDepth = 2f;
 
     // v7 (step 2, PL-18): tectonic plates, a layer to look at (the terrain does not use it).
@@ -2179,6 +2180,119 @@ public class NoiseLab : MonoBehaviour
         public string heatKey;
         public float heatMs, heatChange, heatAnomaly, upAnomaly, upColdest;
         public int heatRounds, heatState, upCells;
+        // v8 (step 1, planet only): the landmasses. mass[cell] = its landmass (−1 = sea);
+        // per landmass: its cells, which pole walls it touches (1 south, 2 north, 3 both) and
+        // its rank among the free ones by size (0 = the largest; −1 = a wall mass).
+        public int[] mass, massSize, massWall, massRank;
+        public int massCount;
+        public float southPsi;        // v8 (step 2): psi of the south pole's wall (0 without the island rule)
+        public IslandRuleResult rule; // v8 (step 2): null without the island rule
+    }
+
+    // v8 (step 1): the largest free landmasses get their own psi in step 2 (the island
+    // rule); smaller ones will count as sea in the ocean solve (D-V8-2). Provisional: fixed
+    // with the real count.
+    const int OceanMaxMasses = 8;
+
+    // v8 (step 1): the land cells of the planet's ocean grid in connected pieces (4
+    // neighbours, east joined to west), labelled in row-major order of their first cell
+    // with a fixed queue, so the same mask gives the same labels. A piece touching the
+    // first or last row belongs to that pole's wall (the edge of the grid is land: psi = 0
+    // there today). The free pieces are ranked by size (ties: the lower label first).
+    static void LabelLandmasses(OceanRegion r)
+    {
+        int nx = r.nx, n = r.ny, cells = nx * n;
+        byte[] sea = r.sea;
+        var mass = new int[cells];
+        for (int i = 0; i < cells; i++) mass[i] = -1;
+        var size = new System.Collections.Generic.List<int>();
+        var wall = new System.Collections.Generic.List<int>();
+        var queue = new int[cells];
+        for (int start = 0; start < cells; start++)
+        {
+            if (sea[start] != 0 || mass[start] >= 0) continue;
+            int label = size.Count, head = 0, tail = 0, count = 0, touches = 0;
+            mass[start] = label;
+            queue[tail++] = start;
+            while (head < tail)
+            {
+                int c = queue[head++];
+                count++;
+                int x = c % nx, y = c / nx;
+                if (y == 0) touches |= 1;
+                if (y == n - 1) touches |= 2;
+                for (int k = 0; k < 4; k++)
+                {
+                    int xx = x, yy = y;
+                    if (k == 0) xx = (x + 1) % nx;
+                    else if (k == 1) xx = (x - 1 + nx) % nx;
+                    else if (k == 2) yy = y + 1;
+                    else yy = y - 1;
+                    if (yy < 0 || yy >= n) continue;
+                    int j = yy * nx + xx;
+                    if (sea[j] != 0 || mass[j] >= 0) continue;
+                    mass[j] = label;
+                    queue[tail++] = j;
+                }
+            }
+            size.Add(count);
+            wall.Add(touches);
+        }
+        int m = size.Count;
+        var rank = new int[m];
+        var free = new System.Collections.Generic.List<int>();
+        for (int k = 0; k < m; k++) { rank[k] = -1; if (wall[k] == 0) free.Add(k); }
+        free.Sort((a, b) => size[a] != size[b] ? size[b].CompareTo(size[a]) : a.CompareTo(b));
+        for (int k = 0; k < free.Count; k++) rank[free[k]] = k;
+        r.mass = mass;
+        r.massSize = size.ToArray();
+        r.massWall = wall.ToArray();
+        r.massRank = rank;
+        r.massCount = m;
+    }
+
+    // v8 (step 2): the island rule in the summary: the psi of each node (the water that passes
+    // between it and the north wall), the cost and the exact check.
+    string IslandRuleSummary(OceanRegion r)
+    {
+        if (!r.wrap) return "";
+        var q = r.rule;
+        if (q == null) return "island rule: off (every coast at 0); ";
+        var sb = new System.Text.StringBuilder("island rule: ");
+        sb.Append($"{q.nodes} nodes ({q.freeNodes} landmasses ≥ {OceanMinMassCells} cells{(q.southNode ? " + the south wall" : ", poles joined by land")}), {q.solves} solves, {q.ms:0} ms; ");
+        sb.Append($"{q.smallAsSea} cells of small islands counted as sea; psi");
+        for (int k = 0; k < q.nodes; k++)
+            sb.Append(k == 0 ? " " : ", ").Append(q.nodeMass[k] < 0 ? "south wall" : $"mass of {r.massSize[q.nodeMass[k]]}").Append($" {q.nodePsi[k]:0.00}");
+        if (q.southNode) sb.Append($"; round the planet eastward (south wall − north wall): {r.southPsi:0.00}");
+        if (q.checkFound) sb.Append($"; check at {LatitudeName(q.checkLat)}: mean u {q.checkU:0.000} vs wind/drag {q.checkPredicted:0.000}");
+        else sb.Append("; check: no row of pure sea");
+        if (q.singular) sb.Append(" SINGULAR");
+        return sb.Append("; ").ToString();
+    }
+
+    // v8 (step 1): one line for the summary: the walls, the largest free landmasses and the rest.
+    static string LandmassSummary(OceanRegion r)
+    {
+        if (r.mass == null) return "";
+        int south = 0, north = 0, both = 0, smallCount = 0, smallCells = 0;
+        var big = new System.Text.StringBuilder();
+        var bySize = new int[System.Math.Max(r.massCount, 1)];
+        for (int k = 0; k < r.massCount; k++)
+        {
+            int w = r.massWall[k];
+            if (w == 1) south += r.massSize[k];
+            else if (w == 2) north += r.massSize[k];
+            else if (w == 3) both += r.massSize[k];
+            else if (r.massRank[k] >= OceanMaxMasses) { smallCount++; smallCells += r.massSize[k]; }
+            else bySize[r.massRank[k]] = r.massSize[k];
+        }
+        int freeBig = 0;
+        for (int k = 0; k < r.massCount; k++) if (r.massWall[k] == 0 && r.massRank[k] < OceanMaxMasses) freeBig++;
+        for (int k = 0; k < freeBig; k++) big.Append(k == 0 ? "" : ", ").Append(bySize[k]);
+        int second = 0; // the largest of the smaller ones (rank OceanMaxMasses)
+        for (int k = 0; k < r.massCount; k++) if (r.massRank[k] == OceanMaxMasses) second = r.massSize[k];
+        return $"landmasses: {r.massCount} (cells: south wall {south}, north wall {north}{(both > 0 ? $", both walls {both} (the poles joined by land)" : "")}; " +
+               $"the {freeBig} largest free: {big}; smaller: {smallCount} masses, {smallCells} cells, the largest {second}); ";
     }
 
     readonly System.Collections.Generic.List<OceanRegion> oceanRegions = new();
@@ -2199,7 +2313,7 @@ public class NoiseLab : MonoBehaviour
     float oceanMs, oceanLastRegionMs;
     string oceanRegionsUsed = "";
 
-    string OceanKey(int index) => $"{HeightKey()}|{F(threshold)}|{F(oceanWidth)}|{index}";
+    string OceanKey(int index) => $"{HeightKey()}|{F(threshold)}|{F(oceanWidth)}|{index}" + (planet && !islandRule ? "|ir0" : ""); // v8
 
     OceanRegion GetOceanRegion(int index)
     {
@@ -2274,7 +2388,8 @@ public class NoiseLab : MonoBehaviour
         // v7: on a planet x wraps; off, nx = n and nothing wraps (same arithmetic as v6).
         int Wx(int x) => wrap ? (x + nx) % nx : x;
         // psi at the corner up-right of cell (x, y): the mean of the four cells around it (0 outside).
-        float P(int x, int y) { x = Wx(x); return x < 0 || y < 0 || x >= nx || y >= n ? 0f : psi[y * nx + x]; }
+        float sv = r.southPsi; // v8: beyond the first row, the south wall's psi (0 but with the island rule)
+        float P(int x, int y) { x = Wx(x); return y < 0 ? sv : x < 0 || x >= nx || y >= n ? 0f : psi[y * nx + x]; }
         float C(int x, int y) => 0.25f * (P(x, y) + P(x + 1, y) + P(x, y + 1) + P(x + 1, y + 1));
         bool Sea(int x, int y) { x = Wx(x); return x >= 0 && y >= 0 && x < nx && y < n && sea[y * nx + x] != 0; }
 
@@ -2465,14 +2580,71 @@ public class NoiseLab : MonoBehaviour
         }
         float eps = oceanWidth * Mathf.PI / (2f * LatitudeSpan); // western current width × beta at the equator
 
-        var nSea = new NativeArray<byte>(sea, Allocator.TempJob);
+        // v8 (step 1): the planet's landmasses, before the solve: the island rule needs them.
+        OceanRegion lab = null;
+        if (wrap) { lab = new OceanRegion { nx = nx, ny = n, sea = sea }; LabelLandmasses(lab); }
+
+        float[] psi;
+        float residual, omegaUsed, south = 0f;
+        int state;
+        IslandRuleResult rule = null;
+        if (wrap && islandRule)
+            psi = SolveIslandRule(lab, force, beta, eps, h, burst, out residual, out omegaUsed, out state, out south, out rule);
+        else
+            psi = SolveStommel(sea, force, beta, null, 0f, nx, n, wrap, eps, h, burst, out residual, out omegaUsed, out state);
+
+        // Velocities at the cell centres (centred differences; land and outside: psi = 0)
+        // and the fastest water.
+        float P(int x, int y) { if (wrap) x = (x + nx) % nx; return y < 0 ? south : x < 0 || x >= nx || y >= n ? 0f : psi[y * nx + x]; }
+        var u = new float[cells];
+        var v = new float[cells];
+        float fastest = 0f;
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < nx; x++)
+            {
+                int i = y * nx + x;
+                if (sea[i] == 0) continue;
+                u[i] = -(P(x, y + 1) - P(x, y - 1)) / (2f * h);
+                v[i] = (P(x + 1, y) - P(x - 1, y)) / (2f * h);
+                fastest = Mathf.Max(fastest, u[i] * u[i] + v[i] * v[i]);
+            }
+
+        // 2b: the temperature is solved apart (SeaHeat), with its own key.
+        var region = new OceanRegion
+        {
+            index = index, key = OceanKey(index), u = u, v = v, psi = psi, sea = sea, state = state,
+            nx = nx, ny = n, wrap = wrap,
+            residual = residual, omega = omegaUsed,
+            fastest = Mathf.Sqrt(fastest),
+            seaShare = (float)seaCount / cells
+        };
+        if (wrap)
+        {
+            region.mass = lab.mass; region.massSize = lab.massSize; region.massWall = lab.massWall;
+            region.massRank = lab.massRank; region.massCount = lab.massCount;
+        }
+        region.southPsi = south;
+        region.rule = rule;
+        region.ms = (float)watch.Elapsed.TotalMilliseconds;
+        return region;
+    }
+
+    // v6 (2a), from v8 a function of its own: one Stommel solve. solveSea: the cells solved
+    // (the rest keep their start value); init: the start (null = all 0); south: psi beyond
+    // the first row (the south pole's wall; 0 everywhere but the island rule).
+    static float[] SolveStommel(byte[] solveSea, float[] force, float[] beta, float[] init, float south,
+                                int nx, int n, bool wrap, float eps, float h, bool burst,
+                                out float residual, out float omegaUsed, out int state)
+    {
+        int cells = nx * n;
+        var nSea = new NativeArray<byte>(solveSea, Allocator.TempJob);
         var nForce = new NativeArray<float>(force, Allocator.TempJob);
         var nBeta = new NativeArray<float>(beta, Allocator.TempJob);
         var nPsi = new NativeArray<float>(cells, Allocator.TempJob);
         var probe = new NativeArray<int>(1, Allocator.TempJob);
         var psi = new float[cells];
-        int state = GridNoiseJob<Simplex2D<Simplex>>.Off;
-        float residual = 0f, omegaUsed = 0f;
+        state = GridNoiseJob<Simplex2D<Simplex>>.Off;
+        residual = 0f; omegaUsed = 0f;
         try
         {
             // 2a fix: over-relaxation can blow up on this non-symmetric equation (ω 1.85 did,
@@ -2482,8 +2654,9 @@ public class NoiseLab : MonoBehaviour
             foreach (float omega in OceanOmegas)
             {
                 int passes = omega == OceanOmegas[0] ? OceanPasses : 2 * OceanPasses;
-                for (int i = 0; i < cells; i++) nPsi[i] = 0f;
-                var sor = new OceanSorJob { sea = nSea, force = nForce, beta = nBeta, psi = nPsi, probe = probe, n = n, nx = nx, wrap = wrap, eps = eps, h = h, omega = omega };
+                if (init == null) for (int i = 0; i < cells; i++) nPsi[i] = 0f;
+                else nPsi.CopyFrom(init);
+                var sor = new OceanSorJob { sea = nSea, force = nForce, beta = nBeta, psi = nPsi, probe = probe, n = n, nx = nx, wrap = wrap, eps = eps, h = h, omega = omega, south = south };
                 int rows = (n + 1) / 2;
                 if (burst)
                 {
@@ -2505,7 +2678,7 @@ public class NoiseLab : MonoBehaviour
                     }
                 }
                 nPsi.CopyTo(psi);
-                residual = OceanResidual(psi, sea, force, beta, nx, n, wrap, eps, h);
+                residual = OceanResidual(psi, solveSea, force, beta, nx, n, wrap, eps, h, south);
                 omegaUsed = omega;
                 if (residual < OceanTolerance) break;
             }
@@ -2514,39 +2687,170 @@ public class NoiseLab : MonoBehaviour
         {
             nSea.Dispose(); nForce.Dispose(); nBeta.Dispose(); nPsi.Dispose(); probe.Dispose();
         }
+        return psi;
+    }
 
-        // Velocities at the cell centres (centred differences; land and outside: psi = 0)
-        // and the fastest water.
-        float P(int x, int y) { if (wrap) x = (x + nx) % nx; return x < 0 || y < 0 || x >= nx || y >= n ? 0f : psi[y * nx + x]; }
-        var u = new float[cells];
-        var v = new float[cells];
-        float fastest = 0f;
-        for (int y = 0; y < n; y++)
-            for (int x = 0; x < nx; x++)
-            {
-                int i = y * nx + x;
-                if (sea[i] == 0) continue;
-                u[i] = -(P(x, y + 1) - P(x, y - 1)) / (2f * h);
-                v[i] = (P(x + 1, y) - P(x - 1, y)) / (2f * h);
-                fastest = Mathf.Max(fastest, u[i] * u[i] + v[i] * v[i]);
-            }
+    // ---------------------------------------------------------------------------------
+    // v8 (step 2, PL-19): the island rule (planet only). Stommel's equation comes from the
+    // momentum equation with a linear drag r·u; along a coast the water does not cross it,
+    // so the Coriolis term drops out, and the pressure has one value, so round any landmass
+    //   r ∮ u·t ds = ∮ τ·t ds   (Pedlosky, Pratt, Spall & Helfrich 1997, eq. 2.2)
+    // which fixes the psi of that landmass. On the grid: each landmass is one unknown psi_S
+    // and its equation is the solver's equation summed over its cells (Stokes turns the sum
+    // into the coast integral). The north wall is the reference (psi 0); the south wall is a
+    // node with a ghost row beyond the first one. Free masses under OceanMinMassCells count
+    // as sea (D-V8-2).
+    // Superposition: psi = psi0 + Σ a_k phi_k, psi0 with the wind and every node at 0, phi_k
+    // without wind and node k at 1; each node's summed equation gives one row of a K × K
+    // system (double, Gaussian elimination with partial pivoting, fixed order).
+    // Check (exact if solved): on a row of pure sea every cell to the south belongs to a
+    // node or is sea, so summing everything south of it gives mean u = (τ_top − τ_ghost)/eps.
+    // ---------------------------------------------------------------------------------
+    const int OceanMinMassCells = 64; // one view of land; smaller free masses count as sea
+    const int OceanMaxNodes = 16;     // cost guard: at most this many free masses get a node
 
-        // 2b: the temperature is solved apart (SeaHeat), with its own key.
-        return new OceanRegion
+    class IslandRuleResult
+    {
+        public int nodes, solves, freeNodes, smallAsSea;
+        public bool southNode;
+        public int[] nodeMass;  // mass label per node (−1 = the south wall)
+        public float[] nodePsi;
+        public float ms, checkLat, checkU, checkPredicted;
+        public bool checkFound, singular;
+    }
+
+    float[] SolveIslandRule(OceanRegion lab, float[] force, float[] beta, float eps, float h, bool burst,
+                            out float residual, out float omegaUsed, out int state, out float south, out IslandRuleResult rule)
+    {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        int nx = lab.nx, n = lab.ny, cells = nx * n;
+        byte[] sea = lab.sea;
+        bool merged = false;
+        for (int k = 0; k < lab.massCount; k++) if (lab.massWall[k] == 3) merged = true;
+
+        // The nodes: the large free masses by rank, then the south wall (unless land joins the poles).
+        var nodeMass = new System.Collections.Generic.List<int>();
+        var byRank = new int[lab.massCount];
+        int freeCount = 0;
+        for (int k = 0; k < lab.massCount; k++) if (lab.massWall[k] == 0) { byRank[lab.massRank[k]] = k; freeCount++; }
+        for (int q = 0; q < freeCount && nodeMass.Count < OceanMaxNodes; q++)
+            if (lab.massSize[byRank[q]] >= OceanMinMassCells) nodeMass.Add(byRank[q]);
+        int freeNodes = nodeMass.Count;
+        if (!merged) nodeMass.Add(-1);
+        int K = nodeMass.Count, southIndex = merged ? -1 : K - 1;
+
+        var massNode = new int[lab.massCount];
+        for (int k = 0; k < lab.massCount; k++) massNode[k] = -1;
+        for (int j = 0; j < freeNodes; j++) massNode[nodeMass[j]] = j;
+        var solveSea = (byte[])sea.Clone();
+        var member = new int[cells]; // node of each cell, −1 = none (sea, north wall, gauge)
+        int smallAsSea = 0;
+        for (int i = 0; i < cells; i++)
         {
-            index = index, key = OceanKey(index), u = u, v = v, psi = psi, sea = sea, state = state,
-            nx = nx, ny = n, wrap = wrap,
-            ms = (float)watch.Elapsed.TotalMilliseconds,
-            residual = residual, omega = omegaUsed,
-            fastest = Mathf.Sqrt(fastest),
-            seaShare = (float)seaCount / cells
+            member[i] = -1;
+            int m = lab.mass[i];
+            if (m < 0) continue;
+            if (lab.massWall[m] == 0)
+            {
+                if (massNode[m] >= 0) member[i] = massNode[m];
+                else { solveSea[i] = 1; smallAsSea++; } // a small island: sea for the currents
+            }
+            else if (lab.massWall[m] == 1 && !merged) member[i] = southIndex;
+        }
+
+        float k2 = eps / (h * h);
+        float y0 = -LatitudeSpan;
+        float ghostForce = -(OceanWindX(y0) - OceanWindX(y0 - h)) / h; // the ghost row's wind curl (≈ 0: no wind at the pole)
+        // Node j's summed equation for field f (sv: f beyond the first row).
+        double Sum(float[] f, int j, bool wind, float sv)
+        {
+            float P(int x, int y) { x = (x + nx) % nx; return y < 0 ? sv : y >= n ? 0f : f[y * nx + x]; }
+            double sum = 0.0;
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < nx; x++)
+                {
+                    if (member[y * nx + x] != j) continue;
+                    float c = P(x, y), e = P(x + 1, y);
+                    sum += k2 * (e + P(x - 1, y) + P(x, y + 1) + P(x, y - 1) - 4f * c) + beta[y] * (e - c) / h - (wind ? force[y] : 0f);
+                }
+            if (j == southIndex)
+                for (int x = 0; x < nx; x++) sum += k2 * (P(x, 0) - sv) - (wind ? ghostForce : 0f);
+            return sum;
+        }
+
+        int solves = 1;
+        float[] psi0 = SolveStommel(solveSea, force, beta, null, 0f, nx, n, true, eps, h, burst, out residual, out omegaUsed, out state);
+        var zero = new float[n];
+        var phi = new float[K][];
+        for (int k = 0; k < K; k++)
+        {
+            var init = new float[cells];
+            for (int i = 0; i < cells; i++) if (member[i] == k) init[i] = 1f;
+            phi[k] = SolveStommel(solveSea, zero, beta, init, k == southIndex ? 1f : 0f, nx, n, true, eps, h, burst, out _, out _, out _);
+            solves++;
+        }
+        var M = new double[K, K + 1];
+        for (int j = 0; j < K; j++)
+        {
+            for (int k = 0; k < K; k++) M[j, k] = Sum(phi[k], j, false, k == southIndex ? 1f : 0f);
+            M[j, K] = -Sum(psi0, j, true, 0f);
+        }
+        // Gauss–Jordan, partial pivoting (fixed order: same inputs, same result).
+        bool singular = false;
+        for (int c = 0; c < K; c++)
+        {
+            int best = c;
+            for (int r = c + 1; r < K; r++) if (System.Math.Abs(M[r, c]) > System.Math.Abs(M[best, c])) best = r;
+            if (System.Math.Abs(M[best, c]) < 1e-12) { singular = true; continue; }
+            if (best != c) for (int q = 0; q <= K; q++) { double t = M[c, q]; M[c, q] = M[best, q]; M[best, q] = t; }
+            for (int r = 0; r < K; r++)
+            {
+                if (r == c) continue;
+                double f = M[r, c] / M[c, c];
+                if (f != 0.0) for (int q = c; q <= K; q++) M[r, q] -= f * M[c, q];
+            }
+        }
+        var a = new float[K];
+        for (int k = 0; k < K; k++) a[k] = System.Math.Abs(M[k, k]) < 1e-12 ? 0f : (float)(M[k, K] / M[k, k]);
+
+        var psi = (float[])psi0.Clone();
+        for (int k = 0; k < K; k++)
+            for (int i = 0; i < cells; i++) psi[i] += a[k] * phi[k][i];
+        south = southIndex >= 0 ? a[southIndex] : 0f;
+        residual = OceanResidual(psi, solveSea, force, beta, nx, n, true, eps, h, south);
+
+        rule = new IslandRuleResult
+        {
+            nodes = K, solves = solves, freeNodes = freeNodes, smallAsSea = smallAsSea, southNode = southIndex >= 0,
+            nodeMass = nodeMass.ToArray(), nodePsi = a, singular = singular
         };
+        // The check: the pure-sea row whose top face has the strongest wind.
+        float bestTau = -1f;
+        for (int y = 0; y + 1 < n && southIndex >= 0; y++)
+        {
+            bool allSea = true;
+            for (int x = 0; x < nx && allSea; x++) allSea = solveSea[y * nx + x] != 0;
+            if (!allSea) continue;
+            float yTop = y0 + (y + 1) * h;
+            float tau = OceanWindX(yTop);
+            if (Mathf.Abs(tau) <= bestTau) continue;
+            bestTau = Mathf.Abs(tau);
+            double du = 0.0;
+            for (int x = 0; x < nx; x++) du += psi[(y + 1) * nx + x] - psi[y * nx + x];
+            rule.checkFound = true;
+            rule.checkLat = yTop;
+            rule.checkU = (float)(-du / nx / h);
+            rule.checkPredicted = (tau - OceanWindX(y0 - h)) / eps;
+        }
+        rule.ms = (float)watch.Elapsed.TotalMilliseconds;
+        return psi;
     }
 
     // Mean |error of the equation| over the sea, relative to the mean |wind curl|.
-    static float OceanResidual(float[] psi, byte[] sea, float[] force, float[] beta, int nx, int n, bool wrap, float eps, float h)
+    static float OceanResidual(float[] psi, byte[] sea, float[] force, float[] beta, int nx, int n, bool wrap, float eps, float h, float south)
     {
-        float P(int x, int y) { if (wrap) x = (x + nx) % nx; return x < 0 || y < 0 || x >= nx || y >= n ? 0f : psi[y * nx + x]; }
+        // v8: beyond the first row, the south wall's psi (0 but with the island rule)
+        float P(int x, int y) { if (wrap) x = (x + nx) % nx; return y < 0 ? south : x < 0 || x >= nx || y >= n ? 0f : psi[y * nx + x]; }
         double res = 0.0, scale = 0.0;
         for (int y = 0; y < n; y++)
             for (int x = 0; x < nx; x++)
@@ -2741,6 +3045,7 @@ public class NoiseLab : MonoBehaviour
                        : $"ocean regions {oceanRegionsUsed} (16×16 view widths each, {OceanN}×{OceanN} cells, {OceanPasses} passes); ") +
                $"last new region {r.ms:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.state)}), sea {100f * r.seaShare:0}%, " +
                $"ω {r.omega}{(r.omega != OceanOmegas[0] ? " (retried)" : "")}, residual {r.residual:0.0000}{(r.residual < OceanTolerance ? "" : " NOT CONVERGED")}, fastest {r.fastest:0.0}× the interior speed; " +
+               LandmassSummary(r) + IslandRuleSummary(r) +
                $"sea temp: memory {F(heatMemory)}, {r.heatRounds} rounds{(r.heatChange < SeaHeatTolerance ? "" : " NOT SETTLED")}, {r.heatMs:0.0} ms ({GridNoiseJob<Simplex2D<Simplex>>.StateName(r.heatState)}), " +
                $"mean |T − T0| {r.heatAnomaly:0.00} °C; upwelling {F(upwelling)}: {r.upCells} coast cells, mean T − T0 {r.upAnomaly:0.00} °C, coldest {r.upColdest:0.00} °C; " +
                $"view {oceanMs:0.0} ms (sampling {seaGridMs:0.0} ms, {GridNoiseJob<Simplex2D<Simplex>>.StateName(oceanSampleState)}; climate grid {extW}×{extH}); " +
@@ -2764,6 +3069,9 @@ public class NoiseLab : MonoBehaviour
         {
             polarSea = R2(Slider("Polar sea", polarSea, 0f, 1f, "0.00",
                 "Sinks the land beyond 60° south, so a sea goes all round the planet there (an open Southern Ocean). 0 = off; 1 = all sea beyond 65°S. With % water the land sunk at the pole comes up elsewhere."));
+            islandRule = GUILayout.Toggle(islandRule, new GUIContent(" Island rule",
+                "Water can pass between landmasses and round the planet: each large landmass and the south pole's wall get their own stream function, fixed so that round each coast the wind's push and the drag balance (Godfrey 1989; Pedlosky et al. 1997). Off: every coast at 0, so no water passes between landmasses (v7). Costs one more ocean solve per large landmass."),
+                GUILayout.Height(30f));
             GUILayout.Label(PlanetCheck());
         }
         GUI.enabled = ocean;
@@ -2811,17 +3119,18 @@ public class NoiseLab : MonoBehaviour
             "How much the sea's temperature sets the moisture of the air over it and of the coast: air over a cold sea holds less water (about 7 % less per °C below the usual of its latitude, Clausius–Clapeyron), so the wind brings dry air and a cold coast turns to desert (Atacama, Namib, Baja California); a warm sea gives a wetter coast. 1 = the physical rate; above 1 it also stands in for the sinking dry air of the subtropics, which the model does not simulate (default 3: cold west coasts turn to desert); 0 = the air ignores the sea's temperature."));
     }
 
-    static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp", "Temp anomaly", "Biomes", "Plates" };
+    static readonly string[] BigColourNames = { "Speed", "Gyres", "Sea temp", "Temp anomaly", "Biomes", "Plates", "Landmasses" };
 
     void BigColourButton()
     {
         if (GUILayout.Button(new GUIContent($"Colour: {BigColourNames[(int)bigColour]}",
                 "How the ×4 and ×16 pictures paint the sea (tap to change). Speed: dark = still, orange = four times the interior speed and more. " +
                 "Gyres: red turns one way, blue the other, lines follow the water (stream function); each gyre is a closed loop. " +
-                "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms). Temp anomaly: how much warmer (red) or colder (blue) than its latitude, white = the same, full colour at ±6 °C, a line every 1 °C. Biomes: the land's biomes from the same climate as the view, coarser (always the sweep wind, no beach), the sea as in Temp anomaly. Plates (Planet only): the tectonic plates, as in the Plates layer."),
+                "Sea temp: sea surface temperature, blue −2 °C to red 28 °C, a line every 2 °C (isotherms). Temp anomaly: how much warmer (red) or colder (blue) than its latitude, white = the same, full colour at ±6 °C, a line every 1 °C. Biomes: the land's biomes from the same climate as the view, coarser (always the sweep wind, no beach), the sea as in Temp anomaly. Plates (Planet only): the tectonic plates, as in the Plates layer. " +
+                "Landmasses (Planet only): the pieces of land the ocean sees (its coarse grid), each its own colour: the free ones of a view of land or more bright (each its own psi with the island rule), the pole walls grey-blue, the smaller ones (sea for the island rule) dark grey."),
                 GUILayout.Width(160f), GUILayout.Height(30f)))
             do bigColour = (BigColour)(((int)bigColour + 1) % BigColourNames.Length);
-            while (bigColour == BigColour.Plates && !planet);
+            while ((bigColour == BigColour.Plates || bigColour == BigColour.Landmasses) && !planet);
     }
 
     // v6 (2a): the currents from four times higher up: 4 × 4 view widths centred on the view,
@@ -2834,7 +3143,7 @@ public class NoiseLab : MonoBehaviour
     int bigScale = 4;
     int bigW = BigN, bigH = BigN; // v7: pixels across and up
     // continents step: paint the stream function instead of the speed; 2b: or the sea temperature
-    enum BigColour { Speed, Gyres, SeaTemp, Anomaly, Biomes, Plates } // 2c: Biomes; v7: Plates (planet only)
+    enum BigColour { Speed, Gyres, SeaTemp, Anomaly, Biomes, Plates, Landmasses } // 2c: Biomes; v7: Plates, v8: Landmasses (planet only)
     BigColour bigColour;
     BigColour bigSeaColour; // v7: what the Plates button goes back to
     Texture2D bigPicture;
@@ -2845,13 +3154,15 @@ public class NoiseLab : MonoBehaviour
     // the view behind is recomputed once, when the picture closes.
     float[] bigHeights;
     string bigHeightsKey;
+    Vector2 bigPanelScroll; // v8: the panel beside or under the picture scrolls
+    bool bigPanelDrag;
     bool bigDirty, viewStale;
 
     void MakeBigPicture(int scale)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         bigScale = scale;
-        if (bigColour == BigColour.Plates && !planet) bigColour = BigColour.Speed;
+        if ((bigColour == BigColour.Plates || bigColour == BigColour.Landmasses) && !planet) bigColour = BigColour.Speed;
         int n = BigN, bh = bigScale == PlanetScale ? BigN / 2 : BigN, cells = n * bh;
         bigW = n;
         bigH = bh;
@@ -2929,6 +3240,7 @@ public class NoiseLab : MonoBehaviour
             }
         }
         if (bigColour == BigColour.Gyres) GyreColours(pixels, n, bh, heights, field);
+        else if (bigColour == BigColour.Landmasses) LandmassColours(pixels, n, bh, heights, regions[0], step);
         else if (bigColour == BigColour.SeaTemp) SeaTempColours(pixels, n, bh, heights, field, 2f);
         else if (bigColour == BigColour.Anomaly) AnomalyColours(pixels, n, bh, heights, field, bigOrigin.y, step);
         else if (bigColour == BigColour.Biomes)
@@ -2949,6 +3261,42 @@ public class NoiseLab : MonoBehaviour
     // each gyre is a closed loop; the sign says which way it turns (red: psi > 0, blue:
     // psi < 0), the strength is how deep the colour is. 12 lines between 0 and the largest
     // |psi| of the picture. Land in grey, as in the speed colouring.
+    // v8 (step 1): the landmasses the ocean sees. Each pixel reads the ocean cell under it
+    // (nearest, no blend: labels do not mix). The sea is pale; land the ocean grid counts as
+    // sea (the coarse coast) is plain grey, so the mismatch shows.
+    static readonly Color32[] LandmassPalette =
+    {
+        new Color32(230, 80, 60, 255), new Color32(240, 170, 40, 255), new Color32(120, 190, 60, 255), new Color32(40, 170, 160, 255),
+        new Color32(70, 120, 220, 255), new Color32(150, 90, 210, 255), new Color32(220, 90, 170, 255), new Color32(160, 120, 70, 255)
+    };
+
+    void LandmassColours(Color32[] pixels, int n, int rows, float[] heights, OceanRegion r, float step)
+    {
+        if (r.mass == null) return;
+        var seaColour = new Color32(225, 232, 238, 255);
+        var coarse = new Color32(170, 170, 165, 255);
+        var wallColour = new Color32(120, 140, 165, 255);
+        var smallColour = new Color32(80, 80, 80, 255);
+        for (int y = 0; y < rows; y++)
+        {
+            float wy = bigOrigin.y + (y + 0.5f) * step;
+            int gy = Mathf.Clamp(Mathf.FloorToInt((wy + LatitudeSpan) * OceanPerView), 0, r.ny - 1);
+            for (int x = 0; x < n; x++)
+            {
+                int i = y * n + x;
+                if (heights[i] < threshold) { pixels[i] = seaColour; continue; }
+                float wx = bigOrigin.x + (x + 0.5f) * step;
+                int gx = Mathf.FloorToInt((wx - PlanetPeriod * Mathf.Floor(wx / PlanetPeriod)) * OceanPerView);
+                gx = Mathf.Clamp(gx, 0, r.nx - 1);
+                int m = r.mass[gy * r.nx + gx];
+                if (m < 0) pixels[i] = coarse;
+                else if (r.massWall[m] != 0) pixels[i] = wallColour;
+                else if (r.massSize[m] < OceanMinMassCells || r.massRank[m] >= OceanMaxNodes) pixels[i] = smallColour; // v8: sea for the island rule
+                else pixels[i] = LandmassPalette[r.massRank[m] % LandmassPalette.Length];
+            }
+        }
+    }
+
     void GyreColours(Color32[] pixels, int n, int rows, float[] heights, float[] psi)
     {
         float max = 1e-6f;
@@ -3173,7 +3521,21 @@ public class NoiseLab : MonoBehaviour
 
         // The sliders first: a slider uses its own mouse-up, so releasing it never closes.
         DrawRect(panel, new Color(0f, 0f, 0f, 0.35f));
-        GUILayout.BeginArea(new Rect(panel.x + 8f, panel.y + 8f, panel.width - 16f, panel.height - 16f));
+        var inner = new Rect(panel.x + 8f, panel.y + 8f, panel.width - 16f, panel.height - 16f);
+        GUILayout.BeginArea(inner);
+        // v8: the panel scrolls (the summary ran off its bottom), as the pages do: a finger
+        // dragged over text or empty space scrolls it; a drag that starts on a slider or a
+        // button belongs to that control.
+        Event pe = Event.current;
+        var body = new Rect(0f, 0f, inner.width, inner.height);
+        if (pe.type == EventType.MouseDown && body.Contains(pe.mousePosition)) bigPanelDrag = GUIUtility.hotControl == 0;
+        if (pe.type == EventType.MouseUp) bigPanelDrag = false;
+        if (pe.type == EventType.MouseDrag && bigPanelDrag && GUIUtility.hotControl == 0)
+        {
+            bigPanelScroll.y -= pe.delta.y;
+            pe.Use();
+        }
+        bigPanelScroll = GUILayout.BeginScrollView(bigPanelScroll, GUIStyle.none, GUI.skin.verticalScrollbar);
         bool close = false;
         bool before = GUI.changed;
         GUI.changed = false;
@@ -3206,6 +3568,7 @@ public class NoiseLab : MonoBehaviour
         if (GUI.changed && !close) { dirty = true; bigDirty = true; }
         GUILayout.Label(OceanSummary());
         GUI.changed = before;
+        GUILayout.EndScrollView();
         GUILayout.EndArea();
 
         Event e = Event.current;
@@ -4035,7 +4398,7 @@ public class NoiseLab : MonoBehaviour
         if (colouring == Colouring.Biomes && wind)
             code += ";wd=" + string.Join(",", F(windAngle), F(windStrength), F(windLift), F(windDry), F(windEvaporation));
         if (FlowOn) code += $";wf={F(solidAbove)},{flowIterations}"; // v6: flow model
-        if (planet) code += polarSea > 0f ? $";pl=1,{F(polarSea)}" : ";pl=1"; // v7 (PL-17); 1c: polar sea
+        if (planet) code += !islandRule ? $";pl=1,{F(polarSea)},0" : polarSea > 0f ? $";pl=1,{F(polarSea)}" : ";pl=1"; // v7 (PL-17); 1c: polar sea; v8: ,0 = no island rule
         if (planet && (plateCount != 12 || plateShape != PlateShape.Growth))
             code += $";pt={plateCount},{(plateShape == PlateShape.Growth ? "g" : "v")}"; // v7 (step 2)
         if (colouring == Colouring.Biomes && ocean) code += $";oc={F(oceanWidth)},{F(heatMemory)},{F(upwelling)}"; // v6 (2a): currents; 2b: heat memory, upwelling
@@ -4094,6 +4457,7 @@ public class NoiseLab : MonoBehaviour
     {
         planet = false; // v7: a code without pl= is the open strip
         polarSea = 0f;
+        islandRule = true; // v8
         plateCount = 12;
         plateShape = PlateShape.Growth;
         heightSource = HeightSource.OneNoise;
@@ -4244,6 +4608,7 @@ public class NoiseLab : MonoBehaviour
                     string[] pp = val.Split(',');
                     planet = pp[0] == "1";
                     polarSea = pp.Length > 1 && TryF(pp[1], out float ps) ? Mathf.Clamp01(ps) : 0f;
+                    islandRule = !(pp.Length > 2 && pp[2] == "0"); // v8
                     break;
                 }
                 case "ov": ReadOverlays(val); sawOverlays = true; break;
@@ -6613,6 +6978,7 @@ struct OceanSorJob : IJobFor
     public int n, nx, parity; // v7: n rows of nx cells (nx = n off)
     public bool wrap;         // v7: a planet: the east edge is joined to the west edge
     public float eps, h, omega;
+    public float south;       // v8: psi beyond the first row (the south wall); 0 but with the island rule
 
     public void Execute(int r)
     {
@@ -6628,7 +6994,7 @@ struct OceanSorJob : IJobFor
             if (sea[i] == 0) continue; // land stays 0
             float e = x < nx - 1 ? psi[i + 1] : wrap ? psi[i + 1 - nx] : 0f;
             float w = x > 0 ? psi[i - 1] : wrap ? psi[i - 1 + nx] : 0f;
-            float no = y < n - 1 ? psi[i + nx] : 0f, so = y > 0 ? psi[i - nx] : 0f;
+            float no = y < n - 1 ? psi[i + nx] : 0f, so = y > 0 ? psi[i - nx] : south;
             float target = (k * (e + w + no + so) + b * e / h - f) / diag;
             psi[i] += omega * (target - psi[i]);
         }

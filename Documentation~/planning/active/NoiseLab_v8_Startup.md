@@ -56,6 +56,37 @@ guíe y frene las corrientes.
 - **D-V8-3:** ¿relieve (f/H) en la v8 o después de la fase K, con dorsales de verdad?
 - **D-V8-4:** ¿solo con *Planet*? Recomendación: sí; con *Planet* apagado, los mismos bits que la v7.
 
+## Decisiones tomadas (Claudio, 2026-11-25: «ok» a las cinco recomendaciones)
+- **D-V8-1:** el océano físico ahora; PL-16 después.
+- **D-V8-2:** ψ propio para las masas grandes (unas 8, más los muros de los polos; el umbral se fija
+  con el conteo real). Las islas pequeñas cuentan como **mar** en el cálculo del océano (la vista las
+  sigue mostrando como tierra). Dejarlas a 0 las ataría al muro norte y rompería la prueba exacta.
+- **D-V8-3:** el relieve (f/H) después, cuando la regla esté medida.
+- **D-V8-4:** solo con *Planet*; con *Planet* apagado, los mismos bits.
+- **D-V8-5:** un sitio de prueba D con un paso de mar hacia 55°S (corriente hacia el este), al final.
+
+## La regla de la isla (fuentes leídas el 2026-11-25)
+- Pedlosky, Pratt, Spall y Helfrich 1997 (*J. Mar. Res.* 55, §2a, ec. 2.2): la componente
+  tangencial del momento, integrada sobre la **costa** de la isla (velocidad normal 0: Coriolis se
+  anula; la presión tiene un solo valor), da ∂ₜ∮u·t ds = ∮τ·t ds + ∮Diss(u)·t ds. Pratt y Pedlosky
+  1998 (*JPO* 28, ec. 1.1–1.2, §6): la fórmula de Godfrey (1.2) cambia el camino para no calcular el
+  rozamiento y sobrestima el caudal hasta un 25 %. Godfrey 1989 no se abrió en el original.
+- Con Stommel (Diss = −r·u), estacionario: **r ∮u·t ds = ∮τ·t ds**, exacta. Nuestra ecuación
+  (`eps∇²ψ + β∂ₓψ = rot τ`) sale de ese momento con r = `eps`.
+- **Discreta:** cada masa S es un nodo con un valor ψ_S, y su ecuación es la suma de la de
+  `OceanSorJob` sobre sus celdas (Stokes):
+  `Σ_caras costa k(ψ_mar − ψ_S) + Σ_extremos este de fila (β_y/h)(ψ_este − ψ_S) − Σ_{c∈S} force = 0`,
+  con k = eps/h². El término β es el resto O(h) del upwind (0 en el continuo). Muro de cada polo: un
+  nodo con fila fantasma; el norte fijo a 0 (referencia); el viento en el polo es sin(3π) = 0.
+  Solución: superposición (K+1 resoluciones de `OceanSorJob`, sin cambiarlo) y un sistema K×K en
+  double.
+- **Prueba exacta (deducida, no leída):** si toda la tierra al sur de una latitud de puro mar tiene
+  nodo, sumar las ecuaciones da **ū(y) = τₓ(y)/eps** (Hidaka / Munk y Palmén, sin verificar en
+  fuente). Con West current 0,25: |ū| ≈ 3,4 a 61–89°S.
+- **Hallazgo:** *Polar sea* abre mar en los vientos del este polares (60–90°), así que allí la
+  corriente irá hacia el **oeste** (análogo: la corriente costera antártica). La corriente hacia el
+  este necesita un paso en los vientos del oeste (30–60°): D-V8-5.
+
 ## Fuera de alcance
 Corrientes con paso de tiempo, varias capas o remolinos; mezcla entre giros; la fase K (placas que
 dan forma al terreno); PL-16; PL-14; cambios en `Runtime/`.

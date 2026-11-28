@@ -1743,3 +1743,10 @@ vegetation — recalibrating vegetation densities for those biomes would change 
 **Relation:** PL-17 (planet grid, *Polar sea*), PL-18 / Phase K (ridges), O1 in the migration matrix. Web lab idea (Claudio, 2026-11-23): «an ocean in a box», the same seed with ψ = 0 on all coasts, the island rule, relief, and relief from plates, side by side.  
 **Status:** proposed as NoiseLab v8 (`NoiseLab_v8_Startup.md`); it changes the order of 2026-11-22 (PL-16 items 1 and 4 first), so the order is confirmed with Claudio at the start of v8.
 
+### PL-20 — Earth as input: a simplified real map to test the climate (NoiseLab)
+**Date:** 2026-11-25  
+**Idea (Claudio):** instead of generating the heightmap, load a simplified Earth (its landmasses and the most relevant features: the big mountain ranges, the Drake Passage, the Isthmus of Panama, the Tibetan plateau) and look at every layer the lab computes on it: currents, sea temperature, winds, moisture, rain shadow, temperature, biomes. A test against the real world: the Gulf Stream, the Humboldt and its upwelling, the Antarctic Circumpolar Current, the Atacama, the Sahara, the monsoon, the Andes' rain shadow.  
+**Notes to decide later:** the source (a public-domain global relief such as NOAA ETOPO, reduced to the planet grid, 32 × 16 views; to be checked), how it enters (a height source in place of the noise, only with *Planet*), and how far the lab's own scale (16 views pole to pole) matches the Earth's.  
+**Relation:** PL-19 (it tests the island rule on the real Drake Passage), PL-16, PL-17.  
+**Status:** idea, after v8.
+
